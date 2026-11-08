@@ -2,7 +2,7 @@
 
 This file says how the commands of [concept.md](concept.md) are built today: the shape
 of the code, the decisions that were taken where the concept left room, and what is not
-built yet.
+built yet. It is the file to read first when you pick this work up.
 
 ## The commands
 
@@ -11,8 +11,8 @@ built yet.
 1. Reads the `<squad>.abox` file of the project and follows its `base` chain. The file is
    looked for in the directory of the command and in its parent directories, so the
    command works from anywhere in the project. `--squad` can be given more than once.
-2. Checks the chain: a cycle, a kit, an MCP server, a parameter or a state directory
-   that is declared twice, overlapping state directories, and a parameter that no
+2. Checks the chain: a cycle, a kit, an MCP server, a parameter, a state directory or a
+   secret that is declared twice, overlapping state directories, and a parameter that no
    configuration declares are errors. The error names the duplicate and the files that
    declare it.
 3. Writes the workload kit: `workload.yaml` (the descriptor) and `workload.dockerfile`
@@ -39,6 +39,8 @@ command or the user configuration says otherwise.
    the names of all of them with `--static-mcp`.
 6. Creates the sandbox: `sbx create <workload kit> <location> --name <sandbox> --kit
    <mixin>... --kit-arg <name>=<value>... --mount <host>:<path>... --static-mcp <names>`.
+7. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the squad it
+   comes from and the build it was made of.
 
 `--local-image` says that the sandbox is made from the local build. It is the only
 source in this version, so the flag is the default; `--tag` chooses the tag of the
@@ -60,6 +62,18 @@ local build.
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.
 
+### `abox secrets list|set|remove [--squad <name>] [--service <name>]`
+
+The kits of a squad ask for a service with the `credential@1` capability. The `secrets`
+section of the configuration says how the value of that service is obtained. abox keeps
+the values on the host, through `sbx secret`, so they never enter a sandbox.
+
+- `list` shows the services the kits ask for, the kits that ask for them, and whether
+  the value is stored on the host.
+- `set` asks for the values and stores them. The value goes through the standard input
+  of sbx, so it stays out of the process list and out of the shell history.
+- `remove` takes the values off the host.
+
 ## The files
 
 ### `.abox`
@@ -80,17 +94,46 @@ mcp:
     url: ${{ parameters.elastic-url }}
 state:
   - ~/.config/opencode/state         # a directory that survives a replacement
+secrets:
+  - service: github                  # a service sbx knows
+    prompt: The GitHub token for GitHub Enterprise Cloud
+  - service: elastic                 # a service sbx does not know
+    host: api.elastic.co
+    env: ELASTIC_API_KEY
+    prompt: The API key for Elastic
+  - service: registry                # a value that is built from several inputs
+    host: registry.example.com
+    env: REGISTRY_TOKEN
+    inputs:
+      - name: username
+        prompt: The user name
+      - name: password
+        prompt: The password
+    separator: ":"
+    encoding: base64
 ```
 
 A base chain combines declarations and never overrides them. Across the whole chain
-every kit, every MCP server, every parameter and every state directory is declared
-once. A kit is compared by its repository, so two tags of one repository are one kit.
+every kit, every MCP server, every parameter, every state directory and every secret is
+declared once. A kit is compared by its repository, so two tags of one repository are
+one kit.
 
 The parameters are named values. A kit or an MCP server uses one with
 `${{ parameters.NAME }}`; a parameter no configuration declares is an error.
 
 The personal `.abox` files of the user live in the configuration directory. They add to
 a squad, they never replace it.
+
+The secrets say how a value is obtained:
+
+| Key | Meaning |
+|---|---|
+| `service` | The name of the secret in the host store. The kits name the same service. |
+| `prompt` | What the user is asked for. |
+| `inputs` | The parts the value is built from. Without them, one value is asked for. |
+| `separator` | How the parts are joined. `:` by default. |
+| `encoding` | `plain` (the default) or `base64`. |
+| `host`, `env` | The host and the variable of a service sbx does not know. With them the secret is stored with `sbx secret set-custom`. |
 
 ### `.workload`
 
@@ -117,7 +160,7 @@ cli/src/Abox/
   Configuration/ the directories and the user configuration
   Kits/         the .abox and .workload files, the chain, the kit generators
   Build/        the manifest of a local build and the store that keeps it
-  Services/     build, create and run
+  Services/     build, create, run and secrets
   Launchers/    one class per launcher
   Sbx/          every call to sbx
   Health/       the checks every command runs first
@@ -129,7 +172,9 @@ cli/src/Abox/
   check live in that one place. The arguments are always a list, never a shell string.
 - Each launcher is one class behind `ILauncher`.
 - The services take their dependencies in their constructor, so the tests can hand them
-  a fake sbx.
+  a fake sbx (`FakeSbxClient` in the test project).
+- The YAML is read in one place (`YamlReader`), so every file is read the same way and
+  an unknown key is an error everywhere.
 
 ## The decisions this version took
 
@@ -149,11 +194,33 @@ cli/src/Abox/
 - **The MCP servers are registered on the host.** A server with an url is registered
   with `sbx mcp add` when it is not registered yet; a server without one has to be
   registered already.
+- **The secrets live on the host.** The kits ask for a service, the configuration says
+  how its value is obtained, and `sbx secret` keeps it. The value never goes into a
+  sandbox and never into the arguments of a process.
 
 ## What is not built yet
 
-- `abox publish`, `abox prune` and `abox secrets`.
+- `abox publish` and `abox prune`. The kit set is not published to a registry, and the
+  local kits are not pruned.
 - The `orca` launcher, and the `hc` helper and the `openssh-server` of the base image.
 - The Claude Code gateway to Copilot on GitHub Enterprise (open question 3).
 - The `worktrees` of the agents, which are lost when a sandbox is replaced (open
   question 9).
+- The agents themselves (GitHub Copilot, OpenCode, pi, Claude Code) are not configured
+  by the kits of this repository yet: the kits carry the credentials and the guidance,
+  the agent configuration is still to come.
+
+## Where to go next
+
+The open questions of [concept.md](concept.md) are the list of what is left. The ones
+that are ready to be picked up:
+
+1. **`abox publish`** — push the kit set of a squad to a registry as one reference, so
+   `abox create` can pull it. The build already produces everything a set needs: the
+   workload kit, the mixins and the manifest.
+2. **`abox prune`** — remove the local builds and the kits nothing uses. The build
+   store knows what is there; the sandboxes say what is in use.
+3. **The agent kits** — the kits of `kits/` carry the credentials and the guidance of
+   the agents, but not their configuration files yet.
+4. **The `orca` launcher** — the SSH key pair, the host entry and the Orca CLI are
+   described in the concept and have not been written.

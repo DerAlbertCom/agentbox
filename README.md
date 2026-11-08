@@ -4,7 +4,9 @@
 [Docker Sandboxes](https://docs.docker.com/ai/sandboxes/).
 
 The idea, the roles and the decisions behind the commands are in
-[docs/concept.md](docs/concept.md). This file describes what is built today.
+[docs/concept.md](docs/concept.md). What is built today, and what is left, is in
+[docs/implementation.md](docs/implementation.md) — **start there when you pick this
+work up**.
 
 ## The commands
 
@@ -13,6 +15,7 @@ The idea, the roles and the decisions behind the commands are in
 | `abox build --squad <name>` | Builds the kit set of a squad: its workload, its kits and the mixin that keeps the state. The result is kept locally. |
 | `abox create --squad <name> [--location <path>]` | Creates the sandbox of a folder from the local build of a squad. |
 | `abox run [<launcher>] [--location <path>] [-- <argv>...]` | Starts a launcher for the sandbox of a folder. The default launcher is a shell. |
+| `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
 
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
@@ -21,7 +24,7 @@ and `abox exec <sandbox> -- <command>`.
 
 ```
 .
-├── ac.abox                    the squad: its kits, its parameters, its state
+├── ac.abox                    the squad: its kits, its parameters, its state, its secrets
 ├── cape.abox                  the base of the squad: the workload
 ├── kits/
 │   ├── mti-ca-dotnet.workload the workload: the template, the tools, the scripts
@@ -68,12 +71,3 @@ the hooks of the repository once:
 ```sh
 git config core.hooksPath .githooks
 ```
-
-## What is not built yet
-
-- `abox publish`, `abox prune` and `abox secrets`.
-- The kit set is not published to a registry: `abox build` keeps it on the machine and
-  `abox create` uses that build. `--local-image` says so explicitly; `--tag` chooses
-  the tag of the local build.
-- The `orca` launcher. `shell` and `herdr-app` are the launchers of this version.
-- The `hc` helper in the image and the `openssh-server` of the base image.

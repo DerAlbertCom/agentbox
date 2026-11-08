@@ -14,4 +14,10 @@ public interface IConsole
 
     /// <summary>Asks a yes/no question. Returns false when the answer is no or unreadable.</summary>
     bool Confirm(string question);
+
+    /// <summary>
+    /// Reads a value the user should not see, for example a secret. Returns null when
+    /// there is nothing to read.
+    /// </summary>
+    string? ReadSecret(string prompt);
 }

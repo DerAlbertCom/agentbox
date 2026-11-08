@@ -1,5 +1,7 @@
 namespace Abox.Infrastructure;
 
+using System.Text;
+
 /// <summary>
 /// <see cref="IConsole"/> on top of <see cref="System.Console"/>.
 /// </summary>
@@ -20,5 +22,45 @@ public sealed class SystemConsole : IConsole
                 answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
                 || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase)
             );
+    }
+
+    public string? ReadSecret(string prompt)
+    {
+        Console.Out.Write(prompt);
+
+        if (Console.IsInputRedirected)
+        {
+            var line = Console.In.ReadLine();
+            Console.Out.WriteLine();
+            return line;
+        }
+
+        var value = new StringBuilder();
+        while (true)
+        {
+            var key = Console.ReadKey(intercept: true);
+            if (key.Key == ConsoleKey.Enter)
+            {
+                break;
+            }
+
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                if (value.Length > 0)
+                {
+                    value.Remove(value.Length - 1, 1);
+                }
+
+                continue;
+            }
+
+            if (!char.IsControl(key.KeyChar))
+            {
+                value.Append(key.KeyChar);
+            }
+        }
+
+        Console.Out.WriteLine();
+        return value.ToString();
     }
 }

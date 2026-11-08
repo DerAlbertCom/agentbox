@@ -255,6 +255,108 @@ public sealed partial class SbxClient : ISbxClient
             .ToList();
     }
 
+    /// <summary>The secrets stored on the host.</summary>
+    public async Task<HostSecrets> ListSecretsAsync(CancellationToken cancellationToken)
+    {
+        var result = await _runner.RunAsync(
+            new ProcessRequest(ExecutableName, ["secret", "ls", "--json"]),
+            cancellationToken
+        );
+
+        if (!result.Succeeded)
+        {
+            throw new AboxException($"'sbx secret ls' failed: {Describe(result)}");
+        }
+
+        return ParseSecrets(result.StandardOutput);
+    }
+
+    /// <summary>
+    /// Stores the secret of a service sbx knows. The value goes through the standard
+    /// input, so it stays out of the process list.
+    /// </summary>
+    public async Task<SbxOutcome> SetSecretAsync(
+        string service,
+        string value,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await _runner.RunAsync(
+            new ProcessRequest(ExecutableName, ["secret", "set", service], StandardInput: value),
+            cancellationToken
+        );
+
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
+    }
+
+    /// <summary>
+    /// Stores the secret of a service sbx does not know. The value goes through the
+    /// standard input, so it stays out of the process list.
+    /// </summary>
+    public async Task<SbxOutcome> SetCustomSecretAsync(
+        string service,
+        string? host,
+        string? environmentVariable,
+        string value,
+        CancellationToken cancellationToken
+    )
+    {
+        var arguments = new List<string> { "secret", "set-custom" };
+
+        if (host is not null)
+        {
+            arguments.Add("--host");
+            arguments.Add(host);
+        }
+
+        if (environmentVariable is not null)
+        {
+            arguments.Add("--env");
+            arguments.Add(environmentVariable);
+        }
+
+        arguments.Add("--value-stdin");
+
+        var result = await _runner.RunAsync(
+            new ProcessRequest(ExecutableName, arguments, StandardInput: value),
+            cancellationToken
+        );
+
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
+    }
+
+    /// <summary>
+    /// Removes a secret from the host store. A secret of a service sbx does not know is
+    /// removed by the host it is sent to.
+    /// </summary>
+    public async Task<SbxOutcome> RemoveSecretAsync(
+        string service,
+        string? host,
+        CancellationToken cancellationToken
+    )
+    {
+        var arguments = new List<string> { "secret", "rm" };
+
+        if (host is null)
+        {
+            arguments.Add(service);
+        }
+        else
+        {
+            arguments.Add("--host");
+            arguments.Add(host);
+        }
+
+        arguments.Add("--force");
+
+        var result = await _runner.RunAsync(
+            new ProcessRequest(ExecutableName, arguments),
+            cancellationToken
+        );
+
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
+    }
+
     /// <summary>Starts the browser sign-in.</summary>
     public async Task<bool> SignInAsync(CancellationToken cancellationToken)
     {
@@ -277,6 +379,44 @@ public sealed partial class SbxClient : ISbxClient
             cancellationToken
         );
         return result.ExitCode;
+    }
+
+    private static HostSecrets ParseSecrets(string json)
+    {
+        var services = new List<string>();
+        var custom = new List<CustomSecret>();
+
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+
+        if (root.TryGetProperty("secrets", out var stored))
+        {
+            foreach (var secret in stored.EnumerateArray())
+            {
+                var name = String(secret, "name");
+                if (!string.IsNullOrEmpty(name))
+                {
+                    services.Add(name);
+                }
+            }
+        }
+
+        if (root.TryGetProperty("custom_secrets", out var customs))
+        {
+            foreach (var secret in customs.EnumerateArray())
+            {
+                var targets = secret.TryGetProperty("targets", out var list)
+                    ? list.EnumerateArray()
+                        .Select(target => target.GetString() ?? string.Empty)
+                        .Where(target => !string.IsNullOrEmpty(target))
+                        .ToList()
+                    : [];
+
+                custom.Add(new CustomSecret(targets, String(secret, "env")));
+            }
+        }
+
+        return new HostSecrets(services, custom);
     }
 
     private static string Describe(ProcessResult result)

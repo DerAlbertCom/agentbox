@@ -14,7 +14,8 @@ public sealed class AboxFile
         IReadOnlyList<KitDeclaration> kits,
         IReadOnlyDictionary<string, string> parameters,
         IReadOnlyList<McpDeclaration> mcp,
-        IReadOnlyList<string> state
+        IReadOnlyList<string> state,
+        IReadOnlyList<SecretDeclaration> secrets
     )
     {
         Path = path;
@@ -24,6 +25,7 @@ public sealed class AboxFile
         Parameters = parameters;
         Mcp = mcp;
         State = state;
+        Secrets = secrets;
     }
 
     /// <summary>The file this configuration was read from.</summary>
@@ -50,11 +52,22 @@ public sealed class AboxFile
     /// <summary>The sandbox directories this configuration keeps across a replacement.</summary>
     public IReadOnlyList<string> State { get; }
 
+    /// <summary>The secrets this configuration declares.</summary>
+    public IReadOnlyList<SecretDeclaration> Secrets { get; }
+
     /// <summary>Reads a <c>.abox</c> file.</summary>
     public static AboxFile Load(string path)
     {
         var reader = YamlReader.LoadFile(path);
-        reader.RejectUnknownKeys("base", "workload", "kits", "parameters", "mcp", "state");
+        reader.RejectUnknownKeys(
+            "base",
+            "workload",
+            "kits",
+            "parameters",
+            "mcp",
+            "state",
+            "secrets"
+        );
 
         return new AboxFile(
             path,
@@ -63,7 +76,8 @@ public sealed class AboxFile
             ReadKits(reader),
             reader.GetStringMap("parameters"),
             ReadMcp(reader),
-            reader.GetStringList("state")
+            reader.GetStringList("state"),
+            ReadSecrets(reader)
         );
     }
 
@@ -88,6 +102,75 @@ public sealed class AboxFile
 
         return kits;
     }
+
+    private static IReadOnlyList<SecretDeclaration> ReadSecrets(YamlReader reader)
+    {
+        var secrets = new List<SecretDeclaration>();
+
+        foreach (var entry in reader.GetEntries("secrets"))
+        {
+            if (entry.IsScalar)
+            {
+                secrets.Add(new SecretDeclaration(entry.ScalarValue));
+                continue;
+            }
+
+            entry.RejectUnknownKeys(
+                "service",
+                "prompt",
+                "inputs",
+                "separator",
+                "encoding",
+                "host",
+                "env"
+            );
+
+            var service =
+                entry.GetString("service")
+                ?? throw new AboxException($"'{reader.Source}': a secret entry needs a 'service'.");
+
+            var inputs = entry
+                .GetEntries("inputs")
+                .Select(input =>
+                {
+                    input.RejectUnknownKeys("name", "prompt");
+                    var name =
+                        input.GetString("name")
+                        ?? throw new AboxException(
+                            $"'{reader.Source}': a secret input needs a 'name'."
+                        );
+
+                    return new SecretInput(name, input.GetString("prompt"));
+                })
+                .ToList();
+
+            var encoding = ReadEncoding(reader, entry.GetString("encoding"));
+
+            secrets.Add(
+                new SecretDeclaration(
+                    service,
+                    entry.GetString("prompt"),
+                    inputs,
+                    entry.GetString("separator") ?? ":",
+                    encoding,
+                    entry.GetString("host"),
+                    entry.GetString("env")
+                )
+            );
+        }
+
+        return secrets;
+    }
+
+    private static SecretEncoding ReadEncoding(YamlReader reader, string? value) =>
+        value?.Trim().ToLowerInvariant() switch
+        {
+            null or "" or "plain" => SecretEncoding.Plain,
+            "base64" => SecretEncoding.Base64,
+            _ => throw new AboxException(
+                $"'{reader.Source}': '{value}' is not a known encoding. Known encodings: plain, base64."
+            ),
+        };
 
     private static IReadOnlyList<McpDeclaration> ReadMcp(YamlReader reader)
     {

@@ -271,6 +271,42 @@ public sealed class YamlEntry
             .ToList();
     }
 
+    /// <summary>The value of a key of the element, when it is a mapping.</summary>
+    public YamlEntry? GetEntry(string key)
+    {
+        var mapping = Mapping();
+        if (!mapping.Children.TryGetValue(new YamlScalarNode(key), out var node))
+        {
+            return null;
+        }
+
+        if (node is not YamlMappingNode)
+        {
+            throw new AboxException($"'{_source}': '{_key}.{key}' must be a mapping.");
+        }
+
+        return new YamlEntry(node, _source, $"{_key}.{key}");
+    }
+
+    /// <summary>The value of a key of the element, when it is a list of mappings or values.</summary>
+    public IReadOnlyList<YamlEntry> GetEntries(string key)
+    {
+        var mapping = Mapping();
+        if (!mapping.Children.TryGetValue(new YamlScalarNode(key), out var node))
+        {
+            return [];
+        }
+
+        if (node is not YamlSequenceNode sequence)
+        {
+            throw new AboxException($"'{_source}': '{_key}.{key}' must be a list.");
+        }
+
+        return sequence
+            .Children.Select(child => new YamlEntry(child, _source, $"{_key}.{key}"))
+            .ToList();
+    }
+
     /// <summary>Fails when the element has keys abox does not know.</summary>
     public void RejectUnknownKeys(params string[] known)
     {

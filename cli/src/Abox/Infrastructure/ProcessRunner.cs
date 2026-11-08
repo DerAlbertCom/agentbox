@@ -38,6 +38,11 @@ public sealed class ProcessRunner : IProcessRunner
             startInfo.RedirectStandardError = true;
         }
 
+        if (request.StandardInput is not null)
+        {
+            startInfo.RedirectStandardInput = true;
+        }
+
         using var process = new Process { StartInfo = startInfo };
 
         var standardOutput = new StringBuilder();
@@ -71,6 +76,15 @@ public sealed class ProcessRunner : IProcessRunner
                 $"Cannot start '{request.FileName}'. {exception.Message}",
                 exception
             );
+        }
+
+        if (request.StandardInput is not null)
+        {
+            await process.StandardInput.WriteAsync(
+                request.StandardInput.AsMemory(),
+                cancellationToken
+            );
+            process.StandardInput.Close();
         }
 
         if (!request.AttachConsole)

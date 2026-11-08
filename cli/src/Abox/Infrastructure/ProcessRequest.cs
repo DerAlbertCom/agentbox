@@ -11,10 +11,12 @@ namespace Abox.Infrastructure;
 /// </param>
 /// <param name="WorkingDirectory">The directory to start in, or null for the current one.</param>
 /// <param name="Environment">Extra environment variables for the child.</param>
+/// <param name="StandardInput">The text the child reads from its standard input, or null.</param>
 public sealed record ProcessRequest(
     string FileName,
     IReadOnlyList<string> Arguments,
     bool AttachConsole = false,
     string? WorkingDirectory = null,
-    IReadOnlyDictionary<string, string>? Environment = null
+    IReadOnlyDictionary<string, string>? Environment = null,
+    string? StandardInput = null
 );

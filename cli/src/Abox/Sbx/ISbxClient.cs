@@ -35,5 +35,27 @@ public interface ISbxClient
 
     Task<int> AddMcpServerAsync(string name, string url, CancellationToken cancellationToken);
 
+    Task<HostSecrets> ListSecretsAsync(CancellationToken cancellationToken);
+
+    Task<SbxOutcome> SetSecretAsync(
+        string service,
+        string value,
+        CancellationToken cancellationToken
+    );
+
+    Task<SbxOutcome> SetCustomSecretAsync(
+        string service,
+        string? host,
+        string? environmentVariable,
+        string value,
+        CancellationToken cancellationToken
+    );
+
+    Task<SbxOutcome> RemoveSecretAsync(
+        string service,
+        string? host,
+        CancellationToken cancellationToken
+    );
+
     Task<bool> SignInAsync(CancellationToken cancellationToken);
 }

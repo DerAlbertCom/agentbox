@@ -21,3 +21,16 @@ mcp:
 state:
   - ~/.config/opencode/state
   - ~/.local/state/shell
+
+# The secrets of the host: the kits ask for a service, this says how its value is
+# obtained. abox keeps the values with 'sbx secret', so they never enter the sandbox.
+secrets:
+  # A service sbx knows: the token is asked for and stored under its name.
+  - service: github
+    prompt: The GitHub token for GitHub Enterprise Cloud
+
+  # A service sbx does not know: the host and the variable the agents read.
+  - service: elastic
+    host: api.elastic.co
+    env: ELASTIC_API_KEY
+    prompt: The API key for Elastic

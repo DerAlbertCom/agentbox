@@ -16,6 +16,7 @@ public static class AboxCommand
                 BuildCommand.Create(services),
                 CreateCommand.Create(services),
                 RunCommand.Create(services),
+                SecretsCommand.Create(services),
                 PipeCommand.Create(services),
                 ExecCommand.Create(services),
             },

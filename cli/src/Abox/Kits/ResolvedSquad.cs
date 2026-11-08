@@ -14,7 +14,8 @@ public sealed class ResolvedSquad
         IReadOnlyDictionary<string, string> parameters,
         IReadOnlyList<McpDeclaration> mcp,
         IReadOnlyList<StateEntry> state,
-        IReadOnlyList<string> configFiles
+        IReadOnlyList<string> configFiles,
+        IReadOnlyList<SecretDeclaration> secrets
     )
     {
         Name = name;
@@ -25,6 +26,7 @@ public sealed class ResolvedSquad
         Mcp = mcp;
         State = state;
         ConfigFiles = configFiles;
+        Secrets = secrets;
     }
 
     /// <summary>The name of the squad.</summary>
@@ -50,4 +52,7 @@ public sealed class ResolvedSquad
 
     /// <summary>The configuration files the squad is made of.</summary>
     public IReadOnlyList<string> ConfigFiles { get; }
+
+    /// <summary>The secrets of the squad: how the values of the services are obtained.</summary>
+    public IReadOnlyList<SecretDeclaration> Secrets { get; }
 }

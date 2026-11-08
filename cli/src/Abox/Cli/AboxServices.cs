@@ -38,6 +38,7 @@ public sealed class AboxServices
             console
         );
         Create = new CreateService(Store, Records, Paths, Sbx, console);
+        Secrets = new SecretsService(Resolver, PersonalConfigurations, Sbx, console);
         Run = new RunService(Launchers, Store, Records, Create, Sbx, HostPrograms, console);
     }
 
@@ -72,6 +73,9 @@ public sealed class AboxServices
     public BuildService Build { get; }
 
     public CreateService Create { get; }
+
+    /// <summary>The host secrets the kits of a squad ask for.</summary>
+    public SecretsService Secrets { get; }
 
     public RunService Run { get; }
 }

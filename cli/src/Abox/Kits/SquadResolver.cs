@@ -45,6 +45,7 @@ public sealed class SquadResolver
         var kits = MergeKits(files, parameters);
         var mcp = MergeMcp(files, parameters);
         var state = MergeState(files);
+        var secrets = MergeSecrets(files);
 
         // The name of the configuration file is the name of the squad, however it was spelled.
         var name = Path.GetFileNameWithoutExtension(projectChain[^1].Path);
@@ -57,7 +58,8 @@ public sealed class SquadResolver
             parameters,
             mcp,
             state,
-            files.Select(file => file.Path).ToList()
+            files.Select(file => file.Path).ToList(),
+            secrets
         );
     }
 
@@ -346,6 +348,30 @@ public sealed class SquadResolver
         }
 
         return servers;
+    }
+
+    private static IReadOnlyList<SecretDeclaration> MergeSecrets(IReadOnlyList<AboxFile> files)
+    {
+        var secrets = new List<SecretDeclaration>();
+        var origins = new Dictionary<string, string>(StringComparer.Ordinal);
+
+        foreach (var file in files)
+        {
+            foreach (var secret in file.Secrets)
+            {
+                if (origins.TryGetValue(secret.Service, out var origin))
+                {
+                    throw new AboxException(
+                        $"The secret '{secret.Service}' is declared twice: in '{origin}' and in '{file.Path}'. A secret is declared once."
+                    );
+                }
+
+                origins[secret.Service] = file.Path;
+                secrets.Add(secret);
+            }
+        }
+
+        return secrets;
     }
 
     private static IReadOnlyList<StateEntry> MergeState(IReadOnlyList<AboxFile> files)

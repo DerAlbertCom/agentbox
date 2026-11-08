@@ -35,4 +35,15 @@ public sealed class TestConsole : IConsole
         _output.Add(question);
         return Answer;
     }
+
+    /// <summary>The values the test hands out, in the order they are asked for.</summary>
+    public List<string> Answers { get; } = [];
+
+    private int _next;
+
+    public string? ReadSecret(string prompt)
+    {
+        _output.Add(prompt);
+        return _next < Answers.Count ? Answers[_next++] : string.Empty;
+    }
 }
