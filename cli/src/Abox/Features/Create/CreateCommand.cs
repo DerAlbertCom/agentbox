@@ -2,21 +2,21 @@ using System.CommandLine;
 using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
-using Abox.Services;
 
-namespace Abox.Cli;
+namespace Abox.Features.Create;
 
 /// <summary>
 /// <c>abox create</c>: creates the sandbox of a folder from the local build of a squad.
 /// </summary>
-public static class CreateCommand
+public sealed class CreateCommand : Command
 {
-    public static Command Create(
+    public CreateCommand(
         AboxConfig config,
         Preflight preflight,
         CreateService create,
         IConsole console
     )
+        : base("create", "Create the sandbox of a folder from the local build of a squad.")
     {
         var squad = new Option<string>("--squad")
         {
@@ -47,15 +47,13 @@ public static class CreateCommand
             Description = "Replace an existing sandbox without asking.",
         };
 
-        var command = new Command(
-            "create",
-            "Create the sandbox of a folder from the local build of a squad."
-        )
-        {
-            Options = { squad, location, tag, localImage, assumeYes },
-        };
+        Options.Add(squad);
+        Options.Add(location);
+        Options.Add(tag);
+        Options.Add(localImage);
+        Options.Add(assumeYes);
 
-        command.SetAction(
+        SetAction(
             async (parseResult, cancellationToken) =>
             {
                 var request = new CreateRequest(
@@ -88,7 +86,5 @@ public static class CreateCommand
                 );
             }
         );
-
-        return command;
     }
 }

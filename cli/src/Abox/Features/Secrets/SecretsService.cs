@@ -3,7 +3,7 @@ using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Sbx;
 
-namespace Abox.Services;
+namespace Abox.Features.Secrets;
 
 /// <summary>What to do with the secrets of a squad.</summary>
 /// <param name="Squad">The squad whose secrets are meant.</param>

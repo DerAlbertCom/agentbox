@@ -1,23 +1,24 @@
 using System.CommandLine;
+using Abox.Cli;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Launchers;
-using Abox.Services;
 
-namespace Abox.Cli;
+namespace Abox.Features.Run;
 
 /// <summary>
 /// <c>abox run</c>: starts a launcher for the sandbox of a folder.
 /// </summary>
-public static class RunCommand
+public sealed class RunCommand : Command
 {
-    public static Command Create(
+    public RunCommand(
         LauncherRegistry launchers,
         Preflight preflight,
         RunService run,
         TrailingArguments trailing,
         IConsole console
     )
+        : base("run", "Start a launcher for the sandbox of a folder.")
     {
         var launcher = new Argument<string>("launcher")
         {
@@ -32,13 +33,10 @@ public static class RunCommand
             Description = "The folder whose sandbox is opened. Defaults to the current directory.",
         };
 
-        var command = new Command("run", "Start a launcher for the sandbox of a folder.")
-        {
-            Arguments = { launcher },
-            Options = { location },
-        };
+        Arguments.Add(launcher);
+        Options.Add(location);
 
-        command.Description =
+        Description =
             "Start a launcher for the sandbox of a folder."
             + Environment.NewLine
             + Environment.NewLine
@@ -49,7 +47,7 @@ public static class RunCommand
                 launchers.All.Select(item => $"  {item.Id, -10} {item.Summary}")
             );
 
-        command.SetAction(
+        SetAction(
             async (parseResult, cancellationToken) =>
             {
                 var request = new RunRequest(
@@ -72,7 +70,5 @@ public static class RunCommand
                 );
             }
         );
-
-        return command;
     }
 }

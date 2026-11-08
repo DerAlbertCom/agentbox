@@ -1,6 +1,6 @@
 using Abox.Infrastructure;
 
-namespace Abox.Cli;
+namespace Abox.Features;
 
 /// <summary>
 /// Runs the work of a command and turns an abox error into a message and exit code 1.

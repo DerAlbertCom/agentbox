@@ -172,21 +172,38 @@ generated image has `/home/agent/workspace` as its working directory.
 
 ```
 cli/src/Abox/
-  Cli/          the commands and the services they use
-  Configuration/ the directories and the user configuration
-  Kits/         the .abox and .workload files, the chain, the kit generators
-  Build/        the manifest of a local build and the store that keeps it
-  Services/     build, create, run and secrets
-  Launchers/    one class per launcher
-  Sbx/          every call to sbx
-  Health/       the checks every command runs first
-  Infrastructure/ the console, the processes, the YAML
-  Naming/       the name of a sandbox
+  Program.cs        runs the command line
+  Cli/              the composition root: the service collection and the root command
+  Features/
+    Build/          abox build: the command and the service that does its work
+    Create/         abox create: the command and the service that does its work
+    Run/            abox run: the command and the service that does its work
+    Secrets/        abox secrets: the command and the service that does its work
+    Prune/          abox prune: the command and the service that does its work
+    Sandbox/        the commands other programs call: abox exec and abox pipe
+    CommandHandling turns an abox error into a message and an exit code
+  Configuration/    the directories and the user configuration
+  Kits/             the .abox and .workload files, the chain, the kit generators
+  Build/            the manifest of a local build and the store that keeps it
+  Launchers/        one class per launcher
+  Sbx/              every call to sbx
+  Health/           the checks every command runs first
+  Infrastructure/   the console, the processes, the YAML
+  Naming/           the name of a sandbox
 ```
 
+- The code is arranged by use, not by kind: one folder per command holds the command
+  and the service that does its work, and shared, technical services keep one place
+  each (`Configuration`, `Kits`, `Build`, `Launchers`, `Sbx`, `Health`,
+  `Infrastructure`, `Naming`).
 - One wrapper class (`SbxClient`) makes every `sbx` call. The flags and the version
   check live in that one place. The arguments are always a list, never a shell string.
 - Each launcher is one class behind `ILauncher`.
+- Each command is a class that the container builds and that takes its dependencies
+  in its constructor; nothing looks the commands up by hand. The root command holds
+  every command the container has, one per slice.
+- A slice registers itself: `AddAbox` calls one method per slice and that method adds
+  the command and the service of the slice.
 - The services take their dependencies in their constructor, so the tests can hand them
   a substitute sbx (NSubstitute in the test project).
 - The YAML is read in one place (`YamlReader`), so every file is read the same way and

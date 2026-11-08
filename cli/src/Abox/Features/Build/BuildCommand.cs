@@ -2,23 +2,23 @@ using System.CommandLine;
 using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
-using Abox.Services;
 
-namespace Abox.Cli;
+namespace Abox.Features.Build;
 
 /// <summary>
 /// <c>abox build</c>: builds the kit set of a squad and keeps it locally.
 /// </summary>
-public static class BuildCommand
+public sealed class BuildCommand : Command
 {
-    public static Command Create(
+    public BuildCommand(
         AboxConfig config,
         Preflight preflight,
         BuildService build,
         IConsole console
     )
+        : base("build", "Build the kit set of a squad: its workload and its kits.")
     {
-        var squad = new Option<string[]>("--squad")
+        var squads = new Option<string[]>("--squad")
         {
             Description =
                 "The squad to build. Can be given more than once. Defaults to the squad of the user configuration.",
@@ -42,20 +42,17 @@ public static class BuildCommand
             Description = "Write the kit sources without building and checking them with sbx.",
         };
 
-        var command = new Command(
-            "build",
-            "Build the kit set of a squad: its workload and its kits."
-        )
-        {
-            Options = { squad, root, tag, verify },
-        };
+        Options.Add(squads);
+        Options.Add(root);
+        Options.Add(tag);
+        Options.Add(verify);
 
-        command.SetAction(
+        SetAction(
             async (parseResult, cancellationToken) =>
             {
-                var squads = parseResult.GetValue(squad);
+                var wanted = parseResult.GetValue(squads);
                 var request = new BuildRequest(
-                    squads is { Length: > 0 } ? squads : [config.DefaultSquad],
+                    wanted is { Length: > 0 } ? wanted : [config.DefaultSquad],
                     parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
                     parseResult.GetValue(tag) ?? config.DefaultTag,
                     !parseResult.GetValue(verify)
@@ -75,7 +72,5 @@ public static class BuildCommand
                 );
             }
         );
-
-        return command;
     }
 }

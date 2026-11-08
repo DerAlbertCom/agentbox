@@ -3,7 +3,7 @@ using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Sbx;
 
-namespace Abox.Services;
+namespace Abox.Features.Build;
 
 /// <summary>What to build.</summary>
 /// <param name="Squads">The squads to build.</param>

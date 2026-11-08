@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 using Abox.Infrastructure;
 using Abox.Sbx;
 
-namespace Abox.Services;
+namespace Abox.Features.Prune;
 
 /// <summary>What a prune removes and what it keeps.</summary>
 /// <param name="Remove">The template images to remove.</param>

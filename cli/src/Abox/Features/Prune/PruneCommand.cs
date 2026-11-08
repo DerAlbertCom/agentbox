@@ -1,23 +1,21 @@
 using System.CommandLine;
 using Abox.Health;
 using Abox.Infrastructure;
-using Abox.Services;
 
-namespace Abox.Cli;
+namespace Abox.Features.Prune;
 
 /// <summary>
 /// <c>abox prune</c>: removes the sbx template images that stopped being used.
 /// </summary>
-public static class PruneCommand
+public sealed class PruneCommand : Command
 {
-    public static Command Create(Preflight preflight, PruneService prune, IConsole console)
-    {
-        var command = new Command(
+    public PruneCommand(Preflight preflight, PruneService prune, IConsole console)
+        : base(
             "prune",
             "Remove the stale template images of sbx: everything but the newest set and its kit sources."
-        );
-
-        command.SetAction(
+        )
+    {
+        SetAction(
             async (_, cancellationToken) =>
             {
                 return await CommandHandling.RunAsync(
@@ -34,7 +32,5 @@ public static class PruneCommand
                 );
             }
         );
-
-        return command;
     }
 }

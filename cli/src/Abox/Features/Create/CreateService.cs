@@ -4,7 +4,7 @@ using Abox.Infrastructure;
 using Abox.Naming;
 using Abox.Sbx;
 
-namespace Abox.Services;
+namespace Abox.Features.Create;
 
 /// <summary>What to create.</summary>
 /// <param name="Squad">The squad the sandbox is created from.</param>
