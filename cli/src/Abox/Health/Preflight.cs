@@ -62,7 +62,7 @@ public sealed class Preflight(IConsole console, ISbxClient sbx, IHostPrograms ho
         }
 
         console.WriteError(
-            $"sbx {version} is too old. abox needs {ISbxClient.MinimumVersion} or later, the first version with v3 kits."
+            $"sbx {version} is too old. abox needs {ISbxClient.MinimumVersion} or later."
         );
         console.WriteError("Upgrade sbx and try again.");
         return false;

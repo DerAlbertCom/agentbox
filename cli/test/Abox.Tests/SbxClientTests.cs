@@ -15,6 +15,51 @@ public sealed class SbxClientTests
     }
 
     [Fact]
+    public async Task TheVersionIsReadFromTheJsonOutput()
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProcessResult(
+                    0,
+                    """
+                    {
+                      "client": {
+                        "version": "v0.51.0",
+                        "revision": "7d55286de0c775148b985ed349f760f1eba06203"
+                      },
+                      "server": {
+                        "state": "running",
+                        "version": "v0.51.0",
+                        "revision": "7d55286de0c775148b985ed349f760f1eba06203",
+                        "api_version": "0.49.0"
+                      }
+                    }
+                    """,
+                    string.Empty
+                )
+            );
+
+        var version = await _client.GetVersionAsync(CancellationToken.None);
+
+        version.Should().Be(new Version(0, 51, 0));
+    }
+
+    [Fact]
+    public async Task AVersonlessAnswerIsAnError()
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "{\"server\": {\"state\": \"stopped\"}}", string.Empty));
+
+        var call = async () => await _client.GetVersionAsync(CancellationToken.None);
+
+        (await call.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*Cannot read the sbx version from ''*"
+        );
+    }
+
+    [Fact]
     public async Task TheSandboxesAreReadFromTheJsonOutput()
     {
         _runner

@@ -41,6 +41,20 @@ internal sealed class SbxCheck
     public string? Hint { get; set; }
 }
 
+/// <summary>The report of <c>sbx version --json</c>.</summary>
+internal sealed class SbxVersion
+{
+    [JsonPropertyName("client")]
+    public SbxClientVersion? Client { get; set; }
+}
+
+/// <summary>The versions of one side of sbx: the client or the daemon.</summary>
+internal sealed class SbxClientVersion
+{
+    [JsonPropertyName("version")]
+    public string? Version { get; set; }
+}
+
 /// <summary>The secrets of <c>sbx secret ls --json</c>.</summary>
 internal sealed class SbxSecrets
 {

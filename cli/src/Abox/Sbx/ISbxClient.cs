@@ -6,8 +6,8 @@ namespace Abox.Sbx;
 /// </summary>
 public interface ISbxClient
 {
-    /// <summary>The first sbx version with v3 kits.</summary>
-    const string MinimumVersion = "0.45.0";
+    /// <summary>The first sbx version abox works with.</summary>
+    const string MinimumVersion = "0.51.0";
 
     Task<Version> GetVersionAsync(CancellationToken cancellationToken);
 

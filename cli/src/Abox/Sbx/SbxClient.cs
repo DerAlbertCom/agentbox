@@ -12,13 +12,13 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
 {
     private const string ExecutableName = "sbx";
 
-    /// <summary>The version of the installed sbx.</summary>
+    /// <summary>The version of the installed sbx client.</summary>
     public async Task<Version> GetVersionAsync(CancellationToken cancellationToken)
     {
-        // 'sbx version' stays on plain text: it answers without the daemon, so the
-        // version check also works when nothing else does. The JSON format asks the daemon.
+        // The JSON format is read the same way as every other call, so the version
+        // does not depend on the words of the plain text.
         var result = await runner.RunAsync(
-            new ProcessRequest(ExecutableName, ["version"]),
+            new ProcessRequest(ExecutableName, ["version", "--json"]),
             cancellationToken
         );
         if (!result.Succeeded)
@@ -26,19 +26,8 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
             throw new AboxException($"'sbx version' failed: {Describe(result)}");
         }
 
-        var match = VersionPattern().Match(result.StandardOutput);
-        if (!match.Success)
-        {
-            throw new AboxException(
-                $"Cannot read the sbx version from '{result.StandardOutput.Trim()}'."
-            );
-        }
-
-        return new Version(
-            int.Parse(match.Groups[1].Value),
-            int.Parse(match.Groups[2].Value),
-            int.Parse(match.Groups[3].Value)
-        );
+        var report = Deserialize<SbxVersion>(result.StandardOutput, "sbx version");
+        return ParseVersion(report.Client?.Version ?? string.Empty);
     }
 
     /// <summary>The report of <c>sbx diagnose</c>.</summary>
@@ -473,6 +462,22 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
     {
         var text = (result.StandardError + result.StandardOutput).Trim();
         return string.IsNullOrEmpty(text) ? $"exit code {result.ExitCode}" : text;
+    }
+
+    /// <summary>Reads the sbx version, like <c>v0.51.0</c> or <c>0.51.0</c>.</summary>
+    private static Version ParseVersion(string text)
+    {
+        var match = VersionPattern().Match(text);
+        if (!match.Success)
+        {
+            throw new AboxException($"Cannot read the sbx version from '{text}'.");
+        }
+
+        return new Version(
+            int.Parse(match.Groups[1].Value),
+            int.Parse(match.Groups[2].Value),
+            int.Parse(match.Groups[3].Value)
+        );
     }
 
     [GeneratedRegex(@"(\d+)\.(\d+)\.(\d+)")]

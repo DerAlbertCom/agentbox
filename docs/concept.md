@@ -44,7 +44,7 @@ Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit co
 Every command except `--help` and `--version` runs these checks first. `abox` never installs anything itself. *(proposed)*
 
 1. **Installed:** `sbx` must be on `PATH` (`sbx.exe` on Windows). If not, print the install steps for the current OS (below) and exit with an error.
-2. **Version:** `sbx version` must be 0.45.0 or later, the first version with v3 kits. An older version gets an upgrade hint.
+2. **Version:** `sbx version --json` must be 0.51.0 or later. An older version gets an upgrade hint.
 3. **Health and sign-in:** abox runs `sbx diagnose --format json` (about 0.5 s here). A failing check stops the command and prints its `hint`. If the `Authentication` check fails, abox starts the browser sign-in and checks again. *(proposed)*
 
 Install steps, from https://docs.docker.com/ai/sandboxes/install/. sbx needs neither Docker Desktop nor Docker Engine.
