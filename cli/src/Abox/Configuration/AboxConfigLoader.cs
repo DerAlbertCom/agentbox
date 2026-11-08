@@ -11,6 +11,7 @@ public static class AboxConfigLoader
     [
         "defaultSquad",
         "defaultLocation",
+        "teamsDirectory",
         "kitsDirectory",
         "defaultTag",
     ];
@@ -31,6 +32,7 @@ public static class AboxConfigLoader
         {
             DefaultSquad = Or(reader.GetString("defaultSquad"), defaults.DefaultSquad),
             DefaultLocation = reader.GetString("defaultLocation"),
+            TeamsDirectory = Or(reader.GetString("teamsDirectory"), defaults.TeamsDirectory),
             KitsDirectory = Or(reader.GetString("kitsDirectory"), defaults.KitsDirectory),
             DefaultTag = Or(reader.GetString("defaultTag"), defaults.DefaultTag),
         };

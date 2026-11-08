@@ -43,8 +43,11 @@ public sealed class SecretsServiceTests
         _sbx.RemoveSecretAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
 
-        _root.File("ac.abox", "workload: mti-ca-dotnet\n");
-        _root.File("kits/mti-ca-dotnet.workload", "template: docker.io/sbx/shell-docker-image\n");
+        _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
+        _root.File(
+            "teams/sample/mti-ca-dotnet.workload",
+            "template: docker.io/sbx/shell-docker-image\n"
+        );
     }
 
     [Fact]
@@ -52,7 +55,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("github");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -75,7 +78,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("github");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -97,7 +100,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("github");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -119,7 +122,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("github");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -146,7 +149,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("registry");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -177,7 +180,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("elastic");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -207,7 +210,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("github");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -235,7 +238,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("github");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -262,7 +265,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("github");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -283,7 +286,7 @@ public sealed class SecretsServiceTests
     {
         WriteKitWithService("elastic");
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:

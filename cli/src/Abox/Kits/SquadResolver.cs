@@ -12,7 +12,7 @@ public sealed class SquadResolver(AboxConfig config)
     /// Resolves a squad from the configurations in a project and the personal
     /// configurations of the user.
     /// </summary>
-    /// <param name="rootDirectory">The directory the project's configurations live in.</param>
+    /// <param name="rootDirectory">The directory of the project that holds its teams folder.</param>
     /// <param name="squadName">The name of the squad.</param>
     /// <param name="personalConfigurations">The personal <c>.abox</c> files of the user.</param>
     public ResolvedSquad Resolve(
@@ -36,9 +36,9 @@ public sealed class SquadResolver(AboxConfig config)
 
         var files = projectChain.Concat(personalChains.SelectMany(chain => chain)).ToList();
 
-        var workload = ResolveWorkload(projectChain, personalChains);
+        var workload = ResolveWorkload(projectChain, personalChains, rootDirectory);
         var parameters = MergeParameters(files);
-        var kits = MergeKits(files, parameters);
+        var kits = MergeKits(files, parameters, rootDirectory);
         var mcp = MergeMcp(files, parameters);
         var state = MergeState(files);
         var secrets = MergeSecrets(files);
@@ -62,7 +62,7 @@ public sealed class SquadResolver(AboxConfig config)
     /// <summary>
     /// Reads a configuration and the configurations it inherits from, the base first.
     /// </summary>
-    private static IReadOnlyList<AboxFile> LoadChain(ConfigRoot root, bool searchParents)
+    private IReadOnlyList<AboxFile> LoadChain(ConfigRoot root, bool searchParents)
     {
         var chain = new List<AboxFile>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -95,16 +95,17 @@ public sealed class SquadResolver(AboxConfig config)
 
     /// <summary>
     /// Finds the <c>.abox</c> file of a configuration. The name is matched without regard
-    /// to case, so <c>AC</c> finds <c>ac.abox</c>. A project is looked for in the parent
-    /// directories too, so the command works from anywhere in it.
+    /// to case, so <c>AC</c> finds <c>ac.abox</c>. The teams of a project live in its
+    /// team folders, and a project is looked for in the parent directories too, so the
+    /// command works from anywhere in it.
     /// </summary>
-    private static string FindConfigurationFile(string directory, string name, bool searchParents)
+    private string FindConfigurationFile(string directory, string name, bool searchParents)
     {
         var current = directory;
 
         while (true)
         {
-            var found = FindConfigurationFileHere(current, name);
+            var found = FindConfigurationFileHere(current, name, searchParents);
             if (found is not null)
             {
                 return found;
@@ -126,18 +127,46 @@ public sealed class SquadResolver(AboxConfig config)
 
         throw new AboxException(
             searchParents
-                ? $"There is no configuration '{name}.abox' in '{directory}' or in one of its parent directories."
+                ? $"There is no squad '{name}' in the teams folders of '{directory}' or of one of its parent directories."
                 : $"There is no configuration '{name}.abox' in '{directory}'."
         );
     }
 
-    private static string? FindConfigurationFileHere(string directory, string name)
+    private string? FindConfigurationFileHere(string directory, string name, bool searchParents)
     {
         if (!Directory.Exists(directory))
         {
             return null;
         }
 
+        // A personal squad lives in the configuration directory, one file each.
+        if (!searchParents)
+        {
+            if (FindConfigurationFileDirectly(directory, name) is { } found)
+            {
+                return found;
+            }
+            return null;
+        }
+
+        // A team of a project is a folder in its teams folder, and a squad is a file in it.
+        var teams = Path.Combine(directory, config.TeamsDirectory);
+        if (!Directory.Exists(teams))
+        {
+            return null;
+        }
+
+        return Directory
+            .EnumerateDirectories(teams)
+            .SelectMany(team => Directory.EnumerateFiles(team, "*.abox"))
+            .FirstOrDefault(file =>
+                Path.GetFileNameWithoutExtension(file)
+                    .Equals(name, StringComparison.OrdinalIgnoreCase)
+            );
+    }
+
+    private static string? FindConfigurationFileDirectly(string directory, string name)
+    {
         var expected = Path.Combine(directory, name + ".abox");
         if (File.Exists(expected))
         {
@@ -154,7 +183,8 @@ public sealed class SquadResolver(AboxConfig config)
 
     private WorkloadFile ResolveWorkload(
         IReadOnlyList<AboxFile> projectChain,
-        IReadOnlyList<IReadOnlyList<AboxFile>> personalChains
+        IReadOnlyList<IReadOnlyList<AboxFile>> personalChains,
+        string rootDirectory
     )
     {
         foreach (var chain in personalChains)
@@ -186,22 +216,28 @@ public sealed class SquadResolver(AboxConfig config)
             throw new AboxException($"'{root.Path}' declares no workload. A squad needs one.");
         }
 
-        var path = FindWorkloadFile(root.Directory, root.Workload);
+        var path = FindWorkloadFile(root.Directory, root.Workload, rootDirectory);
         return WorkloadFile.Load(path);
     }
 
-    private string FindWorkloadFile(string directory, string name)
+    /// <summary>
+    /// Finds the <c>.workload</c> file. The workloads of a team live next to its
+    /// squads; the shared workloads live in the kits folder of the project.
+    /// </summary>
+    private string FindWorkloadFile(string teamDirectory, string name, string rootDirectory)
     {
-        var kitsDirectory = Path.Combine(directory, config.KitsDirectory);
-        var expected = Path.Combine(kitsDirectory, name + ".workload");
-        if (File.Exists(expected))
+        var team = Path.Combine(teamDirectory, name + ".workload");
+        if (File.Exists(team))
         {
-            return expected;
+            return team;
         }
 
+        var kitsDirectory = Path.Combine(rootDirectory, config.KitsDirectory);
         if (!Directory.Exists(kitsDirectory))
         {
-            throw new AboxException($"There is no kits directory '{kitsDirectory}'.");
+            throw new AboxException(
+                $"There is no workload '{name}.workload' in '{teamDirectory}' and no kits directory '{kitsDirectory}'."
+            );
         }
 
         var match = Directory
@@ -213,7 +249,7 @@ public sealed class SquadResolver(AboxConfig config)
 
         return match
             ?? throw new AboxException(
-                $"There is no workload '{name}.workload' in '{kitsDirectory}'."
+                $"There is no workload '{name}.workload' in '{teamDirectory}' or in '{kitsDirectory}'."
             );
     }
 
@@ -245,7 +281,8 @@ public sealed class SquadResolver(AboxConfig config)
 
     private IReadOnlyList<KitSource> MergeKits(
         IReadOnlyList<AboxFile> files,
-        IReadOnlyDictionary<string, string> parameters
+        IReadOnlyDictionary<string, string> parameters,
+        string rootDirectory
     )
     {
         var kits = new List<KitSource>();
@@ -270,7 +307,7 @@ public sealed class SquadResolver(AboxConfig config)
                     StringComparer.Ordinal
                 );
 
-                kits.Add(ResolveKit(kit, arguments, file));
+                kits.Add(ResolveKit(kit, arguments, file, rootDirectory));
             }
         }
 
@@ -280,7 +317,8 @@ public sealed class SquadResolver(AboxConfig config)
     private KitSource ResolveKit(
         KitDeclaration kit,
         IReadOnlyDictionary<string, string> arguments,
-        AboxFile file
+        AboxFile file,
+        string rootDirectory
     )
     {
         if (KitReference.IsRegistryReference(kit.Name))
@@ -288,7 +326,7 @@ public sealed class SquadResolver(AboxConfig config)
             return new KitSource(kit.Name, null, kit.Name, arguments);
         }
 
-        var directory = Path.Combine(file.Directory, config.KitsDirectory, kit.Name);
+        var directory = Path.Combine(rootDirectory, config.KitsDirectory, kit.Name);
         if (!Directory.Exists(directory))
         {
             throw new AboxException(

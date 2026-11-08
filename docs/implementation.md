@@ -8,9 +8,10 @@ built yet. It is the file to read first when you pick this work up.
 
 ### `abox build --squad <name> [--root <dir>] [--tag <tag>] [--no-verify]`
 
-1. Reads the `<squad>.abox` file of the project and follows its `base` chain. The file is
-   looked for in the directory of the command and in its parent directories, so the
-   command works from anywhere in the project. `--squad` can be given more than once.
+1. Reads the `<squad>.abox` file of a team folder under `teams` and follows its `base`
+   chain. The teams folder is looked for in the directory of the command and in its
+   parent directories, so the command works from anywhere in the project. `--squad`
+   can be given more than once.
 2. Checks the chain: a cycle, a kit, an MCP server, a parameter, a state directory or a
    secret that is declared twice, overlapping state directories, and a parameter that no
    configuration declares are errors. The error names the duplicate and the files that
@@ -214,10 +215,12 @@ cli/src/Abox/
 - **Local images only.** A build stays on the machine and `abox create` uses it. There
   is no registry in this version, so `--local-image` is the default and `--tag` chooses
   the tag of the local build.
-- **The kits folder.** The kits and the workloads live in the `kits` folder of the
-  project, the `.abox` files in the root of the project.
+- **The teams folder.** A team is a folder under `teams`. Its `.abox` files (the squads
+  of the team), its `.workload` and the scripts of the workload live in it. The kits
+  stay in the `kits` folder of the project, so every team can use them; the workload of
+  a team lives in the team folder, a shared one can stay in the `kits` folder.
 - **The name of a squad is the name of its file.** `abox build --squad AC` finds
-  `ac.abox` and calls the squad `ac`.
+  `ac.abox` in a team folder and calls the squad `ac`.
 - **The workspace is where the runtime puts it.** The runtime mounts the folder of the
   host at the same path in the sandbox and says so with `WORKSPACE_DIR`, so the
   launcher asks for it instead of assuming `/home/agent/workspace`.

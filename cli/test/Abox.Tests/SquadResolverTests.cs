@@ -11,14 +11,17 @@ public sealed class SquadResolverTests
     public SquadResolverTests()
     {
         _root.Directory_("kits/pi-config");
-        _root.File("kits/mti-ca-dotnet.workload", "template: docker.io/sbx/shell-docker-image\n");
+        _root.File(
+            "teams/sample/mti-ca-dotnet.workload",
+            "template: docker.io/sbx/shell-docker-image\n"
+        );
     }
 
     [Fact]
     public void ASquadResolvesItsWorkloadAndItsKits()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -40,7 +43,7 @@ public sealed class SquadResolverTests
     [Fact]
     public void TheNameOfASquadIsMatchedWithoutRegardToCase()
     {
-        _root.File("ac.abox", "workload: mti-ca-dotnet\n");
+        _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
 
         var squad = _resolver.Resolve(_root.Path, "AC", []);
 
@@ -51,7 +54,7 @@ public sealed class SquadResolverTests
     public void ABaseChainIsCombinedFromTheBaseToTheChild()
     {
         _root.File(
-            "cape.abox",
+            "teams/sample/cape.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -59,7 +62,7 @@ public sealed class SquadResolverTests
             """
         );
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             base: cape
             kits:
@@ -77,8 +80,8 @@ public sealed class SquadResolverTests
     [Fact]
     public void ACycleIsAnError()
     {
-        _root.File("a.abox", "base: b\n");
-        _root.File("b.abox", "base: a\n");
+        _root.File("teams/sample/a.abox", "base: b\n");
+        _root.File("teams/sample/b.abox", "base: a\n");
 
         var action = () => _resolver.Resolve(_root.Path, "a", []);
 
@@ -89,7 +92,7 @@ public sealed class SquadResolverTests
     public void TheSameKitTwiceIsAnError()
     {
         _root.File(
-            "cape.abox",
+            "teams/sample/cape.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -97,7 +100,7 @@ public sealed class SquadResolverTests
             """
         );
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             base: cape
             kits:
@@ -114,7 +117,7 @@ public sealed class SquadResolverTests
     public void TwoTagsOfOneRepositoryAreOneKit()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -132,7 +135,7 @@ public sealed class SquadResolverTests
     public void TheSameParameterTwiceIsAnError()
     {
         _root.File(
-            "cape.abox",
+            "teams/sample/cape.abox",
             """
             workload: mti-ca-dotnet
             parameters:
@@ -140,7 +143,7 @@ public sealed class SquadResolverTests
             """
         );
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             base: cape
             parameters:
@@ -157,7 +160,7 @@ public sealed class SquadResolverTests
     public void AParameterNoConfigurationDeclaresIsAnError()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -176,7 +179,7 @@ public sealed class SquadResolverTests
     public void AParameterIsGivenToTheKitThatUsesIt()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             parameters:
@@ -198,7 +201,7 @@ public sealed class SquadResolverTests
     public void OverlappingStateDirectoriesAreAnError()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             state:
@@ -216,7 +219,7 @@ public sealed class SquadResolverTests
     public void AStateDirectoryIsKeptOnce()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             state:
@@ -234,7 +237,7 @@ public sealed class SquadResolverTests
     [Fact]
     public void ASquadWithoutAWorkloadIsAnError()
     {
-        _root.File("ac.abox", "kits:\n  - pi-config\n");
+        _root.File("teams/sample/ac.abox", "kits:\n  - pi-config\n");
 
         var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
@@ -245,7 +248,7 @@ public sealed class SquadResolverTests
     public void AKitThatIsNotThereIsAnError()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:
@@ -261,7 +264,7 @@ public sealed class SquadResolverTests
     [Fact]
     public void ASquadIsFoundInAParentDirectory()
     {
-        _root.File("ac.abox", "workload: mti-ca-dotnet\n");
+        _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
         var folder = _root.Directory_("projects/one");
 
         var squad = _resolver.Resolve(folder, "ac", []);
@@ -272,7 +275,7 @@ public sealed class SquadResolverTests
     [Fact]
     public void TheBaseOfAPersonalConfigurationIsNotLookedForInAParentDirectory()
     {
-        _root.File("ac.abox", "workload: mti-ca-dotnet\n");
+        _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
         _root.File("base.abox", "kits:\n  - pi-config\n");
         var personal = _root.File("personal/personal.abox", "base: base\n");
 
@@ -285,7 +288,7 @@ public sealed class SquadResolverTests
     public void APersonalConfigurationAddsToTheSquad()
     {
         _root.File(
-            "ac.abox",
+            "teams/sample/ac.abox",
             """
             workload: mti-ca-dotnet
             kits:

@@ -6,7 +6,8 @@
 The idea, the roles and the decisions behind the commands are in
 [docs/concept.md](docs/concept.md). What is built today, and what is left, is in
 [docs/implementation.md](docs/implementation.md) — **start there when you pick this
-work up**.
+work up**. How to write the squads, the kits and the workloads of a project is in
+[docs/authoring.md](docs/authoring.md).
 
 ## The commands
 
@@ -24,11 +25,12 @@ and `abox exec <sandbox> -- <command>`.
 
 ```
 .
-├── ac.abox                    the squad: its kits, its parameters, its state, its secrets
-├── cape.abox                  the base of the squad: the workload
+├── teams/
+│   └── sample/
+│       ├── ac.abox            the squad: its kits, its parameters, its state, its secrets
+│       ├── cape.abox          the base of the squads of the team
+│       └── sample.workload    the workload: the template, the tools, the scripts
 ├── kits/
-│   ├── mti-ca-dotnet.workload the workload: the template, the tools, the scripts
-│   ├── enable-fzf.sh          a script of the workload
 │   ├── pi-config/             a kit
 │   │   └── pi-config.yaml
 │   └── opencode-config/
@@ -39,9 +41,10 @@ and `abox exec <sandbox> -- <command>`.
     └── test/Abox.Tests/       the tests
 ```
 
-The `.abox` files live in the root of the project, the kits and the workloads in the
-`kits` folder. A kit named in a `.abox` file without a slash or a colon is a directory
-in the `kits` folder; a name with a slash or a colon is a reference sbx resolves.
+The `.abox` files and the workloads live in the team folders under `teams`, the kits in
+the `kits` folder of the project. A kit named in a `.abox` file without a slash or a
+colon is a directory in the `kits` folder; a name with a slash or a colon is a
+reference sbx resolves.
 
 ## Building and running the command line
 

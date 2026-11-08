@@ -117,7 +117,7 @@ Implement the contract above, register the launcher under its id, and add a row 
 
 ## Configuration files
 
-References never include a file extension. For now, `abox build` and `abox publish` resolve each `--squad` to an `.abox` file in the repository root: `AC` → `ac.abox` (proposed, case-insensitive). `base` and `workload` names resolve in the same root (proposed).
+References never include a file extension. The teams of a project live in a folder per team under `teams/`, and `abox build` resolves each `--squad` to an `.abox` file in one of the team folders: `AC` → `teams/<team>/ac.abox` (case-insensitive). `base` names resolve in the team folders of the project too. The `workload` named by the root config lives in the team folder, or, when it is shared, in the `kits` folder of the project.
 
 **`.workload`** (YAML)
 - `template`: container image to build on, as in `sbx run --template`. Default `docker.io/sbx/shell-docker-image`, a shell image with Docker Engine inside (`docker.io/sbx/shell-image` is the variant without it). Pin a tag or digest rather than `latest`. *(proposed)* Named `template` so `base` only means the parent `.abox`. *(name proposed)*
@@ -137,12 +137,12 @@ A `base` chain combines declarations and never overrides them. Across the whole 
 Examples:
 
 ```yaml
-# cape.abox (root)
-workload: mti-ca-dotnet
+# teams/<team>/cape.abox (root)
+workload: sample
 ```
 
 ```yaml
-# mti-ca-dotnet.workload
+# teams/<team>/sample.workload
 template: docker.io/sbx/shell-docker-image     # default, can be omitted
 mise:
   - nodejs@24.4.3

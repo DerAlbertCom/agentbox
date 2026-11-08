@@ -72,7 +72,7 @@ public sealed class SecretsCommand : Command
         var root = new Option<string>("--root")
         {
             Description =
-                "The directory the squad's configurations live in. Defaults to the current directory.",
+                "The directory of the project that holds the teams folder. Defaults to the current directory.",
         };
 
         var service = new Option<string[]>("--service")

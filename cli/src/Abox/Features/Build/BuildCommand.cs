@@ -28,7 +28,7 @@ public sealed class BuildCommand : Command
         var root = new Option<string>("--root")
         {
             Description =
-                "The directory the squad's configurations live in. Defaults to the current directory.",
+                "The directory of the project that holds the teams folder. Defaults to the current directory.",
         };
 
         var tag = new Option<string>("--tag")
