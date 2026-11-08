@@ -11,7 +11,12 @@ namespace Abox.Services;
 /// <param name="Location">The folder the sandbox works on.</param>
 /// <param name="Tag">The tag of the local build to use.</param>
 /// <param name="AssumeYes">Whether the replacement of an existing sandbox is confirmed already.</param>
-public sealed record CreateRequest(string Squad, string Location, string Tag, bool AssumeYes = false);
+public sealed record CreateRequest(
+    string Squad,
+    string Location,
+    string Tag,
+    bool AssumeYes = false
+);
 
 /// <summary>
 /// Creates the sandbox of a folder from the local build of its squad.
@@ -34,10 +39,12 @@ public sealed class CreateService
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
     public async Task<int> CreateAsync(CreateRequest request, CancellationToken cancellationToken)
     {
-        var manifest = _store.Load(request.Squad, request.Tag)
-                       ?? throw new AboxException(
-                           $"There is no local build of '{request.Squad}' with the tag '{request.Tag}'. " +
-                           $"Build it first: abox build --squad {request.Squad}");
+        var manifest =
+            _store.Load(request.Squad, request.Tag)
+            ?? throw new AboxException(
+                $"There is no local build of '{request.Squad}' with the tag '{request.Tag}'. "
+                    + $"Build it first: abox build --squad {request.Squad}"
+            );
 
         var location = Path.GetFullPath(request.Location);
         if (!Directory.Exists(location))
@@ -57,19 +64,30 @@ public sealed class CreateService
             mixins.Add(manifest.StateMixinDirectory);
         }
 
-        var arguments = manifest.Kits
-            .SelectMany(kit => kit.Arguments)
+        var arguments = manifest
+            .Kits.SelectMany(kit => kit.Arguments)
             .GroupBy(argument => argument.Key, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToDictionary(group => group.Key, group => group.Value, StringComparer.Ordinal);
 
-        var exitCode = await _sbx.CreateAsync(
-            new SbxCreateRequest(manifest.WorkloadKitDirectory, location, name, mixins, arguments, mounts, servers),
-            cancellationToken);
+        var outcome = await _sbx.CreateAsync(
+            new SbxCreateRequest(
+                manifest.WorkloadKitDirectory,
+                location,
+                name,
+                mixins,
+                arguments,
+                mounts,
+                servers
+            ),
+            cancellationToken
+        );
 
-        if (exitCode != 0)
+        if (!outcome.Succeeded)
         {
-            throw new AboxException($"sbx could not create the sandbox '{name}'.");
+            throw new AboxException(
+                $"sbx could not create the sandbox '{name}'.{Environment.NewLine}{outcome.Output.Trim()}"
+            );
         }
 
         _console.WriteLine($"Created sandbox '{name}' for '{location}'.");
@@ -81,7 +99,8 @@ public sealed class CreateService
         string name,
         string location,
         bool assumeYes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         var existing = await _sbx.FindSandboxAsync(name, cancellationToken);
         if (existing is null)
@@ -128,14 +147,17 @@ public sealed class CreateService
 
     private async Task<IReadOnlyList<string>> EnsureMcpServersAsync(
         BuildManifest manifest,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken
+    )
     {
         if (manifest.Mcp.Count == 0)
         {
             return [];
         }
 
-        var registered = (await _sbx.ListMcpServersAsync(cancellationToken)).ToHashSet(StringComparer.Ordinal);
+        var registered = (await _sbx.ListMcpServersAsync(cancellationToken)).ToHashSet(
+            StringComparer.Ordinal
+        );
         var servers = new List<string>();
 
         foreach (var server in manifest.Mcp)
@@ -145,17 +167,24 @@ public sealed class CreateService
                 if (!registered.Contains(server.Name))
                 {
                     throw new AboxException(
-                        $"The MCP server '{server.Name}' is not registered on this host. " +
-                        $"Register it with 'sbx mcp add {server.Name} --url <url>', or give it an url in the configuration.");
+                        $"The MCP server '{server.Name}' is not registered on this host. "
+                            + $"Register it with 'sbx mcp add {server.Name} --url <url>', or give it an url in the configuration."
+                    );
                 }
             }
             else if (!registered.Contains(server.Name))
             {
                 _console.WriteLine($"Registering the MCP server '{server.Name}'...");
-                var exitCode = await _sbx.AddMcpServerAsync(server.Name, server.Url, cancellationToken);
+                var exitCode = await _sbx.AddMcpServerAsync(
+                    server.Name,
+                    server.Url,
+                    cancellationToken
+                );
                 if (exitCode != 0)
                 {
-                    throw new AboxException($"The MCP server '{server.Name}' could not be registered.");
+                    throw new AboxException(
+                        $"The MCP server '{server.Name}' could not be registered."
+                    );
                 }
             }
 

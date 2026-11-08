@@ -6,6 +6,5 @@ public sealed record DiagnoseReport(IReadOnlyList<DiagnosticCheck> Checks)
     public DiagnosticCheck? Find(string name) =>
         Checks.FirstOrDefault(check => check.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
-    public IReadOnlyList<DiagnosticCheck> Failures =>
-        Checks.Where(check => check.Failed).ToList();
+    public IReadOnlyList<DiagnosticCheck> Failures => Checks.Where(check => check.Failed).ToList();
 }

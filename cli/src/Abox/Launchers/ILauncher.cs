@@ -25,7 +25,8 @@ public sealed record LauncherContext(
     string WorkspacePath,
     IReadOnlyList<string> Argv,
     ISbxClient Sbx,
-    IConsole Console);
+    IConsole Console
+);
 
 /// <summary>
 /// A way to open something for the user in a sandbox.

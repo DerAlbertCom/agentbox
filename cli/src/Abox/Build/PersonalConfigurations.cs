@@ -14,6 +14,9 @@ public sealed class PersonalConfigurations
     /// <summary>The personal configuration files, in a stable order.</summary>
     public IReadOnlyList<string> Files =>
         Directory.Exists(_paths.ConfigDirectory)
-            ? Directory.EnumerateFiles(_paths.ConfigDirectory, "*.abox").OrderBy(file => file).ToList()
+            ? Directory
+                .EnumerateFiles(_paths.ConfigDirectory, "*.abox")
+                .OrderBy(file => file)
+                .ToList()
             : [];
 }

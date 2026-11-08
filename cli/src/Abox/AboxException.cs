@@ -6,12 +6,8 @@ namespace Abox;
 public sealed class AboxException : Exception
 {
     public AboxException(string message)
-        : base(message)
-    {
-    }
+        : base(message) { }
 
     public AboxException(string message, Exception innerException)
-        : base(message, innerException)
-    {
-    }
+        : base(message, innerException) { }
 }

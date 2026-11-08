@@ -19,11 +19,22 @@ public sealed class SquadResolver
     /// <param name="rootDirectory">The directory the project's configurations live in.</param>
     /// <param name="squadName">The name of the squad.</param>
     /// <param name="personalConfigurations">The personal <c>.abox</c> files of the user.</param>
-    public ResolvedSquad Resolve(string rootDirectory, string squadName, IReadOnlyList<string> personalConfigurations)
+    public ResolvedSquad Resolve(
+        string rootDirectory,
+        string squadName,
+        IReadOnlyList<string> personalConfigurations
+    )
     {
         var projectChain = LoadChain(new ConfigRoot(rootDirectory, squadName));
         var personalChains = personalConfigurations
-            .Select(file => LoadChain(new ConfigRoot(Path.GetDirectoryName(file) ?? ".", Path.GetFileNameWithoutExtension(file))))
+            .Select(file =>
+                LoadChain(
+                    new ConfigRoot(
+                        Path.GetDirectoryName(file) ?? ".",
+                        Path.GetFileNameWithoutExtension(file)
+                    )
+                )
+            )
             .ToList();
 
         var files = projectChain.Concat(personalChains.SelectMany(chain => chain)).ToList();
@@ -45,7 +56,8 @@ public sealed class SquadResolver
             parameters,
             mcp,
             state,
-            files.Select(file => file.Path).ToList());
+            files.Select(file => file.Path).ToList()
+        );
     }
 
     /// <summary>
@@ -62,7 +74,9 @@ public sealed class SquadResolver
             var path = FindConfigurationFile(current.Directory, current.Name);
             if (!visited.Add(path))
             {
-                throw new AboxException($"The configuration '{current.Name}' is part of a cycle: '{path}'.");
+                throw new AboxException(
+                    $"The configuration '{current.Name}' is part of a cycle: '{path}'."
+                );
             }
 
             var file = AboxFile.Load(path);
@@ -97,15 +111,23 @@ public sealed class SquadResolver
             throw new AboxException($"The directory '{directory}' does not exist.");
         }
 
-        var match = Directory.EnumerateFiles(directory, "*.abox")
-            .FirstOrDefault(file => Path.GetFileNameWithoutExtension(file).Equals(name, StringComparison.OrdinalIgnoreCase));
+        var match = Directory
+            .EnumerateFiles(directory, "*.abox")
+            .FirstOrDefault(file =>
+                Path.GetFileNameWithoutExtension(file)
+                    .Equals(name, StringComparison.OrdinalIgnoreCase)
+            );
 
-        return match ?? throw new AboxException($"There is no configuration '{name}.abox' in '{directory}'.");
+        return match
+            ?? throw new AboxException(
+                $"There is no configuration '{name}.abox' in '{directory}'."
+            );
     }
 
     private WorkloadFile ResolveWorkload(
         IReadOnlyList<AboxFile> projectChain,
-        IReadOnlyList<IReadOnlyList<AboxFile>> personalChains)
+        IReadOnlyList<IReadOnlyList<AboxFile>> personalChains
+    )
     {
         foreach (var chain in personalChains)
         {
@@ -114,7 +136,8 @@ public sealed class SquadResolver
                 if (file.Workload is not null)
                 {
                     throw new AboxException(
-                        $"'{file.Path}' declares a workload. Only the root configuration of a squad declares one.");
+                        $"'{file.Path}' declares a workload. Only the root configuration of a squad declares one."
+                    );
                 }
             }
         }
@@ -125,7 +148,8 @@ public sealed class SquadResolver
             if (file.Workload is not null)
             {
                 throw new AboxException(
-                    $"'{file.Path}' declares a workload. Only the root configuration of a squad declares one.");
+                    $"'{file.Path}' declares a workload. Only the root configuration of a squad declares one."
+                );
             }
         }
 
@@ -152,13 +176,22 @@ public sealed class SquadResolver
             throw new AboxException($"There is no kits directory '{kitsDirectory}'.");
         }
 
-        var match = Directory.EnumerateFiles(kitsDirectory, "*.workload")
-            .FirstOrDefault(file => Path.GetFileNameWithoutExtension(file).Equals(name, StringComparison.OrdinalIgnoreCase));
+        var match = Directory
+            .EnumerateFiles(kitsDirectory, "*.workload")
+            .FirstOrDefault(file =>
+                Path.GetFileNameWithoutExtension(file)
+                    .Equals(name, StringComparison.OrdinalIgnoreCase)
+            );
 
-        return match ?? throw new AboxException($"There is no workload '{name}.workload' in '{kitsDirectory}'.");
+        return match
+            ?? throw new AboxException(
+                $"There is no workload '{name}.workload' in '{kitsDirectory}'."
+            );
     }
 
-    private static IReadOnlyDictionary<string, string> MergeParameters(IReadOnlyList<AboxFile> files)
+    private static IReadOnlyDictionary<string, string> MergeParameters(
+        IReadOnlyList<AboxFile> files
+    )
     {
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
         var origins = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -170,7 +203,8 @@ public sealed class SquadResolver
                 if (origins.TryGetValue(name, out var origin))
                 {
                     throw new AboxException(
-                        $"The parameter '{name}' is declared twice: in '{origin}' and in '{file.Path}'. A parameter is declared once.");
+                        $"The parameter '{name}' is declared twice: in '{origin}' and in '{file.Path}'. A parameter is declared once."
+                    );
                 }
 
                 origins[name] = file.Path;
@@ -183,7 +217,8 @@ public sealed class SquadResolver
 
     private IReadOnlyList<KitSource> MergeKits(
         IReadOnlyList<AboxFile> files,
-        IReadOnlyDictionary<string, string> parameters)
+        IReadOnlyDictionary<string, string> parameters
+    )
     {
         var kits = new List<KitSource>();
         var origins = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -195,7 +230,8 @@ public sealed class SquadResolver
                 if (origins.TryGetValue(kit.Repository, out var origin))
                 {
                     throw new AboxException(
-                        $"The kit '{kit.Name}' is declared twice: in '{origin}' and in '{file.Path}'. One repository is used once.");
+                        $"The kit '{kit.Name}' is declared twice: in '{origin}' and in '{file.Path}'. One repository is used once."
+                    );
                 }
 
                 origins[kit.Repository] = file.Path;
@@ -203,7 +239,8 @@ public sealed class SquadResolver
                 var arguments = kit.Arguments.ToDictionary(
                     argument => argument.Key,
                     argument => ParameterReference.Expand(argument.Value, parameters, file.Path),
-                    StringComparer.Ordinal);
+                    StringComparer.Ordinal
+                );
 
                 kits.Add(ResolveKit(kit, arguments, file));
             }
@@ -212,7 +249,11 @@ public sealed class SquadResolver
         return kits;
     }
 
-    private KitSource ResolveKit(KitDeclaration kit, IReadOnlyDictionary<string, string> arguments, AboxFile file)
+    private KitSource ResolveKit(
+        KitDeclaration kit,
+        IReadOnlyDictionary<string, string> arguments,
+        AboxFile file
+    )
     {
         if (KitReference.IsRegistryReference(kit.Name))
         {
@@ -222,7 +263,9 @@ public sealed class SquadResolver
         var directory = Path.Combine(file.Directory, _config.KitsDirectory, kit.Name);
         if (!Directory.Exists(directory))
         {
-            throw new AboxException($"The kit '{kit.Name}' of '{file.Path}' is not in '{directory}'.");
+            throw new AboxException(
+                $"The kit '{kit.Name}' of '{file.Path}' is not in '{directory}'."
+            );
         }
 
         return new KitSource(kit.Name, directory, null, arguments);
@@ -230,7 +273,8 @@ public sealed class SquadResolver
 
     private static IReadOnlyList<McpDeclaration> MergeMcp(
         IReadOnlyList<AboxFile> files,
-        IReadOnlyDictionary<string, string> parameters)
+        IReadOnlyDictionary<string, string> parameters
+    )
     {
         var servers = new List<McpDeclaration>();
         var origins = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -242,20 +286,34 @@ public sealed class SquadResolver
                 if (origins.TryGetValue(server.Name, out var origin))
                 {
                     throw new AboxException(
-                        $"The MCP server '{server.Name}' is declared twice: in '{origin}' and in '{file.Path}'. A server is declared once.");
+                        $"The MCP server '{server.Name}' is declared twice: in '{origin}' and in '{file.Path}'. A server is declared once."
+                    );
                 }
 
                 origins[server.Name] = file.Path;
 
-                servers.Add(new McpDeclaration(
-                    server.Name,
-                    server.Url is null ? null : ParameterReference.Expand(server.Url, parameters, file.Path),
-                    server.Command is null ? null : ParameterReference.Expand(server.Command, parameters, file.Path),
-                    server.Arguments?.Select(argument => ParameterReference.Expand(argument, parameters, file.Path)).ToList(),
-                    server.Headers?.ToDictionary(
-                        header => header.Key,
-                        header => ParameterReference.Expand(header.Value, parameters, file.Path),
-                        StringComparer.Ordinal)));
+                servers.Add(
+                    new McpDeclaration(
+                        server.Name,
+                        server.Url is null
+                            ? null
+                            : ParameterReference.Expand(server.Url, parameters, file.Path),
+                        server.Command is null
+                            ? null
+                            : ParameterReference.Expand(server.Command, parameters, file.Path),
+                        server
+                            .Arguments?.Select(argument =>
+                                ParameterReference.Expand(argument, parameters, file.Path)
+                            )
+                            .ToList(),
+                        server.Headers?.ToDictionary(
+                            header => header.Key,
+                            header =>
+                                ParameterReference.Expand(header.Value, parameters, file.Path),
+                            StringComparer.Ordinal
+                        )
+                    )
+                );
             }
         }
 
@@ -276,7 +334,8 @@ public sealed class SquadResolver
                 if (origins.TryGetValue(entry.SandboxPath, out var origin))
                 {
                     throw new AboxException(
-                        $"The state directory '{value}' is declared twice: in '{origin}' and in '{file.Path}'. A state directory is declared once.");
+                        $"The state directory '{value}' is declared twice: in '{origin}' and in '{file.Path}'. A state directory is declared once."
+                    );
                 }
 
                 foreach (var existing in entries)
@@ -284,7 +343,8 @@ public sealed class SquadResolver
                     if (existing.Contains(entry) || entry.Contains(existing))
                     {
                         throw new AboxException(
-                            $"The state directories '{existing.SandboxPath}' and '{entry.SandboxPath}' overlap. sbx refuses overlapping host mounts.");
+                            $"The state directories '{existing.SandboxPath}' and '{entry.SandboxPath}' overlap. sbx refuses overlapping host mounts."
+                        );
                     }
                 }
 

@@ -1,6 +1,6 @@
 using Abox.Infrastructure;
-using Abox.Naming;
 using Abox.Launchers;
+using Abox.Naming;
 using Abox.Sbx;
 
 namespace Abox.Services;
@@ -25,7 +25,8 @@ public sealed class RunService
         LauncherRegistry launchers,
         ISbxClient sbx,
         IHostPrograms hostPrograms,
-        IConsole console)
+        IConsole console
+    )
     {
         _launchers = launchers;
         _sbx = sbx;
@@ -45,7 +46,9 @@ public sealed class RunService
                 continue;
             }
 
-            _console.WriteError($"The launcher '{launcher.Id}' needs '{requirement.Program}' on the host.");
+            _console.WriteError(
+                $"The launcher '{launcher.Id}' needs '{requirement.Program}' on the host."
+            );
             _console.WriteError(requirement.InstallHint);
             return 1;
         }
@@ -68,19 +71,38 @@ public sealed class RunService
                 continue;
             }
 
-            _console.WriteError($"The image of '{name}' has no '{program}'. The image predates the '{launcher.Id}' launcher.");
-            _console.WriteError($"Create the sandbox again for this folder: abox create --location {location}");
+            _console.WriteError(
+                $"The image of '{name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
+            );
+            _console.WriteError(
+                $"Create the sandbox again for this folder: abox create --location {location}"
+            );
             return 1;
         }
 
         var context = new LauncherContext(
             location,
             name,
-            ShellLauncher.WorkspacePath,
+            await WorkspaceOfAsync(name, location, cancellationToken),
             request.Argv,
             _sbx,
-            _console);
+            _console
+        );
 
         return await launcher.RunAsync(context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Where the workspace of the sandbox is. The runtime says so; when it does not, the
+    /// folder of the host is the best guess.
+    /// </summary>
+    private async Task<string> WorkspaceOfAsync(
+        string name,
+        string location,
+        CancellationToken cancellationToken
+    )
+    {
+        var workspace = await _sbx.GetWorkspaceDirectoryAsync(name, cancellationToken);
+        return workspace ?? location;
     }
 }

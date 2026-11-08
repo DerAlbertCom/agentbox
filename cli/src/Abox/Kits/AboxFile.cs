@@ -14,7 +14,8 @@ public sealed class AboxFile
         IReadOnlyList<KitDeclaration> kits,
         IReadOnlyDictionary<string, string> parameters,
         IReadOnlyList<McpDeclaration> mcp,
-        IReadOnlyList<string> state)
+        IReadOnlyList<string> state
+    )
     {
         Path = path;
         Base = @base;
@@ -62,7 +63,8 @@ public sealed class AboxFile
             ReadKits(reader),
             reader.GetStringMap("parameters"),
             ReadMcp(reader),
-            reader.GetStringList("state"));
+            reader.GetStringList("state")
+        );
     }
 
     private static IReadOnlyList<KitDeclaration> ReadKits(YamlReader reader)
@@ -78,8 +80,9 @@ public sealed class AboxFile
             }
 
             entry.RejectUnknownKeys("name", "args");
-            var name = entry.GetString("name")
-                       ?? throw new AboxException($"'{reader.Source}': a kit entry needs a 'name'.");
+            var name =
+                entry.GetString("name")
+                ?? throw new AboxException($"'{reader.Source}': a kit entry needs a 'name'.");
             kits.Add(new KitDeclaration(name, entry.GetStringMap("args")));
         }
 
@@ -99,15 +102,19 @@ public sealed class AboxFile
             }
 
             entry.RejectUnknownKeys("name", "url", "command", "args", "headers");
-            var name = entry.GetString("name")
-                       ?? throw new AboxException($"'{reader.Source}': an mcp entry needs a 'name'.");
+            var name =
+                entry.GetString("name")
+                ?? throw new AboxException($"'{reader.Source}': an mcp entry needs a 'name'.");
 
-            servers.Add(new McpDeclaration(
-                name,
-                entry.GetString("url"),
-                entry.GetString("command"),
-                entry.GetStringList("args"),
-                entry.GetStringMap("headers")));
+            servers.Add(
+                new McpDeclaration(
+                    name,
+                    entry.GetString("url"),
+                    entry.GetString("command"),
+                    entry.GetStringList("args"),
+                    entry.GetStringMap("headers")
+                )
+            );
         }
 
         return servers;

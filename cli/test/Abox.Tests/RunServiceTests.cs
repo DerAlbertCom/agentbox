@@ -1,7 +1,7 @@
 using Abox.Launchers;
 using Abox.Naming;
-using Abox.Services;
 using Abox.Sbx;
+using Abox.Services;
 
 namespace Abox.Tests;
 
@@ -21,11 +21,15 @@ public sealed class RunServiceTests
     [Fact]
     public async Task TheShellRunsInTheWorkspaceOfTheSandbox()
     {
-        _sbx.Sandboxes.Add(new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now));
+        _sbx.Sandboxes.Add(
+            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
+        );
+        _sbx.WorkspaceDirectory = "/home/agent/workspace";
 
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(0, exitCode);
         var exec = Assert.Single(_sbx.Executed);
@@ -35,11 +39,28 @@ public sealed class RunServiceTests
     }
 
     [Fact]
+    public async Task TheShellRunsInTheFolderWhenTheRuntimeDoesNotSayWhereTheWorkspaceIs()
+    {
+        _sbx.Sandboxes.Add(
+            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
+        );
+
+        await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None);
+
+        Assert.Equal(_root.Path, Assert.Single(_sbx.Executed).WorkingDirectory);
+    }
+
+    [Fact]
     public async Task TheShellRunsTheCommandThatIsGiven()
     {
-        _sbx.Sandboxes.Add(new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now));
+        _sbx.Sandboxes.Add(
+            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
+        );
 
-        await _service.RunAsync(new RunRequest("shell", _root.Path, ["ls", "-la"]), CancellationToken.None);
+        await _service.RunAsync(
+            new RunRequest("shell", _root.Path, ["ls", "-la"]),
+            CancellationToken.None
+        );
 
         Assert.Equal(["ls", "-la"], Assert.Single(_sbx.Executed).Command);
     }
@@ -49,7 +70,8 @@ public sealed class RunServiceTests
     {
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(1, exitCode);
         Assert.Contains("abox create", _console.AllText);
@@ -59,8 +81,9 @@ public sealed class RunServiceTests
     [Fact]
     public async Task ALauncherThatIsNotKnownIsAnError()
     {
-        var exception = await Assert.ThrowsAsync<AboxException>(
-            () => _service.RunAsync(new RunRequest("nope", _root.Path, []), CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<AboxException>(() =>
+            _service.RunAsync(new RunRequest("nope", _root.Path, []), CancellationToken.None)
+        );
 
         Assert.Contains("no launcher 'nope'", exception.Message);
     }

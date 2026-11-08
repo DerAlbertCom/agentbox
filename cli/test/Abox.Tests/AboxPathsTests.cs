@@ -48,6 +48,9 @@ public sealed class AboxPathsTests
     {
         var paths = AboxPaths.For("/config", "/state");
 
-        Assert.Equal(Path.Combine("/state", "builds", "ac", "latest"), paths.BuildDirectory("ac", "latest"));
+        Assert.Equal(
+            Path.Combine("/state", "builds", "ac", "latest"),
+            paths.BuildDirectory("ac", "latest")
+        );
     }
 }

@@ -17,11 +17,14 @@ public sealed class SquadResolverTests
     [Fact]
     public void ASquadResolvesItsWorkloadAndItsKits()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             kits:
               - pi-config
-            """);
+            """
+        );
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
 
@@ -47,16 +50,22 @@ public sealed class SquadResolverTests
     [Fact]
     public void ABaseChainIsCombinedFromTheBaseToTheChild()
     {
-        _root.File("cape.abox", """
+        _root.File(
+            "cape.abox",
+            """
             workload: mti-ca-dotnet
             kits:
               - pi-config
-            """);
-        _root.File("ac.abox", """
+            """
+        );
+        _root.File(
+            "ac.abox",
+            """
             base: cape
             kits:
               - other-kit
-            """);
+            """
+        );
         _root.Directory_("kits/other-kit");
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
@@ -79,16 +88,22 @@ public sealed class SquadResolverTests
     [Fact]
     public void TheSameKitTwiceIsAnError()
     {
-        _root.File("cape.abox", """
+        _root.File(
+            "cape.abox",
+            """
             workload: mti-ca-dotnet
             kits:
               - pi-config
-            """);
-        _root.File("ac.abox", """
+            """
+        );
+        _root.File(
+            "ac.abox",
+            """
             base: cape
             kits:
               - pi-config
-            """);
+            """
+        );
 
         var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
 
@@ -98,12 +113,15 @@ public sealed class SquadResolverTests
     [Fact]
     public void TwoTagsOfOneRepositoryAreOneKit()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             kits:
               - docker.io/acme/pi-config:1.0
               - docker.io/acme/pi-config:2.0
-            """);
+            """
+        );
 
         var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
 
@@ -113,16 +131,22 @@ public sealed class SquadResolverTests
     [Fact]
     public void TheSameParameterTwiceIsAnError()
     {
-        _root.File("cape.abox", """
+        _root.File(
+            "cape.abox",
+            """
             workload: mti-ca-dotnet
             parameters:
               url: https://example.com
-            """);
-        _root.File("ac.abox", """
+            """
+        );
+        _root.File(
+            "ac.abox",
+            """
             base: cape
             parameters:
               url: https://other.example.com
-            """);
+            """
+        );
 
         var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
 
@@ -132,13 +156,16 @@ public sealed class SquadResolverTests
     [Fact]
     public void AParameterNoConfigurationDeclaresIsAnError()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             kits:
               - name: pi-config
                 args:
                   url: ${{ parameters.missing }}
-            """);
+            """
+        );
 
         var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
 
@@ -148,7 +175,9 @@ public sealed class SquadResolverTests
     [Fact]
     public void AParameterIsGivenToTheKitThatUsesIt()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             parameters:
               url: https://example.com
@@ -156,7 +185,8 @@ public sealed class SquadResolverTests
               - name: pi-config
                 args:
                   url: ${{ parameters.url }}
-            """);
+            """
+        );
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
 
@@ -167,12 +197,15 @@ public sealed class SquadResolverTests
     [Fact]
     public void OverlappingStateDirectoriesAreAnError()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             state:
               - ~/.config
               - ~/.config/opencode
-            """);
+            """
+        );
 
         var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
 
@@ -182,11 +215,14 @@ public sealed class SquadResolverTests
     [Fact]
     public void AStateDirectoryIsKeptOnce()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             state:
               - ~/.config/opencode/state
-            """);
+            """
+        );
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
 
@@ -208,11 +244,14 @@ public sealed class SquadResolverTests
     [Fact]
     public void AKitThatIsNotThereIsAnError()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             kits:
               - missing-kit
-            """);
+            """
+        );
 
         var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
 
@@ -222,15 +261,21 @@ public sealed class SquadResolverTests
     [Fact]
     public void APersonalConfigurationAddsToTheSquad()
     {
-        _root.File("ac.abox", """
+        _root.File(
+            "ac.abox",
+            """
             workload: mti-ca-dotnet
             kits:
               - pi-config
-            """);
-        var personal = _root.File("personal.abox", """
+            """
+        );
+        var personal = _root.File(
+            "personal.abox",
+            """
             kits:
               - personal-kit
-            """);
+            """
+        );
         _root.Directory_("kits/personal-kit");
 
         var squad = _resolver.Resolve(_root.Path, "ac", [personal]);

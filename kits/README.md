@@ -23,7 +23,7 @@ A `.workload` file describes the base image of a team:
 ```yaml
 template: docker.io/sbx/shell-docker-image   # the image the base is built on
 mise:                                        # the tools, the last one is the default
-  - nodejs@24.4.3
+  - nodejs@24.22.2
   - dotnet@10.0.403
 scripts:                                     # run while the image is built
   - enable-fzf.sh

@@ -29,33 +29,40 @@ public static class RunCommand
             Options = { location },
         };
 
-        command.Description = "Start a launcher for the sandbox of a folder." +
-                              Environment.NewLine + Environment.NewLine +
-                              "Launchers:" + Environment.NewLine +
-                              string.Join(Environment.NewLine, services.Launchers.All.Select(item => $"  {item.Id,-10} {item.Summary}"));
+        command.Description =
+            "Start a launcher for the sandbox of a folder."
+            + Environment.NewLine
+            + Environment.NewLine
+            + "Launchers:"
+            + Environment.NewLine
+            + string.Join(
+                Environment.NewLine,
+                services.Launchers.All.Select(item => $"  {item.Id, -10} {item.Summary}")
+            );
 
-        // Everything after "--" belongs to the launcher, not to abox.
-        command.TreatUnmatchedTokensAsErrors = false;
+        command.SetAction(
+            async (parseResult, cancellationToken) =>
+            {
+                var request = new RunRequest(
+                    parseResult.GetValue(launcher) ?? "shell",
+                    parseResult.GetValue(location) ?? Directory.GetCurrentDirectory(),
+                    services.Trailing.Values
+                );
 
-        command.SetAction(async (parseResult, cancellationToken) =>
-        {
-            var request = new RunRequest(
-                parseResult.GetValue(launcher) ?? "shell",
-                parseResult.GetValue(location) ?? Directory.GetCurrentDirectory(),
-                parseResult.UnmatchedTokens.ToList());
-
-            return await CommandHandling.RunAsync(
-                async () =>
-                {
-                    if (!await services.Preflight.EnsureReadyAsync(cancellationToken))
+                return await CommandHandling.RunAsync(
+                    async () =>
                     {
-                        return 1;
-                    }
+                        if (!await services.Preflight.EnsureReadyAsync(cancellationToken))
+                        {
+                            return 1;
+                        }
 
-                    return await services.Run.RunAsync(request, cancellationToken);
-                },
-                services.Console);
-        });
+                        return await services.Run.RunAsync(request, cancellationToken);
+                    },
+                    services.Console
+                );
+            }
+        );
 
         return command;
     }

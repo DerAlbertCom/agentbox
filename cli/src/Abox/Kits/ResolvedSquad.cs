@@ -14,7 +14,8 @@ public sealed class ResolvedSquad
         IReadOnlyDictionary<string, string> parameters,
         IReadOnlyList<McpDeclaration> mcp,
         IReadOnlyList<StateEntry> state,
-        IReadOnlyList<string> configFiles)
+        IReadOnlyList<string> configFiles
+    )
     {
         Name = name;
         RootDirectory = rootDirectory;

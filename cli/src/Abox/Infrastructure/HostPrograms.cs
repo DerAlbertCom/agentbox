@@ -13,9 +13,7 @@ public sealed class HostPrograms : IHostPrograms
     private readonly string _pathDirectories;
 
     public HostPrograms()
-        : this(Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
-    {
-    }
+        : this(Environment.GetEnvironmentVariable("PATH") ?? string.Empty) { }
 
     public HostPrograms(string pathDirectories) => _pathDirectories = pathDirectories;
 
@@ -27,10 +25,18 @@ public sealed class HostPrograms : IHostPrograms
         }
 
         var extensions = OperatingSystem.IsWindows()
-            ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT").Split(';', StringSplitOptions.RemoveEmptyEntries)
+            ? (Environment.GetEnvironmentVariable("PATHEXT") ?? ".EXE;.CMD;.BAT").Split(
+                ';',
+                StringSplitOptions.RemoveEmptyEntries
+            )
             : [string.Empty];
 
-        foreach (var directory in _pathDirectories.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (
+            var directory in _pathDirectories.Split(
+                Path.PathSeparator,
+                StringSplitOptions.RemoveEmptyEntries
+            )
+        )
         {
             foreach (var extension in extensions)
             {

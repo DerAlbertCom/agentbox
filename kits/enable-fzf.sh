@@ -19,4 +19,4 @@ esac
 mkdir -p /home/agent/.local/bin
 curl -fsSL "https://github.com/junegunn/fzf/releases/download/v${version}/fzf-${version}-linux_${arch}.tar.gz" \
   | tar -xz -C /tmp
-install -m 0755 "/tmp/fzf-${version}-linux_${arch}.tar.gz" /home/agent/.local/bin/fzf
+install -m 0755 /tmp/fzf /home/agent/.local/bin/fzf

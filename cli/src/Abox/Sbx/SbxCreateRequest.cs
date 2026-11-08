@@ -15,4 +15,5 @@ public sealed record SbxCreateRequest(
     IReadOnlyList<string> Mixins,
     IReadOnlyDictionary<string, string> KitArguments,
     IReadOnlyList<SbxMount> Mounts,
-    IReadOnlyList<string> StaticMcpServers);
+    IReadOnlyList<string> StaticMcpServers
+);

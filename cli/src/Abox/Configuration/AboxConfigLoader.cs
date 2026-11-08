@@ -20,10 +20,16 @@ public static class AboxConfigLoader
 
         return new AboxConfig
         {
-            DefaultSquad = string.IsNullOrWhiteSpace(file.DefaultSquad) ? new AboxConfig().DefaultSquad : file.DefaultSquad,
+            DefaultSquad = string.IsNullOrWhiteSpace(file.DefaultSquad)
+                ? new AboxConfig().DefaultSquad
+                : file.DefaultSquad,
             DefaultLocation = file.DefaultLocation,
-            KitsDirectory = string.IsNullOrWhiteSpace(file.KitsDirectory) ? new AboxConfig().KitsDirectory : file.KitsDirectory,
-            DefaultTag = string.IsNullOrWhiteSpace(file.DefaultTag) ? new AboxConfig().DefaultTag : file.DefaultTag,
+            KitsDirectory = string.IsNullOrWhiteSpace(file.KitsDirectory)
+                ? new AboxConfig().KitsDirectory
+                : file.KitsDirectory,
+            DefaultTag = string.IsNullOrWhiteSpace(file.DefaultTag)
+                ? new AboxConfig().DefaultTag
+                : file.DefaultTag,
         };
     }
 

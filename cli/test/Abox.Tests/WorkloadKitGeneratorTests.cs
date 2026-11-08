@@ -10,12 +10,14 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheKitIsAWorkloadThatTheHostLaunchesAsAnAgent()
     {
-        var workload = WriteWorkload("""
+        var workload = WriteWorkload(
+            """
             template: docker.io/sbx/shell-docker-image
             mise:
               - nodejs@24.4.3
               - dotnet@10.0.403
-            """);
+            """
+        );
 
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
@@ -51,11 +53,13 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void EveryToolHasItsOwnInstallStep()
     {
-        var workload = WriteWorkload("""
+        var workload = WriteWorkload(
+            """
             mise:
               - nodejs@24.4.3
               - dotnet@10.0.403
-            """);
+            """
+        );
 
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
@@ -66,30 +70,73 @@ public sealed class WorkloadKitGeneratorTests
     }
 
     [Fact]
-    public void TheToolsAreInstalledInReverseOrderSoTheLastOneIsTheDefault()
+    public void TheVersionsOfOneToolAreInstalledInOneStep()
     {
-        var workload = WriteWorkload("""
+        var workload = WriteWorkload(
+            """
             mise:
-              - nodejs@24.4.3
+              - dotnet@9.0.303
               - dotnet@10.0.403
-            """);
+            """
+        );
+
+        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
+
+        var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
+        Assert.Contains("mise use -g -y dotnet@10.0.403 dotnet@9.0.303", dockerfile);
+        Assert.Equal(1, CountOccurrences(dockerfile, "mise use -g -y"));
+    }
+
+    [Fact]
+    public void TheVersionThatComesLastInTheWorkloadIsTheDefaultOfItsTool()
+    {
+        var workload = WriteWorkload(
+            """
+            mise:
+              - dotnet@9.0.303
+              - dotnet@10.0.403
+            """
+        );
 
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         Assert.True(
             dockerfile.IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
-            < dockerfile.IndexOf("nodejs@24.4.3", StringComparison.Ordinal));
+                < dockerfile.IndexOf("dotnet@9.0.303", StringComparison.Ordinal)
+        );
+    }
+
+    [Fact]
+    public void TheToolsAreInstalledInReverseOrderSoTheLastOneIsTheDefault()
+    {
+        var workload = WriteWorkload(
+            """
+            mise:
+              - nodejs@24.4.3
+              - dotnet@10.0.403
+            """
+        );
+
+        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
+
+        var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
+        Assert.True(
+            dockerfile.IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
+                < dockerfile.IndexOf("nodejs@24.4.3", StringComparison.Ordinal)
+        );
     }
 
     [Fact]
     public void TheScriptsRunAtTheEndOfTheBuild()
     {
         _root.File("enable-fzf.sh", "echo fzf");
-        var workload = WriteWorkload("""
+        var workload = WriteWorkload(
+            """
             scripts:
               - enable-fzf.sh
-            """);
+            """
+        );
 
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
@@ -113,28 +160,36 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheGitHubTokenIsASecretAndNotAnArgument()
     {
-        var workload = WriteWorkload("""
+        var workload = WriteWorkload(
+            """
             mise:
               - nodejs@24.4.3
-            """);
+            """
+        );
 
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains($"--mount=type=secret,id={WorkloadKitGenerator.GitHubTokenSecret}", dockerfile);
+        Assert.Contains(
+            $"--mount=type=secret,id={WorkloadKitGenerator.GitHubTokenSecret}",
+            dockerfile
+        );
         Assert.DoesNotContain("--build-arg", dockerfile);
     }
 
     [Fact]
     public void AScriptThatIsNotThereIsAnError()
     {
-        var workload = WriteWorkload("""
+        var workload = WriteWorkload(
+            """
             scripts:
               - missing.sh
-            """);
+            """
+        );
 
-        var exception = Assert.Throws<AboxException>(
-            () => _generator.Generate(workload, Path.Combine(_root.Path, "kit")));
+        var exception = Assert.Throws<AboxException>(() =>
+            _generator.Generate(workload, Path.Combine(_root.Path, "kit"))
+        );
 
         Assert.Contains("missing.sh", exception.Message);
     }

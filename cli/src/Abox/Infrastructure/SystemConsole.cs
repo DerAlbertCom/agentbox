@@ -15,7 +15,10 @@ public sealed class SystemConsole : IConsole
     {
         Console.Out.Write($"{question} [y/N] ");
         var answer = Console.In.ReadLine();
-        return answer is not null && (answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
-                                     || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase));
+        return answer is not null
+            && (
+                answer.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
+                || answer.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase)
+            );
     }
 }

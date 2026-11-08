@@ -16,4 +16,5 @@ public sealed record ProcessRequest(
     IReadOnlyList<string> Arguments,
     bool AttachConsole = false,
     string? WorkingDirectory = null,
-    IReadOnlyDictionary<string, string>? Environment = null);
+    IReadOnlyDictionary<string, string>? Environment = null
+);

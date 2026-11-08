@@ -52,6 +52,23 @@ dotnet run --project src/Abox -- build --squad ac --root .. --no-verify
 The command line needs `sbx` on the PATH: it calls sbx for every sandbox operation and
 never installs anything itself.
 
+## The formatting and the hooks
+
+The code is formatted with [CSharpier](https://csharpier.com), which comes with the
+repository as a local tool:
+
+```sh
+dotnet csharpier format cli     # format the code
+dotnet csharpier check cli      # check the formatting
+```
+
+The hook in `.githooks/pre-commit` checks the formatting before every commit. Enable
+the hooks of the repository once:
+
+```sh
+git config core.hooksPath .githooks
+```
+
 ## What is not built yet
 
 - `abox publish`, `abox prune` and `abox secrets`.

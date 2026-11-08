@@ -35,7 +35,10 @@ public sealed class StateMixinGenerator
                 .AppendLine($"      path: {entry.SandboxPath}");
         }
 
-        File.WriteAllText(Path.Combine(targetDirectory, MixinName + ".yaml"), descriptor.ToString());
+        File.WriteAllText(
+            Path.Combine(targetDirectory, MixinName + ".yaml"),
+            descriptor.ToString()
+        );
 
         return targetDirectory;
     }

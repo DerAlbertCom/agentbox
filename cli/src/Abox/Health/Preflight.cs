@@ -45,7 +45,9 @@ public sealed class Preflight
             return true;
         }
 
-        _console.WriteError("sbx is not on PATH. abox needs it and never installs anything itself.");
+        _console.WriteError(
+            "sbx is not on PATH. abox needs it and never installs anything itself."
+        );
         foreach (var line in InstallInstructions.ForCurrentSystem())
         {
             _console.WriteError(line);
@@ -73,7 +75,8 @@ public sealed class Preflight
         }
 
         _console.WriteError(
-            $"sbx {version} is too old. abox needs {SbxClient.MinimumVersion} or later, the first version with v3 kits.");
+            $"sbx {version} is too old. abox needs {SbxClient.MinimumVersion} or later, the first version with v3 kits."
+        );
         _console.WriteError("Upgrade sbx and try again.");
         return false;
     }

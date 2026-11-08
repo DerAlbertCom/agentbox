@@ -21,9 +21,7 @@ public sealed record StateEntry(string SandboxPath, string RelativePath)
             throw new AboxException("A state entry cannot be empty.");
         }
 
-        var sandboxPath = trimmed.StartsWith('~')
-            ? SandboxHome + trimmed[1..]
-            : trimmed;
+        var sandboxPath = trimmed.StartsWith('~') ? SandboxHome + trimmed[1..] : trimmed;
 
         if (!sandboxPath.StartsWith('/'))
         {

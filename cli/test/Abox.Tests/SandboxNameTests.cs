@@ -29,13 +29,19 @@ public sealed class SandboxNameTests
     [Fact]
     public void TheSameFolderAlwaysGetsTheSameName()
     {
-        Assert.Equal(SandboxName.For("/home/albert/projects/rwe"), SandboxName.For("/home/albert/projects/rwe"));
+        Assert.Equal(
+            SandboxName.For("/home/albert/projects/rwe"),
+            SandboxName.For("/home/albert/projects/rwe")
+        );
     }
 
     [Fact]
     public void AnotherFolderGetsAnotherName()
     {
-        Assert.NotEqual(SandboxName.For("/home/albert/projects/rwe"), SandboxName.For("/home/albert/projects/other"));
+        Assert.NotEqual(
+            SandboxName.For("/home/albert/projects/rwe"),
+            SandboxName.For("/home/albert/projects/other")
+        );
     }
 
     [Fact]
@@ -45,7 +51,10 @@ public sealed class SandboxNameTests
 
         Assert.True(name.Length >= 2);
         Assert.True(char.IsAsciiLetterOrDigit(name[0]));
-        Assert.All(name, character => Assert.True(
-            char.IsAsciiLetterOrDigit(character) || character is '-' or '.'));
+        Assert.All(
+            name,
+            character =>
+                Assert.True(char.IsAsciiLetterOrDigit(character) || character is '-' or '.')
+        );
     }
 }

@@ -13,4 +13,5 @@ public sealed record McpDeclaration(
     string? Url = null,
     string? Command = null,
     IReadOnlyList<string>? Arguments = null,
-    IReadOnlyDictionary<string, string>? Headers = null);
+    IReadOnlyDictionary<string, string>? Headers = null
+);

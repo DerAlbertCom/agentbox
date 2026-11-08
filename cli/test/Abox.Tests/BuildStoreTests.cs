@@ -10,9 +10,9 @@ public sealed class BuildStoreTests
 
     public BuildStoreTests()
     {
-        _store = new BuildStore(AboxPaths.For(
-            Path.Combine(_root.Path, "config"),
-            Path.Combine(_root.Path, "state")));
+        _store = new BuildStore(
+            AboxPaths.For(Path.Combine(_root.Path, "config"), Path.Combine(_root.Path, "state"))
+        );
     }
 
     [Fact]
@@ -36,8 +36,22 @@ public sealed class BuildStoreTests
     [Fact]
     public void TheTagsOfASquadAreListed()
     {
-        _store.Save(new BuildManifest { Squad = "ac", Tag = "latest", CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero) });
-        _store.Save(new BuildManifest { Squad = "ac", Tag = "dev", CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero) });
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "latest",
+                CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
+            }
+        );
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "dev",
+                CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
+            }
+        );
 
         Assert.Equal(["dev", "latest"], _store.AvailableTags("ac"));
     }
@@ -45,20 +59,31 @@ public sealed class BuildStoreTests
     [Fact]
     public void TheKitsAndStateOfABuildSurviveTheRoundTrip()
     {
-        _store.Save(new BuildManifest
-        {
-            Squad = "ac",
-            Tag = "latest",
-            WorkloadKitDirectory = "/kits/workload",
-            Kits =
-            [
-                new ManifestKit { Name = "pi-config", Reference = "/kits/pi-config", IsLocal = true },
-            ],
-            State =
-            [
-                new ManifestState { SandboxPath = "/home/agent/.config/opencode", RelativePath = ".config/opencode" },
-            ],
-        });
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "latest",
+                WorkloadKitDirectory = "/kits/workload",
+                Kits =
+                [
+                    new ManifestKit
+                    {
+                        Name = "pi-config",
+                        Reference = "/kits/pi-config",
+                        IsLocal = true,
+                    },
+                ],
+                State =
+                [
+                    new ManifestState
+                    {
+                        SandboxPath = "/home/agent/.config/opencode",
+                        RelativePath = ".config/opencode",
+                    },
+                ],
+            }
+        );
 
         var manifest = _store.Load("ac", "latest")!;
 

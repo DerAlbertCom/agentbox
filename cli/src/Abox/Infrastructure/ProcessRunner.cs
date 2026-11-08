@@ -8,7 +8,10 @@ namespace Abox.Infrastructure;
 /// </summary>
 public sealed class ProcessRunner : IProcessRunner
 {
-    public async Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken cancellationToken)
+    public async Task<ProcessResult> RunAsync(
+        ProcessRequest request,
+        CancellationToken cancellationToken
+    )
     {
         var startInfo = new ProcessStartInfo(request.FileName)
         {
@@ -64,7 +67,10 @@ public sealed class ProcessRunner : IProcessRunner
         }
         catch (Exception exception)
         {
-            throw new AboxException($"Cannot start '{request.FileName}'. {exception.Message}", exception);
+            throw new AboxException(
+                $"Cannot start '{request.FileName}'. {exception.Message}",
+                exception
+            );
         }
 
         if (!request.AttachConsole)
@@ -75,6 +81,10 @@ public sealed class ProcessRunner : IProcessRunner
 
         await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
 
-        return new ProcessResult(process.ExitCode, standardOutput.ToString(), standardError.ToString());
+        return new ProcessResult(
+            process.ExitCode,
+            standardOutput.ToString(),
+            standardError.ToString()
+        );
     }
 }

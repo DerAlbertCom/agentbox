@@ -21,11 +21,14 @@ public sealed class HerdrAppLauncher : ILauncher
     public string Summary => "A space in the Herdr desktop app";
 
     public IReadOnlyList<HostRequirement> HostRequirements =>
-    [
-        new(AppProgram, "Install the Herdr desktop app from https://herdr.dev."),
-        new(CoreProgram, "Install herdr-core: it comes with the Herdr desktop app."),
-        new("abox", "abox must be on PATH: the Herdr app calls 'abox pipe' to reach the sandbox."),
-    ];
+        [
+            new(AppProgram, "Install the Herdr desktop app from https://herdr.dev."),
+            new(CoreProgram, "Install herdr-core: it comes with the Herdr desktop app."),
+            new(
+                "abox",
+                "abox must be on PATH: the Herdr app calls 'abox pipe' to reach the sandbox."
+            ),
+        ];
 
     public IReadOnlyList<string> SandboxRequirements => [CoreProgram];
 
@@ -43,9 +46,14 @@ public sealed class HerdrAppLauncher : ILauncher
             "do",
             "space.new",
             "--name",
-            Path.GetFileName(context.Location.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)),
+            Path.GetFileName(
+                context.Location.TrimEnd(
+                    Path.DirectorySeparatorChar,
+                    Path.AltDirectorySeparatorChar
+                )
+            ),
             "--folder",
-            ShellLauncher.WorkspacePath,
+            context.WorkspacePath,
             "--machine",
             context.SandboxName,
         };
@@ -58,21 +66,28 @@ public sealed class HerdrAppLauncher : ILauncher
 
         var result = await _runner.RunAsync(
             new ProcessRequest(AppProgram, arguments, AttachConsole: true),
-            cancellationToken);
+            cancellationToken
+        );
 
         if (!result.Succeeded)
         {
-            throw new AboxException($"'{AppProgram} do space.new' failed with exit code {result.ExitCode}.");
+            throw new AboxException(
+                $"'{AppProgram} do space.new' failed with exit code {result.ExitCode}."
+            );
         }
 
         return 0;
     }
 
-    private async Task<bool> MachineExistsAsync(string sandboxName, CancellationToken cancellationToken)
+    private async Task<bool> MachineExistsAsync(
+        string sandboxName,
+        CancellationToken cancellationToken
+    )
     {
         var result = await _runner.RunAsync(
             new ProcessRequest(CoreProgram, ["machine", "ls", "--json"]),
-            cancellationToken);
+            cancellationToken
+        );
 
         if (!result.Succeeded)
         {
@@ -88,15 +103,20 @@ public sealed class HerdrAppLauncher : ILauncher
     {
         var via = $"abox pipe {context.SandboxName} -- sh -c";
         var result = await _runner.RunAsync(
-            new ProcessRequest(CoreProgram, ["machine", "add", "--via", via, "--name", context.SandboxName]),
-            cancellationToken);
+            new ProcessRequest(
+                CoreProgram,
+                ["machine", "add", "--via", via, "--name", context.SandboxName]
+            ),
+            cancellationToken
+        );
 
         if (!result.Succeeded)
         {
             var message = result.StandardError.Trim();
             throw new AboxException(
-                $"'{CoreProgram} machine add' failed with exit code {result.ExitCode}." +
-                (message.Length > 0 ? $" {message}" : string.Empty));
+                $"'{CoreProgram} machine add' failed with exit code {result.ExitCode}."
+                    + (message.Length > 0 ? $" {message}" : string.Empty)
+            );
         }
     }
 
@@ -110,14 +130,16 @@ public sealed class HerdrAppLauncher : ILauncher
         // The app keeps running when it is started on its own.
         await _runner.RunAsync(
             new ProcessRequest(AppProgram, [], AttachConsole: false),
-            cancellationToken);
+            cancellationToken
+        );
     }
 
     private async Task<bool> AppIsRunningAsync(CancellationToken cancellationToken)
     {
         var result = await _runner.RunAsync(
             new ProcessRequest(AppProgram, ["status"]),
-            cancellationToken);
+            cancellationToken
+        );
 
         if (!result.Succeeded)
         {
@@ -128,8 +150,8 @@ public sealed class HerdrAppLauncher : ILauncher
         {
             using var document = JsonDocument.Parse(result.StandardOutput);
             return !document.RootElement.TryGetProperty("errors", out var errors)
-                   || errors.ValueKind != JsonValueKind.Array
-                   || errors.GetArrayLength() == 0;
+                || errors.ValueKind != JsonValueKind.Array
+                || errors.GetArrayLength() == 0;
         }
         catch (JsonException)
         {

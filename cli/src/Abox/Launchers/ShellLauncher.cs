@@ -7,9 +7,6 @@ namespace Abox.Launchers;
 /// </summary>
 public sealed class ShellLauncher : ILauncher
 {
-    /// <summary>Where the workspace is inside the sandbox.</summary>
-    public const string WorkspacePath = "/home/agent/workspace";
-
     public string Id => "shell";
 
     public string Summary => "A shell in the workspace of the sandbox";
@@ -28,7 +25,9 @@ public sealed class ShellLauncher : ILauncher
                 command,
                 AllocateTty: true,
                 KeepStandardInputOpen: true,
-                WorkingDirectory: WorkspacePath),
-            cancellationToken);
+                WorkingDirectory: context.WorkspacePath
+            ),
+            cancellationToken
+        );
     }
 }

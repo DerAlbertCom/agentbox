@@ -1,0 +1,14 @@
+#!/bin/sh
+#
+# The formatting of the C# files is checked before every commit.
+#
+# Enable the hooks of the repository with:
+#   git config core.hooksPath .githooks
+#
+set -e
+
+root="$(git rev-parse --show-toplevel)"
+cd "$root"
+
+echo "abox: checking the formatting"
+exec dotnet csharpier check cli

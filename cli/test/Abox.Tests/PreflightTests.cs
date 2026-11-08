@@ -36,8 +36,7 @@ public sealed class PreflightTests
     [Fact]
     public async Task AFailingCheckStopsTheCommand()
     {
-        _sbx.Report = new DiagnoseReport(
-        [
+        _sbx.Report = new DiagnoseReport([
             new DiagnosticCheck("Authentication", "pass", "authenticated", ""),
             new DiagnosticCheck("Daemon", "fail", "not healthy", "start the daemon"),
         ]);
@@ -52,8 +51,7 @@ public sealed class PreflightTests
     [Fact]
     public async Task AHealthySbxLetsTheCommandGoOn()
     {
-        _sbx.Report = new DiagnoseReport(
-        [
+        _sbx.Report = new DiagnoseReport([
             new DiagnosticCheck("Authentication", "pass", "authenticated", ""),
             new DiagnosticCheck("Daemon", "pass", "healthy", ""),
         ]);

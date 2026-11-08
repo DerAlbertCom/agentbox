@@ -5,7 +5,7 @@
 template: docker.io/sbx/shell-docker-image
 
 mise:
-  - nodejs@24.4.3
+  - nodejs@24.22.2
   - dotnet@9.0.303
   - dotnet@10.0.403
 

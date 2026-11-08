@@ -27,17 +27,20 @@ public sealed class AboxPaths
     public string BuildsDirectory => Path.Combine(StateDirectory, "builds");
 
     /// <summary>The directory of one local build.</summary>
-    public string BuildDirectory(string squad, string tag) => Path.Combine(BuildsDirectory, squad, tag);
+    public string BuildDirectory(string squad, string tag) =>
+        Path.Combine(BuildsDirectory, squad, tag);
 
     /// <summary>
     /// Resolves the directories for the current user: XDG variables when they are set to an
     /// absolute path, the platform defaults otherwise.
     /// </summary>
-    public static AboxPaths Create() => Resolve(
-        Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
-        Environment.GetEnvironmentVariable("XDG_STATE_HOME"),
-        HomeDirectory(),
-        OperatingSystem.IsWindows());
+    public static AboxPaths Create() =>
+        Resolve(
+            Environment.GetEnvironmentVariable("XDG_CONFIG_HOME"),
+            Environment.GetEnvironmentVariable("XDG_STATE_HOME"),
+            HomeDirectory(),
+            OperatingSystem.IsWindows()
+        );
 
     /// <summary>
     /// Resolves the directories from the values of the environment, so the rule can be
@@ -47,19 +50,22 @@ public sealed class AboxPaths
     /// <param name="xdgStateHome">The value of XDG_STATE_HOME, if it is set.</param>
     /// <param name="home">The home directory of the user.</param>
     /// <param name="windows">Whether the user is on Windows.</param>
-    public static AboxPaths Resolve(string? xdgConfigHome, string? xdgStateHome, string home, bool windows)
+    public static AboxPaths Resolve(
+        string? xdgConfigHome,
+        string? xdgStateHome,
+        string home,
+        bool windows
+    )
     {
-        var config = Usable(xdgConfigHome)
-            ? Path.Combine(xdgConfigHome!, "abox")
-            : windows
-                ? Path.Combine(home, ".abox", "config")
-                : Path.Combine(home, ".config", "abox");
+        var config =
+            Usable(xdgConfigHome) ? Path.Combine(xdgConfigHome!, "abox")
+            : windows ? Path.Combine(home, ".abox", "config")
+            : Path.Combine(home, ".config", "abox");
 
-        var state = Usable(xdgStateHome)
-            ? Path.Combine(xdgStateHome!, "abox")
-            : windows
-                ? Path.Combine(home, ".abox", "state")
-                : Path.Combine(home, ".local", "state", "abox");
+        var state =
+            Usable(xdgStateHome) ? Path.Combine(xdgStateHome!, "abox")
+            : windows ? Path.Combine(home, ".abox", "state")
+            : Path.Combine(home, ".local", "state", "abox");
 
         return new AboxPaths(config, state);
     }

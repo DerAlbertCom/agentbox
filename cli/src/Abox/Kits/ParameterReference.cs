@@ -11,18 +11,28 @@ public static partial class ParameterReference
     /// Replaces every parameter reference with its value. A reference to a parameter no
     /// configuration declares is an error.
     /// </summary>
-    public static string Expand(string value, IReadOnlyDictionary<string, string> parameters, string source)
+    public static string Expand(
+        string value,
+        IReadOnlyDictionary<string, string> parameters,
+        string source
+    )
     {
-        return ReferencePattern().Replace(value, match =>
-        {
-            var name = match.Groups[1].Value;
-            if (!parameters.TryGetValue(name, out var parameter))
-            {
-                throw new AboxException($"'{source}' uses the parameter '{name}', which no configuration declares.");
-            }
+        return ReferencePattern()
+            .Replace(
+                value,
+                match =>
+                {
+                    var name = match.Groups[1].Value;
+                    if (!parameters.TryGetValue(name, out var parameter))
+                    {
+                        throw new AboxException(
+                            $"'{source}' uses the parameter '{name}', which no configuration declares."
+                        );
+                    }
 
-            return parameter;
-        });
+                    return parameter;
+                }
+            );
     }
 
     /// <summary>Whether the value uses any parameter.</summary>

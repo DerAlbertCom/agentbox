@@ -1,11 +1,11 @@
 using Abox.Build;
 using Abox.Configuration;
+using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Launchers;
-using Abox.Health;
-using Abox.Services;
 using Abox.Sbx;
+using Abox.Services;
 
 namespace Abox.Cli;
 
@@ -27,12 +27,23 @@ public sealed class AboxServices
         Store = new BuildStore(Paths);
         PersonalConfigurations = new PersonalConfigurations(Paths);
         Launchers = new LauncherRegistry([new ShellLauncher(), new HerdrAppLauncher(Runner)]);
-        Build = new BuildService(Resolver, new WorkloadKitGenerator(), new StateMixinGenerator(), PersonalConfigurations, Store, Sbx, console);
+        Build = new BuildService(
+            Resolver,
+            new WorkloadKitGenerator(),
+            new StateMixinGenerator(),
+            PersonalConfigurations,
+            Store,
+            Sbx,
+            console
+        );
         Create = new CreateService(Store, Paths, Sbx, console);
         Run = new RunService(Launchers, Sbx, HostPrograms, console);
     }
 
     public IConsole Console { get; }
+
+    /// <summary>The arguments after the "--" of the command line.</summary>
+    public TrailingArguments Trailing { get; } = new();
 
     public AboxPaths Paths { get; }
 

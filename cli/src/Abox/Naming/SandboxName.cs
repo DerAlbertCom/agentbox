@@ -14,7 +14,9 @@ public static class SandboxName
     public static string For(string absolutePath)
     {
         var normalized = NormalizePath(absolutePath);
-        var folder = NormalizeFolderName(Path.GetFileName(normalized.Replace('/', Path.DirectorySeparatorChar)));
+        var folder = NormalizeFolderName(
+            Path.GetFileName(normalized.Replace('/', Path.DirectorySeparatorChar))
+        );
 
         return $"{folder}-{Marker}-{Hash(normalized)}";
     }

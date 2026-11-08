@@ -21,6 +21,9 @@ public sealed class FakeSbxClient : ISbxClient
 
     public List<string> Programs { get; } = [];
 
+    /// <summary>Where the runtime put the workspace, when the test says so.</summary>
+    public string? WorkspaceDirectory { get; set; }
+
     public List<string> RegisteredMcpServers { get; } = [];
 
     public HashSet<string> McpServers { get; } = [];
@@ -29,20 +32,26 @@ public sealed class FakeSbxClient : ISbxClient
 
     public int ExecExitCode { get; set; }
 
-    public Task<Version> GetVersionAsync(CancellationToken cancellationToken) => Task.FromResult(Version);
+    public Task<Version> GetVersionAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(Version);
 
-    public Task<DiagnoseReport> DiagnoseAsync(CancellationToken cancellationToken) => Task.FromResult(Report);
+    public Task<DiagnoseReport> DiagnoseAsync(CancellationToken cancellationToken) =>
+        Task.FromResult(Report);
 
-    public Task<IReadOnlyList<SandboxInfo>> ListSandboxesAsync(CancellationToken cancellationToken) =>
-        Task.FromResult<IReadOnlyList<SandboxInfo>>(Sandboxes);
+    public Task<IReadOnlyList<SandboxInfo>> ListSandboxesAsync(
+        CancellationToken cancellationToken
+    ) => Task.FromResult<IReadOnlyList<SandboxInfo>>(Sandboxes);
 
     public Task<SandboxInfo?> FindSandboxAsync(string name, CancellationToken cancellationToken) =>
         Task.FromResult(Sandboxes.FirstOrDefault(sandbox => sandbox.Name == name));
 
-    public Task<int> CreateAsync(SbxCreateRequest request, CancellationToken cancellationToken)
+    public Task<SbxOutcome> CreateAsync(
+        SbxCreateRequest request,
+        CancellationToken cancellationToken
+    )
     {
         Created.Add(request);
-        return Task.FromResult(CreateExitCode);
+        return Task.FromResult(new SbxOutcome(CreateExitCode, string.Empty));
     }
 
     public Task<int> RemoveSandboxAsync(string name, CancellationToken cancellationToken)
@@ -58,11 +67,21 @@ public sealed class FakeSbxClient : ISbxClient
         return Task.FromResult(ExecExitCode);
     }
 
-    public Task<bool> HasProgramAsync(string sandbox, string program, CancellationToken cancellationToken) =>
-        Task.FromResult(Programs.Contains(program));
+    public Task<bool> HasProgramAsync(
+        string sandbox,
+        string program,
+        CancellationToken cancellationToken
+    ) => Task.FromResult(Programs.Contains(program));
 
-    public Task<(int ExitCode, string Output)> InspectKitAsync(string kitDirectory, CancellationToken cancellationToken) =>
-        Task.FromResult((0, string.Empty));
+    public Task<string?> GetWorkspaceDirectoryAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    ) => Task.FromResult(WorkspaceDirectory);
+
+    public Task<(int ExitCode, string Output)> InspectKitAsync(
+        string kitDirectory,
+        CancellationToken cancellationToken
+    ) => Task.FromResult((0, string.Empty));
 
     public Task<IReadOnlyList<string>> ListMcpServersAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<string>>(McpServers.ToList());

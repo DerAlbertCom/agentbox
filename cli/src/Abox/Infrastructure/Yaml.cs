@@ -22,11 +22,14 @@ public static class Yaml
         try
         {
             return deserializer.Deserialize<T>(yaml)
-                   ?? throw new AboxException($"'{source}' is empty.");
+                ?? throw new AboxException($"'{source}' is empty.");
         }
         catch (YamlException exception)
         {
-            throw new AboxException($"'{source}' is not valid YAML: {exception.Message}", exception);
+            throw new AboxException(
+                $"'{source}' is not valid YAML: {exception.Message}",
+                exception
+            );
         }
     }
 }

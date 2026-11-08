@@ -11,7 +11,10 @@ public sealed class BuildStore
 {
     private const string ManifestFileName = "build.json";
 
-    private static readonly JsonSerializerOptions SerializerOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions SerializerOptions = new()
+    {
+        WriteIndented = true,
+    };
 
     private readonly AboxPaths _paths;
 
@@ -29,7 +32,10 @@ public sealed class BuildStore
             return null;
         }
 
-        var manifest = JsonSerializer.Deserialize<BuildManifest>(File.ReadAllText(path), SerializerOptions);
+        var manifest = JsonSerializer.Deserialize<BuildManifest>(
+            File.ReadAllText(path),
+            SerializerOptions
+        );
         return manifest ?? throw new AboxException($"The build '{squad}:{tag}' is not readable.");
     }
 
@@ -42,11 +48,13 @@ public sealed class BuildStore
             return [];
         }
 
-        return Directory.EnumerateDirectories(directory)
+        return Directory
+            .EnumerateDirectories(directory)
             .Select(path => new
             {
                 Tag = Path.GetFileName(path)!,
-                CreatedAt = Load(squad, Path.GetFileName(path)!)?.CreatedAt ?? DateTimeOffset.MinValue,
+                CreatedAt = Load(squad, Path.GetFileName(path)!)?.CreatedAt
+                    ?? DateTimeOffset.MinValue,
             })
             .OrderByDescending(build => build.CreatedAt)
             .Select(build => build.Tag)
@@ -61,6 +69,7 @@ public sealed class BuildStore
 
         File.WriteAllText(
             Path.Combine(directory, ManifestFileName),
-            JsonSerializer.Serialize(manifest, SerializerOptions));
+            JsonSerializer.Serialize(manifest, SerializerOptions)
+        );
     }
 }

@@ -11,7 +11,8 @@ public sealed record KitSource(
     string Name,
     string? Directory,
     string? RegistryReference,
-    IReadOnlyDictionary<string, string> Arguments)
+    IReadOnlyDictionary<string, string> Arguments
+)
 {
     /// <summary>What sbx is given: a directory or a reference.</summary>
     public string Reference => Directory ?? RegistryReference ?? Name;

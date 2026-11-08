@@ -13,4 +13,5 @@ public sealed record SbxExecRequest(
     bool AllocateTty = false,
     bool KeepStandardInputOpen = false,
     string? WorkingDirectory = null,
-    string? User = null);
+    string? User = null
+);

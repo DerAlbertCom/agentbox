@@ -1,8 +1,8 @@
 using Abox.Build;
 using Abox.Configuration;
 using Abox.Naming;
-using Abox.Services;
 using Abox.Sbx;
+using Abox.Services;
 
 namespace Abox.Tests;
 
@@ -17,7 +17,10 @@ public sealed class CreateServiceTests
 
     public CreateServiceTests()
     {
-        _paths = AboxPaths.For(Path.Combine(_root.Path, "config"), Path.Combine(_root.Path, "state"));
+        _paths = AboxPaths.For(
+            Path.Combine(_root.Path, "config"),
+            Path.Combine(_root.Path, "state")
+        );
         _store = new BuildStore(_paths);
         _service = new CreateService(_store, _paths, _sbx, _console);
     }
@@ -39,8 +42,9 @@ public sealed class CreateServiceTests
     [Fact]
     public async Task ABuildThatIsNotThereIsAnError()
     {
-        var exception = await Assert.ThrowsAsync<AboxException>(
-            () => _service.CreateAsync(Request(), CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<AboxException>(() =>
+            _service.CreateAsync(Request(), CancellationToken.None)
+        );
 
         Assert.Contains("abox build --squad ac", exception.Message);
     }
@@ -64,10 +68,13 @@ public sealed class CreateServiceTests
     {
         SaveBuild();
         _console.Answer = false;
-        _sbx.Sandboxes.Add(new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now));
+        _sbx.Sandboxes.Add(
+            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
+        );
 
-        var exception = await Assert.ThrowsAsync<AboxException>(
-            () => _service.CreateAsync(Request(), CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<AboxException>(() =>
+            _service.CreateAsync(Request(), CancellationToken.None)
+        );
 
         Assert.Contains("not replaced", exception.Message);
         Assert.Empty(_sbx.Removed);
@@ -106,8 +113,9 @@ public sealed class CreateServiceTests
     {
         SaveBuild(mcp: [new ManifestMcp { Name = "elastic" }]);
 
-        var exception = await Assert.ThrowsAsync<AboxException>(
-            () => _service.CreateAsync(Request(), CancellationToken.None));
+        var exception = await Assert.ThrowsAsync<AboxException>(() =>
+            _service.CreateAsync(Request(), CancellationToken.None)
+        );
 
         Assert.Contains("not registered", exception.Message);
     }
@@ -116,14 +124,31 @@ public sealed class CreateServiceTests
 
     private void SaveBuild(List<ManifestMcp>? mcp = null)
     {
-        _store.Save(new BuildManifest
-        {
-            Squad = "ac",
-            Tag = "latest",
-            WorkloadKitDirectory = "/kits/workload",
-            Kits = [new ManifestKit { Name = "pi-config", Reference = "/kits/pi-config", IsLocal = true }],
-            State = [new ManifestState { SandboxPath = "/home/agent/.config/opencode/state", RelativePath = ".config/opencode/state" }],
-            Mcp = mcp ?? [],
-        });
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "latest",
+                WorkloadKitDirectory = "/kits/workload",
+                Kits =
+                [
+                    new ManifestKit
+                    {
+                        Name = "pi-config",
+                        Reference = "/kits/pi-config",
+                        IsLocal = true,
+                    },
+                ],
+                State =
+                [
+                    new ManifestState
+                    {
+                        SandboxPath = "/home/agent/.config/opencode/state",
+                        RelativePath = ".config/opencode/state",
+                    },
+                ],
+                Mcp = mcp ?? [],
+            }
+        );
     }
 }

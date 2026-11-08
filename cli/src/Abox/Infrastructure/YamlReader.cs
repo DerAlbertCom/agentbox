@@ -37,11 +37,17 @@ public sealed class YamlReader
         {
             var stream = new YamlStream();
             stream.Load(new StringReader(yaml));
-            root = stream.Documents.Count > 0 ? stream.Documents[0].RootNode : new YamlScalarNode(string.Empty);
+            root =
+                stream.Documents.Count > 0
+                    ? stream.Documents[0].RootNode
+                    : new YamlScalarNode(string.Empty);
         }
         catch (YamlException exception)
         {
-            throw new AboxException($"'{source}' is not valid YAML: {exception.Message}", exception);
+            throw new AboxException(
+                $"'{source}' is not valid YAML: {exception.Message}",
+                exception
+            );
         }
 
         if (root is not YamlMappingNode mapping)
@@ -141,7 +147,9 @@ public sealed class YamlReader
             var name = KeyName(childKey);
             if (!known.Contains(name))
             {
-                throw new AboxException($"'{_source}': '{name}' is not a known key. Known keys: {string.Join(", ", known)}.");
+                throw new AboxException(
+                    $"'{_source}': '{name}' is not a known key. Known keys: {string.Join(", ", known)}."
+                );
             }
         }
     }
@@ -158,7 +166,8 @@ public sealed class YamlReader
 
     private static YamlScalarNode ScalarKey(string key) => new(key);
 
-    private static string KeyName(YamlNode node) => node is YamlScalarNode scalar ? scalar.Value ?? string.Empty : node.ToString();
+    private static string KeyName(YamlNode node) =>
+        node is YamlScalarNode scalar ? scalar.Value ?? string.Empty : node.ToString();
 }
 
 /// <summary>
@@ -182,7 +191,8 @@ public sealed class YamlEntry
     public bool IsScalar => Node is YamlScalarNode;
 
     /// <summary>The value of the element, when it is a plain value.</summary>
-    public string ScalarValue => Node is YamlScalarNode scalar ? scalar.Value ?? string.Empty : string.Empty;
+    public string ScalarValue =>
+        Node is YamlScalarNode scalar ? scalar.Value ?? string.Empty : string.Empty;
 
     /// <summary>The value of a key of the element, when the element is a mapping.</summary>
     public string? GetString(string key)
@@ -218,7 +228,9 @@ public sealed class YamlEntry
         var result = new Dictionary<string, string>();
         foreach (var (childKey, childValue) in values.Children)
         {
-            var name = childKey is YamlScalarNode childScalar ? childScalar.Value ?? string.Empty : childKey.ToString();
+            var name = childKey is YamlScalarNode childScalar
+                ? childScalar.Value ?? string.Empty
+                : childKey.ToString();
             if (childValue is not YamlScalarNode value)
             {
                 throw new AboxException($"'{_source}': '{_key}.{key}.{name}' must be a value.");
@@ -244,15 +256,19 @@ public sealed class YamlEntry
             throw new AboxException($"'{_source}': '{_key}.{key}' must be a list.");
         }
 
-        return sequence.Children.Select(child =>
-        {
-            if (child is not YamlScalarNode scalar)
+        return sequence
+            .Children.Select(child =>
             {
-                throw new AboxException($"'{_source}': '{_key}.{key}' must be a list of values.");
-            }
+                if (child is not YamlScalarNode scalar)
+                {
+                    throw new AboxException(
+                        $"'{_source}': '{_key}.{key}' must be a list of values."
+                    );
+                }
 
-            return scalar.Value ?? string.Empty;
-        }).ToList();
+                return scalar.Value ?? string.Empty;
+            })
+            .ToList();
     }
 
     /// <summary>Fails when the element has keys abox does not know.</summary>
@@ -260,10 +276,14 @@ public sealed class YamlEntry
     {
         foreach (var (childKey, _) in Mapping().Children)
         {
-            var name = childKey is YamlScalarNode scalar ? scalar.Value ?? string.Empty : childKey.ToString();
+            var name = childKey is YamlScalarNode scalar
+                ? scalar.Value ?? string.Empty
+                : childKey.ToString();
             if (!known.Contains(name))
             {
-                throw new AboxException($"'{_source}': '{_key}.{name}' is not a known key. Known keys: {string.Join(", ", known)}.");
+                throw new AboxException(
+                    $"'{_source}': '{_key}.{name}' is not a known key. Known keys: {string.Join(", ", known)}."
+                );
             }
         }
     }
@@ -272,7 +292,9 @@ public sealed class YamlEntry
     {
         if (Node is not YamlMappingNode mapping)
         {
-            throw new AboxException($"'{_source}': every '{_key}' entry must be a value or a mapping.");
+            throw new AboxException(
+                $"'{_source}': every '{_key}' entry must be a value or a mapping."
+            );
         }
 
         return mapping;

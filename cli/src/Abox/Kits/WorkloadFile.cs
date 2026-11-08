@@ -14,7 +14,8 @@ public sealed class WorkloadFile
         string path,
         string template,
         IReadOnlyList<string> mise,
-        IReadOnlyList<string> scripts)
+        IReadOnlyList<string> scripts
+    )
     {
         Path = path;
         Template = template;
@@ -51,6 +52,7 @@ public sealed class WorkloadFile
             path,
             string.IsNullOrWhiteSpace(template) ? DefaultTemplate : template,
             reader.GetStringList("mise"),
-            reader.GetStringList("scripts"));
+            reader.GetStringList("scripts")
+        );
     }
 }

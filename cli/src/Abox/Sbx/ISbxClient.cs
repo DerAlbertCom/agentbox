@@ -16,15 +16,20 @@ public interface ISbxClient
 
     Task<SandboxInfo?> FindSandboxAsync(string name, CancellationToken cancellationToken);
 
-    Task<int> CreateAsync(SbxCreateRequest request, CancellationToken cancellationToken);
-
+    Task<SbxOutcome> CreateAsync(SbxCreateRequest request, CancellationToken cancellationToken);
     Task<int> RemoveSandboxAsync(string name, CancellationToken cancellationToken);
 
     Task<int> ExecAsync(SbxExecRequest request, CancellationToken cancellationToken);
 
     Task<bool> HasProgramAsync(string sandbox, string program, CancellationToken cancellationToken);
 
-    Task<(int ExitCode, string Output)> InspectKitAsync(string kitDirectory, CancellationToken cancellationToken);
+    /// <summary>Where the runtime put the workspace of the sandbox, when it says.</summary>
+    Task<string?> GetWorkspaceDirectoryAsync(string sandbox, CancellationToken cancellationToken);
+
+    Task<(int ExitCode, string Output)> InspectKitAsync(
+        string kitDirectory,
+        CancellationToken cancellationToken
+    );
 
     Task<IReadOnlyList<string>> ListMcpServersAsync(CancellationToken cancellationToken);
 
