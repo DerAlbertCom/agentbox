@@ -29,7 +29,7 @@ The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unle
 command or the user configuration says otherwise.
 
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag>]
-[--local-image] [--yes]`
+[--local] [--yes]`
 
 1. Resolves the team like `abox build` does, from the folder the sandbox works on. The
    team comes from `--team` or the user configuration `defaultTeam`. The squad comes
@@ -50,9 +50,11 @@ command or the user configuration says otherwise.
 8. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the team
    and the squad it comes from and the build it was made of.
 
-`--local-image` says that the sandbox is made from the local build. It is the only
-source in this version, so the flag is the default; `--tag` chooses the tag of the
-local build.
+`--local` says that the sandbox uses the templates that are in sbx and nothing is
+pulled from a registry; it is the only source in this version, so the flag is the
+default. `--tag` chooses the tag of the local build, `latest` by default. The manifest
+records the reference the kit set is published under: `agentbox-rwest-<team>:<tag>`;
+the registry host and `abox publish` are not built yet.
 
 ### `abox run [<launcher>] [--location <path>] [-- <argv>...]`
 
@@ -224,8 +226,8 @@ cli/src/Abox/
 ## The decisions this version took
 
 - **Local images only.** A build stays on the machine and `abox create` uses it. There
-  is no registry in this version, so `--local-image` is the default and `--tag` chooses
-  the tag of the local build.
+  is no registry wired yet, so `--local` is the default; `--tag` chooses the tag of the
+  local build, `latest` by default.
 - **The teams folder.** A team is a folder under `teams`. Its `.abox` files (the squads
   of the team), its `.workload` and the scripts of the workload live in it. The kits
   stay in the `kits` folder of the project, so every team can use them; the workload of

@@ -80,7 +80,7 @@ public sealed class BuildService(
             await VerifyAsync(squad, workloadDirectory, stateDirectory, cancellationToken);
         }
 
-        store.Save(Manifest(squad, request, workloadDirectory, stateDirectory));
+        store.Save(Manifest(teamName, squad, request, workloadDirectory, stateDirectory));
 
         console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
         console.WriteLine(
@@ -125,6 +125,7 @@ public sealed class BuildService(
     }
 
     private static BuildManifest Manifest(
+        string teamName,
         ResolvedSquad squad,
         BuildRequest request,
         string workloadDirectory,
@@ -135,6 +136,7 @@ public sealed class BuildService(
         {
             Squad = squad.Name,
             Tag = request.Tag,
+            Reference = ImageName.OfTeam(teamName, request.Tag),
             CreatedAt = DateTimeOffset.Now,
             RootDirectory = squad.RootDirectory,
             WorkloadName = squad.Workload.Name,

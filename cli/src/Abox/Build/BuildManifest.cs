@@ -38,6 +38,9 @@ public sealed class BuildManifest
 
     /// <summary>The configuration files the squad is made of.</summary>
     public List<string> ConfigFiles { get; set; } = [];
+
+    /// <summary>The reference the kit set of the team is published under, registry host not included.</summary>
+    public string? Reference { get; set; }
 }
 
 /// <summary>A kit of a local build.</summary>

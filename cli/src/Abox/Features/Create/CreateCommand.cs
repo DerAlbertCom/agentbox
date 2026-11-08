@@ -44,10 +44,9 @@ public sealed class CreateCommand : Command
                 "The tag of the local build to use. Defaults to the tag of the user configuration.",
         };
 
-        var localImage = new Option<bool>("--local-image")
+        var local = new Option<bool>("--local")
         {
-            Description =
-                "Use the local build of the squad. This is the only source in this version.",
+            Description = "Use the templates that are in sbx, and never pull from the registry.",
         };
 
         var assumeYes = new Option<bool>("--yes")
@@ -59,7 +58,7 @@ public sealed class CreateCommand : Command
         Options.Add(squad);
         Options.Add(location);
         Options.Add(tag);
-        Options.Add(localImage);
+        Options.Add(local);
         Options.Add(assumeYes);
 
         SetAction(
@@ -94,10 +93,10 @@ public sealed class CreateCommand : Command
                             return 1;
                         }
 
-                        if (!parseResult.GetValue(localImage))
+                        if (!parseResult.GetValue(local))
                         {
                             console.WriteError(
-                                "note: this version of abox creates sandboxes from local images only."
+                                "note: this version of abox uses the templates that are in sbx."
                             );
                         }
 

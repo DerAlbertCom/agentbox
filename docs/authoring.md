@@ -43,7 +43,9 @@ abox run --location <folder>                 # open the sandbox of the folder
   than `latest`.
 - `create` names the sandbox after the folder it works on and asks before it replaces
   an existing one. It creates the sandbox of `--squad`; without it, the command asks
-  which squad of the team to use, and uses the only one without asking.
+  which squad of the team to use, and uses the only one without asking. `--tag` uses
+  another tag of the local build than `latest`, and `--local` uses the templates that
+  are in sbx and never pulls from the registry.
   `abox create --team sample --location <folder>` again replaces the sandbox.
 - `run` starts a launcher (a shell, unless said otherwise) in the sandbox. When the
   squad has a newer build than the sandbox was made of, it offers to replace first.
