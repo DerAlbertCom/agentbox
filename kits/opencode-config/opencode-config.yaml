@@ -1,0 +1,23 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: opencode configuration
+description: The guidance and the configuration the opencode agent reads in the sandbox.
+version: "1.0.0"
+
+capabilities:
+  # opencode reads its guidance next to its own configuration.
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      directory: /home/agent/.config/opencode
+      filename: AGENTS.md
+      content: |
+        You work in a sandbox that has its own tools. The workspace of the folder you
+        were started for is at /home/agent/workspace.
+
+        Conventions for work in this sandbox:
+
+        - The credentials are not in the sandbox. Ask the host for them through the
+          tools of the sandbox instead of looking for tokens.
+        - Your session state lives in ~/.config/opencode/state, which is kept when the
+          sandbox is replaced.

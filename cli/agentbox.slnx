@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path="../docs/concept.md" />
+    <File Path="../kits/README.md" />
+  </Folder>
+  <Project Path="src/Abox/Abox.csproj" />
+  <Project Path="test/Abox.Tests/Abox.Tests.csproj" />
+</Solution>

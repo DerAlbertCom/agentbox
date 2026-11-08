@@ -1,0 +1,13 @@
+# The base image of the CAPE team.
+#
+# The workload becomes a sandbox kit: abox writes the descriptor and the Dockerfile
+# from these lines. The last tool of the list is the default of the image.
+template: docker.io/sbx/shell-docker-image
+
+mise:
+  - nodejs@24.4.3
+  - dotnet@9.0.303
+  - dotnet@10.0.403
+
+scripts:
+  - enable-fzf.sh

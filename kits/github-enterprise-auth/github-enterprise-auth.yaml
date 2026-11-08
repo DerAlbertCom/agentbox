@@ -1,0 +1,32 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: GitHub Enterprise authentication
+description: >
+  The agents of the sandbox reach GitHub Enterprise Cloud with the credential of the host,
+  so the token never enters the sandbox.
+version: "1.0.0"
+
+capabilities:
+  # The hosts the agents reach with the credential of the host.
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow:
+          - api.github.com
+          - github.com
+
+  # The credential itself: the host holds the token, the sandbox only sees a sentinel.
+  - type: com.docker.sandbox/credential@1
+    optional: true
+    description: GitHub access for the agents
+    config:
+      service: github
+      phase: runtime
+      apiKey:
+        name: GITHUB_TOKEN
+        proxyManaged: true
+        inject:
+          - domain: api.github.com
+            header: Authorization
+            format: "Bearer %s"

@@ -1,0 +1,23 @@
+# The AC squad: the base image of the team, with the kits and the tools of the squad.
+base: cape
+
+kits:
+  - github-enterprise-auth
+  - pi-config
+  - opencode-config
+  - elastic-auth
+
+# Named values the kits and the MCP servers use.
+parameters:
+  elastic-url: https://foobar.com/mcp
+
+# The MCP servers every agent of the sandbox gets.
+mcp:
+  - name: elastic
+    url: ${{ parameters.elastic-url }}
+  - azuredevops
+
+# The directories that survive a replacement of the sandbox.
+state:
+  - ~/.config/opencode/state
+  - ~/.local/state/shell

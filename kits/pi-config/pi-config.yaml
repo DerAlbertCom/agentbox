@@ -1,0 +1,23 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: pi configuration
+description: The guidance and the configuration the pi agent reads in the sandbox.
+version: "1.0.0"
+
+capabilities:
+  # pi reads its guidance in the agent directory of its home.
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      directory: /home/agent/.pi/agent
+      filename: AGENTS.md
+      content: |
+        You work in a sandbox that has its own tools. The workspace of the folder you
+        were started for is at /home/agent/workspace.
+
+        Conventions for work in this sandbox:
+
+        - The credentials are not in the sandbox. Ask the host for them through the
+          tools of the sandbox instead of looking for tokens.
+        - `mise upgrade --bump` updates the tools of the image. The exact versions of
+          the workload do not move with a plain `mise upgrade`.

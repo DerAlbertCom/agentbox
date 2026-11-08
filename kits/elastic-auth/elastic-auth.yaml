@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Elastic authentication
+description: The agents of the sandbox reach Elastic with the credential of the host.
+version: "1.0.0"
+
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow:
+          - api.elastic.co
+          - foobar.com
+
+  - type: com.docker.sandbox/credential@1
+    optional: true
+    description: Elastic access for the agents
+    config:
+      service: elastic
+      phase: runtime
+      apiKey:
+        name: ELASTIC_API_KEY
+        proxyManaged: true
+        inject:
+          - domain: api.elastic.co
+            header: Authorization
+            format: "ApiKey %s"

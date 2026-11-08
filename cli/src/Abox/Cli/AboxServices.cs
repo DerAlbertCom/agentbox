@@ -1,0 +1,62 @@
+using Abox.Build;
+using Abox.Configuration;
+using Abox.Infrastructure;
+using Abox.Kits;
+using Abox.Launchers;
+using Abox.Health;
+using Abox.Services;
+using Abox.Sbx;
+
+namespace Abox.Cli;
+
+/// <summary>
+/// The services the commands use. One place, so every command works the same way.
+/// </summary>
+public sealed class AboxServices
+{
+    public AboxServices(IConsole console)
+    {
+        Console = console;
+        Paths = AboxPaths.Create();
+        Config = AboxConfigLoader.Load(Paths);
+        Runner = new ProcessRunner();
+        HostPrograms = new HostPrograms();
+        Sbx = new SbxClient(Runner);
+        Preflight = new Preflight(console, Sbx, HostPrograms);
+        Resolver = new SquadResolver(Config);
+        Store = new BuildStore(Paths);
+        PersonalConfigurations = new PersonalConfigurations(Paths);
+        Launchers = new LauncherRegistry([new ShellLauncher(), new HerdrAppLauncher(Runner)]);
+        Build = new BuildService(Resolver, new WorkloadKitGenerator(), new StateMixinGenerator(), PersonalConfigurations, Store, Sbx, console);
+        Create = new CreateService(Store, Paths, Sbx, console);
+        Run = new RunService(Launchers, Sbx, HostPrograms, console);
+    }
+
+    public IConsole Console { get; }
+
+    public AboxPaths Paths { get; }
+
+    public AboxConfig Config { get; }
+
+    public IProcessRunner Runner { get; }
+
+    public IHostPrograms HostPrograms { get; }
+
+    public ISbxClient Sbx { get; }
+
+    public Preflight Preflight { get; }
+
+    public SquadResolver Resolver { get; }
+
+    public BuildStore Store { get; }
+
+    public PersonalConfigurations PersonalConfigurations { get; }
+
+    public LauncherRegistry Launchers { get; }
+
+    public BuildService Build { get; }
+
+    public CreateService Create { get; }
+
+    public RunService Run { get; }
+}
