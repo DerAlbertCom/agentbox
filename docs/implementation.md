@@ -74,6 +74,22 @@ the values on the host, through `sbx secret`, so they never enter a sandbox.
   of sbx, so it stays out of the process list and out of the shell history.
 - `remove` takes the values off the host.
 
+### `abox prune`
+
+Sbx stores every kit it builds as a template image: one image per build plus one per kit
+in it, and the sources of the kits under a own repository (sbx-kit-src). They pile up,
+because a build replaces them with new ones and sbx never takes the old ones away.
+
+`abox prune` lists the template images (`sbx template ls --json`), groups the images of
+the assembled repository by their build id (the tags `«id»`, `«id»-kit-N` and
+`«id»-template` of one build share the id), and keeps the newest build together with its
+kit sources: an sbx-kit-src image stays as long as its image id is in the kept set. What
+is left goes with `sbx template rm`, one image at a time, and sbx asks nothing (--force).
+
+The command never touches sandboxes, secrets, or images of any other repository, and it
+never removes an image whose age or id sbx does not report: prune only throws away what
+it can prove is stale.
+
 ## The files
 
 ### `.abox`
@@ -200,8 +216,8 @@ cli/src/Abox/
 
 ## What is not built yet
 
-- `abox publish` and `abox prune`. The kit set is not published to a registry, and the
-  local kits are not pruned.
+- `abox publish`. The kit set is not published to a registry, and `abox prune` removes
+  only the template images of sbx, not the local builds of the build store.
 - The `orca` launcher, and the `hc` helper and the `openssh-server` of the base image.
 - The Claude Code gateway to Copilot on GitHub Enterprise (open question 3).
 - The `worktrees` of the agents, which are lost when a sandbox is replaced (open
@@ -218,8 +234,8 @@ that are ready to be picked up:
 1. **`abox publish`** — push the kit set of a squad to a registry as one reference, so
    `abox create` can pull it. The build already produces everything a set needs: the
    workload kit, the mixins and the manifest.
-2. **`abox prune`** — remove the local builds and the kits nothing uses. The build
-   store knows what is there; the sandboxes say what is in use.
+2. **The rest of `abox prune`** — the local builds of the build store are not pruned
+   yet. The build store knows what is there; the sandboxes say what is in use.
 3. **The agent kits** — the kits of `kits/` carry the credentials and the guidance of
    the agents, but not their configuration files yet.
 4. **The `orca` launcher** — the SSH key pair, the host entry and the Orca CLI are

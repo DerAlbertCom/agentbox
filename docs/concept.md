@@ -36,7 +36,7 @@ Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit co
   - If JFrog has a newer `latest`, asks whether to replace the sandbox now. Skipped offline. *(proposed placement)*
 - **`abox build --squad <names>`** resolves each squad's `.abox` file from the repository root (for now) and builds the squad's kit set: one workload and the mixins reached through `base`. Rejects duplicate kit repositories and file collisions between kits. Layers are shared, not repacked, so squads with common kits share blobs. *(proposed)*
 - **`abox publish --squad <names>`** pushes the kit set to JFrog as one reference, with the resolved squad config (see open question 2).
-- **`abox prune [--build] [--latest]`** removes local kits and workloads, or with `--build`, local build artifacts. Keeps `latest` unless `--latest` is given. Never removes anything a running sandbox uses. *(proposed: also keep anything a stopped sandbox uses)*
+- **`abox prune`** removes the template images of sbx that stopped being used: it keeps the newest assembled kit set and the kit sources it is built from, and removes the older sets and the kit sources nothing uses. Never removes sandboxes, secrets, or images of other repositories, nor anything an image of unknown age or id holds. *(proposed: also keep anything a stopped sandbox uses; also prune the local builds of the build store)*
 - **`abox secrets`** manages host-side secrets for kits, through `sbx secret` behind the scenes. *(proposed subcommands: `set`, `list`, `remove`)*
 
 ## Preflight
