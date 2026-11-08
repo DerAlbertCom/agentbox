@@ -37,7 +37,7 @@ public sealed class BuildCommand : Command
         var tag = new Option<string>("--tag")
         {
             Description =
-                "The tag the build is stored under. Defaults to the tag of the user configuration.",
+                "The tag the build is stored under. Defaults to the tag of the user configuration, latest.",
         };
 
         var verify = new Option<bool>("--no-verify")

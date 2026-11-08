@@ -12,6 +12,11 @@ public sealed record PrunePlan(
     IReadOnlyList<TemplateImage> Keep
 );
 
+/// <summary>How far a prune goes.</summary>
+/// <param name="Everything">Whether it reaches for everything, for the mode of a full prune.</param>
+/// <param name="StopSandboxes">Whether it stops the running sandboxes first.</param>
+public sealed record PruneRequest(bool Everything, bool StopSandboxes);
+
 /// <summary>
 /// Prunes the template images of the local sbx. Keeps the newest assembled kit set
 /// and the kit sources it is built from, removes the older sets and the kit sources
@@ -32,9 +37,18 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
     private static partial Regex KitIndexSuffix();
 
     /// <summary>Prunes the template images and returns the exit code of the command.</summary>
-    public async Task<int> PruneTemplatesAsync(CancellationToken cancellationToken)
+    public async Task<int> PruneTemplatesAsync(
+        PruneRequest request,
+        CancellationToken cancellationToken
+    )
     {
-        var plan = Plan(await sbx.ListTemplatesAsync(cancellationToken));
+        if (request.StopSandboxes)
+        {
+            await StopSandboxesAsync(cancellationToken);
+        }
+
+        var images = await sbx.ListTemplatesAsync(cancellationToken);
+        var plan = request.Everything ? Everything(images) : Plan(images);
 
         if (plan.Remove.Count == 0)
         {
@@ -44,8 +58,18 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
             return 0;
         }
 
-        console.WriteLine($"Keeping the newest set '{KeptBuilds(plan)}' and its kit sources.");
-        console.WriteLine($"Removing {plan.Remove.Count} stale template images...");
+        if (request.Everything)
+        {
+            console.WriteLine(
+                $"Reaching for {plan.Remove.Count} template images of sbx. What a sandbox "
+                    + "uses, sbx keeps."
+            );
+        }
+        else
+        {
+            console.WriteLine($"Keeping the newest set '{KeptBuilds(plan)}' and its kit sources.");
+            console.WriteLine($"Removing {plan.Remove.Count} stale template images...");
+        }
 
         var failures = new List<string>();
         foreach (var image in plan.Remove)
@@ -54,6 +78,10 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
             if (outcome.Succeeded)
             {
                 console.WriteLine($"Removed {image.Reference}.");
+            }
+            else if (request.Everything)
+            {
+                console.WriteLine($"sbx keeps {image.Reference}, it uses it.");
             }
             else
             {
@@ -74,6 +102,28 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
         }
 
         return 0;
+    }
+
+    /// <summary>Stops every running sandbox, so a full prune reaches what is not running.</summary>
+    private async Task StopSandboxesAsync(CancellationToken cancellationToken)
+    {
+        var running = (await sbx.ListSandboxesAsync(cancellationToken))
+            .Where(sandbox => sandbox.IsRunning)
+            .ToList();
+        if (running.Count == 0)
+        {
+            return;
+        }
+
+        console.WriteLine($"Stopping {running.Count} running sandbox(es)...");
+        foreach (var sandbox in running)
+        {
+            var outcome = await sbx.StopSandboxAsync(sandbox.Name, cancellationToken);
+            if (!outcome.Succeeded)
+            {
+                throw new AboxException($"sbx could not stop the sandbox '{sandbox.Name}'.");
+            }
+        }
     }
 
     /// <summary>
@@ -145,6 +195,36 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
 
         return new PrunePlan(remove, keep);
     }
+
+    /// <summary>
+    /// The set of a full prune: every kit image of a known age that sbx holds, kept only
+    /// where a sandbox needs it. sbx decides that at removal time, so the prune reaches
+    /// for all of them and reports the ones sbx keeps.
+    /// </summary>
+    public static PrunePlan Everything(IReadOnlyList<TemplateImage> images)
+    {
+        var keep = new List<TemplateImage>();
+        var remove = new List<TemplateImage>();
+
+        foreach (var image in images)
+        {
+            // An image abox does not know is a sbx kit image, or of a known age, stays.
+            if (image.CreatedAt is null || image.Id.Length == 0 || !IsKnownRepository(image))
+            {
+                keep.Add(image);
+            }
+            else
+            {
+                remove.Add(image);
+            }
+        }
+
+        return new PrunePlan(remove, keep);
+    }
+
+    private static bool IsKnownRepository(TemplateImage image) =>
+        image.Repository.EndsWith(AssembledRepository, StringComparison.Ordinal)
+        || image.Repository.EndsWith(KitSourceRepository, StringComparison.Ordinal);
 
     /// <summary>The build a tag of the assembled repository belongs to.</summary>
     private static string BuildIdOf(string tag)

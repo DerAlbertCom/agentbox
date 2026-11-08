@@ -188,6 +188,16 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
         return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
     }
 
+    /// <summary>Stops one sandbox without removing it.</summary>
+    public async Task<SbxOutcome> StopSandboxAsync(string name, CancellationToken cancellationToken)
+    {
+        var result = await runner.RunAsync(
+            new ProcessRequest(ExecutableName, ["stop", name]),
+            cancellationToken
+        );
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
+    }
+
     /// <summary>Runs a command in a sandbox, starting the sandbox when it is stopped.</summary>
     public async Task<int> ExecAsync(SbxExecRequest request, CancellationToken cancellationToken)
     {

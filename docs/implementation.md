@@ -96,9 +96,14 @@ the assembled repository by their build id (the tags `«id»`, `«id»-kit-N` an
 kit sources: an sbx-kit-src image stays as long as its image id is in the kept set. What
 is left goes with `sbx template rm`, one image at a time, and sbx asks nothing (--force).
 
-The command never touches sandboxes, secrets, or images of any other repository, and it
-never removes an image whose age or id sbx does not report: prune only throws away what
-it can prove is stale.
+With `--full`, the prune reaches for every sbx kit image of a known age, not only the
+stale sets: it removes everything, and what a sandbox uses, sbx refuses and keeps. The
+prune reports what sbx keeps and is happy about it. With `--sbx`, it stops the running
+sandboxes first (`sbx stop`, one per sandbox, the kit builder included).
+
+The command never touches secrets, or images of any other repository, and it never
+removes an image whose age or id sbx does not report: prune only throws away what it
+can prove is stale.
 
 ## The files
 

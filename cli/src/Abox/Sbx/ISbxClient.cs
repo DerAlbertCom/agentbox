@@ -27,6 +27,9 @@ public interface ISbxClient
 
     Task<SbxOutcome> RemoveSandboxAsync(string name, CancellationToken cancellationToken);
 
+    /// <summary>Stops one sandbox without removing it.</summary>
+    Task<SbxOutcome> StopSandboxAsync(string name, CancellationToken cancellationToken);
+
     Task<int> ExecAsync(SbxExecRequest request, CancellationToken cancellationToken);
 
     Task<bool> HasProgramAsync(string sandbox, string program, CancellationToken cancellationToken);

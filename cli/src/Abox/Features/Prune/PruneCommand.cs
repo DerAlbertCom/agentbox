@@ -15,9 +15,28 @@ public sealed class PruneCommand : Command
             "Remove the stale template images of sbx: everything but the newest set and its kit sources."
         )
     {
+        var full = new Option<bool>("--full")
+        {
+            Description =
+                "Reach for everything sbx holds, not only the stale sets. What a sandbox uses, sbx keeps.",
+        };
+
+        var stop = new Option<bool>("--sbx")
+        {
+            Description = "Stop the running sandboxes before the prune.",
+        };
+
+        Options.Add(full);
+        Options.Add(stop);
+
         SetAction(
-            async (_, cancellationToken) =>
+            async (parseResult, cancellationToken) =>
             {
+                var request = new PruneRequest(
+                    parseResult.GetValue(full),
+                    parseResult.GetValue(stop)
+                );
+
                 return await CommandHandling.RunAsync(
                     async () =>
                     {
@@ -26,7 +45,7 @@ public sealed class PruneCommand : Command
                             return 1;
                         }
 
-                        return await prune.PruneTemplatesAsync(cancellationToken);
+                        return await prune.PruneTemplatesAsync(request, cancellationToken);
                     },
                     console
                 );
