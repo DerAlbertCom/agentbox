@@ -259,6 +259,31 @@ public sealed class SquadResolverTests
     }
 
     [Fact]
+    public void ASquadIsFoundInAParentDirectory()
+    {
+        _root.File("ac.abox", "workload: mti-ca-dotnet\n");
+        var folder = _root.Directory_("projects/one");
+
+        var squad = _resolver.Resolve(folder, "ac", []);
+
+        Assert.Equal("mti-ca-dotnet", squad.Workload.Name);
+    }
+
+    [Fact]
+    public void TheBaseOfAPersonalConfigurationIsNotLookedForInAParentDirectory()
+    {
+        _root.File("ac.abox", "workload: mti-ca-dotnet\n");
+        _root.File("base.abox", "kits:\n  - pi-config\n");
+        var personal = _root.File("personal/personal.abox", "base: base\n");
+
+        var exception = Assert.Throws<AboxException>(() =>
+            _resolver.Resolve(_root.Path, "ac", [personal])
+        );
+
+        Assert.Contains("no configuration 'base.abox'", exception.Message);
+    }
+
+    [Fact]
     public void APersonalConfigurationAddsToTheSquad()
     {
         _root.File(

@@ -67,6 +67,13 @@ public static class CreateCommand
                             return 1;
                         }
 
+                        if (!parseResult.GetValue(localImage))
+                        {
+                            services.Console.WriteError(
+                                "note: this version of abox creates sandboxes from local images only."
+                            );
+                        }
+
                         return await services.Create.CreateAsync(request, cancellationToken);
                     },
                     services.Console

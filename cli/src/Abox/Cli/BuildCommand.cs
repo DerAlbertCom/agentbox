@@ -10,9 +10,11 @@ public static class BuildCommand
 {
     public static Command Create(AboxServices services)
     {
-        var squad = new Option<string>("--squad")
+        var squad = new Option<string[]>("--squad")
         {
-            Description = "The squad to build. Defaults to the squad of the user configuration.",
+            Description =
+                "The squad to build. Can be given more than once. Defaults to the squad of the user configuration.",
+            AllowMultipleArgumentsPerToken = false,
         };
 
         var root = new Option<string>("--root")
@@ -43,8 +45,9 @@ public static class BuildCommand
         command.SetAction(
             async (parseResult, cancellationToken) =>
             {
+                var squads = parseResult.GetValue(squad);
                 var request = new BuildRequest(
-                    parseResult.GetValue(squad) ?? services.Config.DefaultSquad,
+                    squads is { Length: > 0 } ? squads : [services.Config.DefaultSquad],
                     parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
                     parseResult.GetValue(tag) ?? services.Config.DefaultTag,
                     !parseResult.GetValue(verify)

@@ -8,7 +8,9 @@ built yet.
 
 ### `abox build --squad <name> [--root <dir>] [--tag <tag>] [--no-verify]`
 
-1. Reads the `<squad>.abox` file of the project and follows its `base` chain.
+1. Reads the `<squad>.abox` file of the project and follows its `base` chain. The file is
+   looked for in the directory of the command and in its parent directories, so the
+   command works from anywhere in the project. `--squad` can be given more than once.
 2. Checks the chain: a cycle, a kit, an MCP server, a parameter or a state directory
    that is declared twice, overlapping state directories, and a parameter that no
    configuration declares are errors. The error names the duplicate and the files that
@@ -49,7 +51,8 @@ local build.
    `abox create` command to run.
 3. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
-4. Starts the launcher.
+4. Asks the runtime where the workspace of the sandbox is (`WORKSPACE_DIR`) and starts
+   the launcher there.
 
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.
@@ -134,6 +137,9 @@ cli/src/Abox/
   project, the `.abox` files in the root of the project.
 - **The name of a squad is the name of its file.** `abox build --squad AC` finds
   `ac.abox` and calls the squad `ac`.
+- **The workspace is where the runtime puts it.** The runtime mounts the folder of the
+  host at the same path in the sandbox and says so with `WORKSPACE_DIR`, so the
+  launcher asks for it instead of assuming `/home/agent/workspace`.
 - **The state directories of a squad are mounted from the host.** sbx mounts a host
   directory only where a kit asks for it, so abox writes a mixin that asks for every
   state directory and passes one `--mount` per directory.

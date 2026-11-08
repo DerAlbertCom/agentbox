@@ -25,14 +25,15 @@ public sealed class SquadResolver
         IReadOnlyList<string> personalConfigurations
     )
     {
-        var projectChain = LoadChain(new ConfigRoot(rootDirectory, squadName));
+        var projectChain = LoadChain(new ConfigRoot(rootDirectory, squadName), searchParents: true);
         var personalChains = personalConfigurations
             .Select(file =>
                 LoadChain(
                     new ConfigRoot(
                         Path.GetDirectoryName(file) ?? ".",
                         Path.GetFileNameWithoutExtension(file)
-                    )
+                    ),
+                    searchParents: false
                 )
             )
             .ToList();
@@ -63,7 +64,7 @@ public sealed class SquadResolver
     /// <summary>
     /// Reads a configuration and the configurations it inherits from, the base first.
     /// </summary>
-    private static IReadOnlyList<AboxFile> LoadChain(ConfigRoot root)
+    private static IReadOnlyList<AboxFile> LoadChain(ConfigRoot root, bool searchParents)
     {
         var chain = new List<AboxFile>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -71,7 +72,7 @@ public sealed class SquadResolver
         var current = root;
         while (true)
         {
-            var path = FindConfigurationFile(current.Directory, current.Name);
+            var path = FindConfigurationFile(current.Directory, current.Name, searchParents);
             if (!visited.Add(path))
             {
                 throw new AboxException(
@@ -87,7 +88,7 @@ public sealed class SquadResolver
                 break;
             }
 
-            current = new ConfigRoot(current.Directory, file.Base);
+            current = new ConfigRoot(Path.GetDirectoryName(path)!, file.Base);
         }
 
         chain.Reverse();
@@ -96,31 +97,58 @@ public sealed class SquadResolver
 
     /// <summary>
     /// Finds the <c>.abox</c> file of a configuration. The name is matched without regard
-    /// to case, so <c>AC</c> finds <c>ac.abox</c>.
+    /// to case, so <c>AC</c> finds <c>ac.abox</c>. A project is looked for in the parent
+    /// directories too, so the command works from anywhere in it.
     /// </summary>
-    private static string FindConfigurationFile(string directory, string name)
+    private static string FindConfigurationFile(string directory, string name, bool searchParents)
     {
+        var current = directory;
+
+        while (true)
+        {
+            var found = FindConfigurationFileHere(current, name);
+            if (found is not null)
+            {
+                return found;
+            }
+
+            if (!searchParents)
+            {
+                break;
+            }
+
+            var parent = Path.GetDirectoryName(current);
+            if (parent is null || parent == current)
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        throw new AboxException(
+            $"There is no configuration '{name}.abox' in '{directory}' or in one of its parent directories."
+        );
+    }
+
+    private static string? FindConfigurationFileHere(string directory, string name)
+    {
+        if (!Directory.Exists(directory))
+        {
+            return null;
+        }
+
         var expected = Path.Combine(directory, name + ".abox");
         if (File.Exists(expected))
         {
             return expected;
         }
 
-        if (!Directory.Exists(directory))
-        {
-            throw new AboxException($"The directory '{directory}' does not exist.");
-        }
-
-        var match = Directory
+        return Directory
             .EnumerateFiles(directory, "*.abox")
             .FirstOrDefault(file =>
                 Path.GetFileNameWithoutExtension(file)
                     .Equals(name, StringComparison.OrdinalIgnoreCase)
-            );
-
-        return match
-            ?? throw new AboxException(
-                $"There is no configuration '{name}.abox' in '{directory}'."
             );
     }
 

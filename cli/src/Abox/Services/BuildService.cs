@@ -6,12 +6,12 @@ using Abox.Sbx;
 namespace Abox.Services;
 
 /// <summary>What to build.</summary>
-/// <param name="Squad">The squad to build.</param>
-/// <param name="RootDirectory">The directory the squad's configurations live in.</param>
-/// <param name="Tag">The tag the build is stored under.</param>
+/// <param name="Squads">The squads to build.</param>
+/// <param name="RootDirectory">The directory the squads' configurations live in.</param>
+/// <param name="Tag">The tag the builds are stored under.</param>
 /// <param name="Verify">Whether the kits are built and checked with sbx.</param>
 public sealed record BuildRequest(
-    string Squad,
+    IReadOnlyList<string> Squads,
     string RootDirectory,
     string Tag,
     bool Verify = true
@@ -50,15 +50,32 @@ public sealed class BuildService
         _console = console;
     }
 
-    /// <summary>Builds the squad and returns the exit code of the command.</summary>
+    /// <summary>Builds the squads and returns the exit code of the command.</summary>
     public async Task<int> BuildAsync(BuildRequest request, CancellationToken cancellationToken)
+    {
+        foreach (var squad in request.Squads)
+        {
+            if (!await BuildSquadAsync(squad, request, cancellationToken))
+            {
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    private async Task<bool> BuildSquadAsync(
+        string squadName,
+        BuildRequest request,
+        CancellationToken cancellationToken
+    )
     {
         var squad = _resolver.Resolve(
             request.RootDirectory,
-            request.Squad,
+            squadName,
             _personalConfigurations.Files
         );
-        var buildDirectory = _store.DirectoryFor(request.Squad, request.Tag);
+        var buildDirectory = _store.DirectoryFor(squad.Name, request.Tag);
 
         var workloadDirectory = Path.Combine(buildDirectory, WorkloadKitGenerator.KitName);
         _workloadGenerator.Generate(squad.Workload, workloadDirectory);
@@ -76,11 +93,12 @@ public sealed class BuildService
 
         _store.Save(Manifest(squad, request, workloadDirectory, stateDirectory));
 
-        _console.WriteLine($"Squad '{request.Squad}' built as '{request.Tag}'.");
+        _console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
         _console.WriteLine(
-            $"Create a sandbox from it with: abox create --squad {request.Squad} --local-image"
+            $"Create a sandbox from it with: abox create --squad {squad.Name} --local-image"
         );
-        return 0;
+
+        return true;
     }
 
     private async Task VerifyAsync(
@@ -126,7 +144,7 @@ public sealed class BuildService
     {
         var manifest = new BuildManifest
         {
-            Squad = request.Squad,
+            Squad = squad.Name,
             Tag = request.Tag,
             CreatedAt = DateTimeOffset.Now,
             RootDirectory = squad.RootDirectory,
