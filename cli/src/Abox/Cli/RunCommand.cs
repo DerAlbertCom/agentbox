@@ -1,4 +1,7 @@
 using System.CommandLine;
+using Abox.Health;
+using Abox.Infrastructure;
+using Abox.Launchers;
 using Abox.Services;
 
 namespace Abox.Cli;
@@ -8,7 +11,13 @@ namespace Abox.Cli;
 /// </summary>
 public static class RunCommand
 {
-    public static Command Create(AboxServices services)
+    public static Command Create(
+        LauncherRegistry launchers,
+        Preflight preflight,
+        RunService run,
+        TrailingArguments trailing,
+        IConsole console
+    )
     {
         var launcher = new Argument<string>("launcher")
         {
@@ -16,7 +25,7 @@ public static class RunCommand
             Description = "The launcher to start. Defaults to the shell.",
         };
 
-        launcher.CompletionSources.Add(services.Launchers.All.Select(item => item.Id).ToArray());
+        launcher.CompletionSources.Add(launchers.All.Select(item => item.Id).ToArray());
 
         var location = new Option<string>("--location")
         {
@@ -37,7 +46,7 @@ public static class RunCommand
             + Environment.NewLine
             + string.Join(
                 Environment.NewLine,
-                services.Launchers.All.Select(item => $"  {item.Id, -10} {item.Summary}")
+                launchers.All.Select(item => $"  {item.Id, -10} {item.Summary}")
             );
 
         command.SetAction(
@@ -46,20 +55,20 @@ public static class RunCommand
                 var request = new RunRequest(
                     parseResult.GetValue(launcher) ?? "shell",
                     parseResult.GetValue(location) ?? Directory.GetCurrentDirectory(),
-                    services.Trailing.Values
+                    trailing.Values
                 );
 
                 return await CommandHandling.RunAsync(
                     async () =>
                     {
-                        if (!await services.Preflight.EnsureReadyAsync(cancellationToken))
+                        if (!await preflight.EnsureReadyAsync(cancellationToken))
                         {
                             return 1;
                         }
 
-                        return await services.Run.RunAsync(request, cancellationToken);
+                        return await run.RunAsync(request, cancellationToken);
                     },
-                    services.Console
+                    console
                 );
             }
         );

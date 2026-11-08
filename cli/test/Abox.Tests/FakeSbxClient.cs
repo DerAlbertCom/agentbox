@@ -74,11 +74,11 @@ public sealed class FakeSbxClient : ISbxClient
         return Task.FromResult(new SbxOutcome(CreateExitCode, string.Empty));
     }
 
-    public Task<int> RemoveSandboxAsync(string name, CancellationToken cancellationToken)
+    public Task<SbxOutcome> RemoveSandboxAsync(string name, CancellationToken cancellationToken)
     {
         Removed.Add(name);
         Sandboxes.RemoveAll(sandbox => sandbox.Name == name);
-        return Task.FromResult(0);
+        return Task.FromResult(new SbxOutcome(0, string.Empty));
     }
 
     public Task<int> ExecAsync(SbxExecRequest request, CancellationToken cancellationToken)
@@ -98,19 +98,23 @@ public sealed class FakeSbxClient : ISbxClient
         CancellationToken cancellationToken
     ) => Task.FromResult(WorkspaceDirectory);
 
-    public Task<(int ExitCode, string Output)> InspectKitAsync(
+    public Task<SbxOutcome> InspectKitAsync(
         string kitDirectory,
         CancellationToken cancellationToken
-    ) => Task.FromResult((0, string.Empty));
+    ) => Task.FromResult(new SbxOutcome(0, string.Empty));
 
     public Task<IReadOnlyList<string>> ListMcpServersAsync(CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<string>>(McpServers.ToList());
 
-    public Task<int> AddMcpServerAsync(string name, string url, CancellationToken cancellationToken)
+    public Task<SbxOutcome> AddMcpServerAsync(
+        string name,
+        string url,
+        CancellationToken cancellationToken
+    )
     {
         RegisteredMcpServers.Add(name);
         McpServers.Add(name);
-        return Task.FromResult(0);
+        return Task.FromResult(new SbxOutcome(0, string.Empty));
     }
 
     public Task<bool> SignInAsync(CancellationToken cancellationToken) => Task.FromResult(true);

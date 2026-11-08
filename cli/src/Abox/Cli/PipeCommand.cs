@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Abox.Infrastructure;
 using Abox.Sbx;
 
 namespace Abox.Cli;
@@ -10,7 +11,7 @@ namespace Abox.Cli;
 /// </summary>
 public static class PipeCommand
 {
-    public static Command Create(AboxServices services)
+    public static Command Create(ISbxClient sbx, TrailingArguments trailing, IConsole console)
     {
         var sandbox = new Argument<string>("sandbox")
         {
@@ -27,36 +28,30 @@ public static class PipeCommand
         };
 
         command.SetAction(
-            (Func<ParseResult, CancellationToken, Task<int>>)(
-                async (parseResult, cancellationToken) =>
+            async (parseResult, cancellationToken) =>
+            {
+                var argv = trailing.Values;
+                if (argv.Count == 0)
                 {
-                    var argv = services.Trailing.Values;
-                    if (argv.Count == 0)
-                    {
-                        services.Console.WriteError(
-                            "error: no command given. Use: abox pipe <sandbox> -- <command>"
-                        );
-                        return 1;
-                    }
-
-                    return await CommandHandling.RunAsync(
-                        async () =>
-                        {
-                            var exitCode = await services.Sbx.ExecAsync(
-                                new SbxExecRequest(
-                                    parseResult.GetValue(sandbox)!,
-                                    argv,
-                                    KeepStandardInputOpen: true
-                                ),
-                                cancellationToken
-                            );
-
-                            return exitCode;
-                        },
-                        services.Console
+                    console.WriteError(
+                        "error: no command given. Use: abox pipe <sandbox> -- <command>"
                     );
+                    return 1;
                 }
-            )
+
+                return await CommandHandling.RunAsync(
+                    async () =>
+                        await sbx.ExecAsync(
+                            new SbxExecRequest(
+                                parseResult.GetValue(sandbox)!,
+                                argv,
+                                KeepStandardInputOpen: true
+                            ),
+                            cancellationToken
+                        ),
+                    console
+                );
+            }
         );
 
         return command;

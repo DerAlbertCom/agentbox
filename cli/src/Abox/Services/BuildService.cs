@@ -21,35 +21,16 @@ public sealed record BuildRequest(
 /// Builds a squad: resolves its configuration, writes the workload kit and the state
 /// mixin, checks the kits with sbx and keeps the manifest of the result.
 /// </summary>
-public sealed class BuildService
+public sealed class BuildService(
+    SquadResolver resolver,
+    WorkloadKitGenerator workloadGenerator,
+    StateMixinGenerator stateGenerator,
+    PersonalConfigurations personalConfigurations,
+    BuildStore store,
+    ISbxClient sbx,
+    IConsole console
+)
 {
-    private readonly SquadResolver _resolver;
-    private readonly WorkloadKitGenerator _workloadGenerator;
-    private readonly StateMixinGenerator _stateGenerator;
-    private readonly PersonalConfigurations _personalConfigurations;
-    private readonly BuildStore _store;
-    private readonly ISbxClient _sbx;
-    private readonly IConsole _console;
-
-    public BuildService(
-        SquadResolver resolver,
-        WorkloadKitGenerator workloadGenerator,
-        StateMixinGenerator stateGenerator,
-        PersonalConfigurations personalConfigurations,
-        BuildStore store,
-        ISbxClient sbx,
-        IConsole console
-    )
-    {
-        _resolver = resolver;
-        _workloadGenerator = workloadGenerator;
-        _stateGenerator = stateGenerator;
-        _personalConfigurations = personalConfigurations;
-        _store = store;
-        _sbx = sbx;
-        _console = console;
-    }
-
     /// <summary>Builds the squads and returns the exit code of the command.</summary>
     public async Task<int> BuildAsync(BuildRequest request, CancellationToken cancellationToken)
     {
@@ -70,31 +51,35 @@ public sealed class BuildService
         CancellationToken cancellationToken
     )
     {
-        var squad = _resolver.Resolve(
+        var squad = resolver.Resolve(
             request.RootDirectory,
             squadName,
-            _personalConfigurations.Files
+            personalConfigurations.Files
         );
-        var buildDirectory = _store.DirectoryFor(squad.Name, request.Tag);
+        var buildDirectory = store.DirectoryFor(squad.Name, request.Tag);
 
         var workloadDirectory = Path.Combine(buildDirectory, WorkloadKitGenerator.KitName);
-        _workloadGenerator.Generate(squad.Workload, workloadDirectory);
-        _console.WriteLine(
+        workloadGenerator.Generate(squad.Workload, workloadDirectory);
+        console.WriteLine(
             $"Workload kit '{squad.Workload.Name}' written to '{workloadDirectory}'."
         );
 
-        var stateDirectory = Path.Combine(buildDirectory, StateMixinGenerator.MixinName);
-        _stateGenerator.Generate(squad.State, stateDirectory);
+        string? stateDirectory = null;
+        if (squad.State.Count > 0)
+        {
+            stateDirectory = Path.Combine(buildDirectory, StateMixinGenerator.MixinName);
+            stateGenerator.Generate(squad.State, stateDirectory);
+        }
 
         if (request.Verify)
         {
             await VerifyAsync(squad, workloadDirectory, stateDirectory, cancellationToken);
         }
 
-        _store.Save(Manifest(squad, request, workloadDirectory, stateDirectory));
+        store.Save(Manifest(squad, request, workloadDirectory, stateDirectory));
 
-        _console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
-        _console.WriteLine(
+        console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
+        console.WriteLine(
             $"Create a sandbox from it with: abox create --squad {squad.Name} --local-image"
         );
 
@@ -104,7 +89,7 @@ public sealed class BuildService
     private async Task VerifyAsync(
         ResolvedSquad squad,
         string workloadDirectory,
-        string stateDirectory,
+        string? stateDirectory,
         CancellationToken cancellationToken
     )
     {
@@ -117,29 +102,29 @@ public sealed class BuildService
             squad.Kits.Where(kit => kit.IsLocal).Select(kit => (kit.Name, kit.Directory!))
         );
 
-        if (squad.State.Count > 0)
+        if (stateDirectory is not null)
         {
             kits.Add((StateMixinGenerator.MixinName, stateDirectory));
         }
 
         foreach (var (name, directory) in kits)
         {
-            _console.WriteLine($"Building kit '{name}'...");
-            var (exitCode, output) = await _sbx.InspectKitAsync(directory, cancellationToken);
-            if (exitCode != 0)
+            console.WriteLine($"Building kit '{name}'...");
+            var outcome = await sbx.InspectKitAsync(directory, cancellationToken);
+            if (!outcome.Succeeded)
             {
                 throw new AboxException(
-                    $"The kit '{name}' does not build:{Environment.NewLine}{output.Trim()}"
+                    $"The kit '{name}' does not build:{Environment.NewLine}{outcome.Output.Trim()}"
                 );
             }
         }
     }
 
-    private BuildManifest Manifest(
+    private static BuildManifest Manifest(
         ResolvedSquad squad,
         BuildRequest request,
         string workloadDirectory,
-        string stateDirectory
+        string? stateDirectory
     )
     {
         var manifest = new BuildManifest
@@ -152,6 +137,7 @@ public sealed class BuildService
             WorkloadKitDirectory = workloadDirectory,
             Template = squad.Workload.Template,
             ConfigFiles = [.. squad.ConfigFiles],
+            StateMixinDirectory = stateDirectory,
         };
 
         foreach (var kit in squad.Kits)
@@ -185,8 +171,6 @@ public sealed class BuildService
                 }
             );
         }
-
-        manifest.StateMixinDirectory = squad.State.Count > 0 ? stateDirectory : null;
 
         return manifest;
     }

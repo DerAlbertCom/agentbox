@@ -34,6 +34,18 @@ public sealed class BuildStoreTests
     }
 
     [Fact]
+    public void ABuildThatIsNotReadableIsAnError()
+    {
+        var directory = _store.DirectoryFor("ac", "latest");
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "build.json"), "not json");
+
+        var exception = Assert.Throws<AboxException>(() => _store.Load("ac", "latest"));
+
+        Assert.Contains("not readable", exception.Message);
+    }
+
+    [Fact]
     public void TheKitsAndStateOfABuildSurviveTheRoundTrip()
     {
         _store.Save(

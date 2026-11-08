@@ -1,4 +1,7 @@
 using System.CommandLine;
+using Abox.Configuration;
+using Abox.Health;
+using Abox.Infrastructure;
 using Abox.Services;
 
 namespace Abox.Cli;
@@ -8,35 +11,43 @@ namespace Abox.Cli;
 /// </summary>
 public static class SecretsCommand
 {
-    public static Command Create(AboxServices services)
+    public static Command Create(
+        AboxConfig config,
+        Preflight preflight,
+        SecretsService secrets,
+        IConsole console
+    )
     {
         var command = new Command("secrets", "Manage the host secrets the kits of a squad ask for.")
         {
             Subcommands =
             {
                 SubCommand(
-                    services,
+                    config,
+                    preflight,
+                    console,
                     "list",
                     "List the services of the squad and whether they are stored.",
                     withService: false,
-                    (request, cancellationToken) =>
-                        services.Secrets.ListAsync(request, cancellationToken)
+                    (request, cancellationToken) => secrets.ListAsync(request, cancellationToken)
                 ),
                 SubCommand(
-                    services,
+                    config,
+                    preflight,
+                    console,
                     "set",
                     "Ask for the secrets of the squad and store them on the host.",
                     withService: true,
-                    (request, cancellationToken) =>
-                        services.Secrets.SetAsync(request, cancellationToken)
+                    (request, cancellationToken) => secrets.SetAsync(request, cancellationToken)
                 ),
                 SubCommand(
-                    services,
+                    config,
+                    preflight,
+                    console,
                     "remove",
                     "Remove the secrets of the squad from the host.",
                     withService: true,
-                    (request, cancellationToken) =>
-                        services.Secrets.RemoveAsync(request, cancellationToken)
+                    (request, cancellationToken) => secrets.RemoveAsync(request, cancellationToken)
                 ),
             },
         };
@@ -45,7 +56,9 @@ public static class SecretsCommand
     }
 
     private static Command SubCommand(
-        AboxServices services,
+        AboxConfig config,
+        Preflight preflight,
+        IConsole console,
         string name,
         string description,
         bool withService,
@@ -84,7 +97,7 @@ public static class SecretsCommand
                 await CommandHandling.RunAsync(
                     async () =>
                     {
-                        if (!await services.Preflight.EnsureReadyAsync(cancellationToken))
+                        if (!await preflight.EnsureReadyAsync(cancellationToken))
                         {
                             return 1;
                         }
@@ -92,14 +105,14 @@ public static class SecretsCommand
                         var wanted = withService ? parseResult.GetValue(service) ?? [] : [];
 
                         var request = new SecretsRequest(
-                            parseResult.GetValue(squad) ?? services.Config.DefaultSquad,
+                            parseResult.GetValue(squad) ?? config.DefaultSquad,
                             parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
                             wanted
                         );
 
                         return await action(request, cancellationToken);
                     },
-                    services.Console
+                    console
                 )
         );
 

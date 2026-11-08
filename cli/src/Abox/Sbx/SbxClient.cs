@@ -8,21 +8,16 @@ namespace Abox.Sbx;
 /// Every call abox makes to <c>sbx</c>. Keeping them in one place keeps the flags and the
 /// version check in one place too.
 /// </summary>
-public sealed partial class SbxClient : ISbxClient
+public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
 {
-    /// <summary>The first sbx version with v3 kits.</summary>
-    public const string MinimumVersion = "0.45.0";
-
     private const string ExecutableName = "sbx";
-
-    private readonly IProcessRunner _runner;
-
-    public SbxClient(IProcessRunner runner) => _runner = runner;
 
     /// <summary>The version of the installed sbx.</summary>
     public async Task<Version> GetVersionAsync(CancellationToken cancellationToken)
     {
-        var result = await _runner.RunAsync(
+        // 'sbx version' stays on plain text: it answers without the daemon, so the
+        // version check also works when nothing else does. The JSON format asks the daemon.
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["version"]),
             cancellationToken
         );
@@ -49,8 +44,8 @@ public sealed partial class SbxClient : ISbxClient
     /// <summary>The report of <c>sbx diagnose</c>.</summary>
     public async Task<DiagnoseReport> DiagnoseAsync(CancellationToken cancellationToken)
     {
-        var result = await _runner.RunAsync(
-            new ProcessRequest(ExecutableName, ["diagnose", "--format", "json"]),
+        var result = await runner.RunAsync(
+            new ProcessRequest(ExecutableName, ["diagnose", "--json"]),
             cancellationToken
         );
         if (!result.Succeeded)
@@ -58,7 +53,17 @@ public sealed partial class SbxClient : ISbxClient
             throw new AboxException($"'sbx diagnose' failed: {Describe(result)}");
         }
 
-        return ParseDiagnostics(result.StandardOutput);
+        var report = Deserialize<SbxDiagnose>(result.StandardOutput, "sbx diagnose");
+        return new DiagnoseReport(
+            report
+                .Checks.Select(check => new DiagnosticCheck(
+                    check.Name ?? string.Empty,
+                    check.Status ?? string.Empty,
+                    check.Message ?? string.Empty,
+                    check.Hint ?? string.Empty
+                ))
+                .ToList()
+        );
     }
 
     /// <summary>The sandboxes sbx knows about.</summary>
@@ -66,7 +71,7 @@ public sealed partial class SbxClient : ISbxClient
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["ls", "--json"]),
             cancellationToken
         );
@@ -75,7 +80,14 @@ public sealed partial class SbxClient : ISbxClient
             throw new AboxException($"'sbx ls' failed: {Describe(result)}");
         }
 
-        return ParseSandboxes(result.StandardOutput);
+        return Deserialize<List<SbxSandbox>>(result.StandardOutput, "sbx ls")
+            .Where(sandbox => !string.IsNullOrEmpty(sandbox.Name))
+            .Select(sandbox => new SandboxInfo(
+                sandbox.Name!,
+                sandbox.Status ?? string.Empty,
+                sandbox.CreatedAt
+            ))
+            .ToList();
     }
 
     /// <summary>Whether a sandbox with this name exists.</summary>
@@ -129,7 +141,7 @@ public sealed partial class SbxClient : ISbxClient
             arguments.Add(string.Join(",", request.StaticMcpServers));
         }
 
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, arguments),
             cancellationToken
         );
@@ -137,13 +149,16 @@ public sealed partial class SbxClient : ISbxClient
     }
 
     /// <summary>Removes a sandbox without asking.</summary>
-    public async Task<int> RemoveSandboxAsync(string name, CancellationToken cancellationToken)
+    public async Task<SbxOutcome> RemoveSandboxAsync(
+        string name,
+        CancellationToken cancellationToken
+    )
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["rm", name, "--force"]),
             cancellationToken
         );
-        return result.ExitCode;
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
     }
 
     /// <summary>Runs a command in a sandbox, starting the sandbox when it is stopped.</summary>
@@ -176,7 +191,7 @@ public sealed partial class SbxClient : ISbxClient
         arguments.Add(request.Sandbox);
         arguments.AddRange(request.Command);
 
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, arguments, AttachConsole: true),
             cancellationToken
         );
@@ -191,7 +206,7 @@ public sealed partial class SbxClient : ISbxClient
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(
                 ExecutableName,
                 ["exec", sandbox, "sh", "-c", $"command -v {program}"]
@@ -208,7 +223,7 @@ public sealed partial class SbxClient : ISbxClient
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(
                 ExecutableName,
                 ["exec", sandbox, "sh", "-c", "printf %s \"$WORKSPACE_DIR\""]
@@ -221,16 +236,18 @@ public sealed partial class SbxClient : ISbxClient
     }
 
     /// <summary>Builds a kit from source and reports what it found.</summary>
-    public async Task<(int ExitCode, string Output)> InspectKitAsync(
+    public async Task<SbxOutcome> InspectKitAsync(
         string kitDirectory,
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
+        // The output is only shown to the user when the kit does not build, so it stays
+        // in the human-readable format.
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["kit", "inspect", kitDirectory]),
             cancellationToken
         );
-        return (result.ExitCode, result.StandardOutput + result.StandardError);
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
     }
 
     /// <summary>The MCP servers registered on the host.</summary>
@@ -238,8 +255,8 @@ public sealed partial class SbxClient : ISbxClient
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
-            new ProcessRequest(ExecutableName, ["mcp", "ls", "--quiet"]),
+        var result = await runner.RunAsync(
+            new ProcessRequest(ExecutableName, ["mcp", "ls", "--json"]),
             cancellationToken
         );
         if (!result.Succeeded)
@@ -247,18 +264,17 @@ public sealed partial class SbxClient : ISbxClient
             throw new AboxException($"'sbx mcp ls' failed: {Describe(result)}");
         }
 
-        return result
-            .StandardOutput.Split(
-                '\n',
-                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
-            )
+        return Deserialize<List<SbxMcpServer>>(result.StandardOutput, "sbx mcp ls")
+            .Select(server => server.Name)
+            .Where(name => !string.IsNullOrEmpty(name))
+            .Select(name => name!)
             .ToList();
     }
 
     /// <summary>The secrets stored on the host.</summary>
     public async Task<HostSecrets> ListSecretsAsync(CancellationToken cancellationToken)
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["secret", "ls", "--json"]),
             cancellationToken
         );
@@ -268,7 +284,18 @@ public sealed partial class SbxClient : ISbxClient
             throw new AboxException($"'sbx secret ls' failed: {Describe(result)}");
         }
 
-        return ParseSecrets(result.StandardOutput);
+        var list = Deserialize<SbxSecrets>(result.StandardOutput, "sbx secret ls");
+        return new HostSecrets(
+            list.Secrets.Select(secret => secret.Name)
+                .Where(name => !string.IsNullOrEmpty(name))
+                .Select(name => name!)
+                .ToList(),
+            list.CustomSecrets.Select(secret => new CustomSecret(
+                    secret.Targets.Where(target => !string.IsNullOrEmpty(target)).ToList(),
+                    secret.EnvironmentVariable
+                ))
+                .ToList()
+        );
     }
 
     /// <summary>
@@ -281,7 +308,7 @@ public sealed partial class SbxClient : ISbxClient
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["secret", "set", service], StandardInput: value),
             cancellationToken
         );
@@ -317,7 +344,7 @@ public sealed partial class SbxClient : ISbxClient
 
         arguments.Add("--value-stdin");
 
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, arguments, StandardInput: value),
             cancellationToken
         );
@@ -349,7 +376,7 @@ public sealed partial class SbxClient : ISbxClient
 
         arguments.Add("--force");
 
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, arguments),
             cancellationToken
         );
@@ -360,7 +387,7 @@ public sealed partial class SbxClient : ISbxClient
     /// <summary>Starts the browser sign-in.</summary>
     public async Task<bool> SignInAsync(CancellationToken cancellationToken)
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["login"], AttachConsole: true),
             cancellationToken
         );
@@ -368,142 +395,46 @@ public sealed partial class SbxClient : ISbxClient
     }
 
     /// <summary>Registers an MCP server on the host.</summary>
-    public async Task<int> AddMcpServerAsync(
+    public async Task<SbxOutcome> AddMcpServerAsync(
         string name,
         string url,
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(ExecutableName, ["mcp", "add", name, "--url", url]),
             cancellationToken
         );
-        return result.ExitCode;
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
     }
 
-    private static HostSecrets ParseSecrets(string json)
+    /// <summary>The JSON sbx wrote, as a typed result.</summary>
+    private static T Deserialize<T>(string json, string command)
+        where T : class
     {
-        var services = new List<string>();
-        var custom = new List<CustomSecret>();
-
-        using var document = JsonDocument.Parse(json);
-        var root = document.RootElement;
-
-        if (root.TryGetProperty("secrets", out var stored))
+        if (string.IsNullOrWhiteSpace(json))
         {
-            foreach (var secret in stored.EnumerateArray())
-            {
-                var name = String(secret, "name");
-                if (!string.IsNullOrEmpty(name))
-                {
-                    services.Add(name);
-                }
-            }
+            throw new AboxException($"'{command}' wrote no output.");
         }
 
-        if (root.TryGetProperty("custom_secrets", out var customs))
+        try
         {
-            foreach (var secret in customs.EnumerateArray())
-            {
-                var targets = secret.TryGetProperty("targets", out var list)
-                    ? list.EnumerateArray()
-                        .Select(target => target.GetString() ?? string.Empty)
-                        .Where(target => !string.IsNullOrEmpty(target))
-                        .ToList()
-                    : [];
-
-                custom.Add(new CustomSecret(targets, String(secret, "env")));
-            }
+            return JsonSerializer.Deserialize<T>(json)
+                ?? throw new AboxException($"'{command}' wrote no output.");
         }
-
-        return new HostSecrets(services, custom);
+        catch (JsonException exception)
+        {
+            throw new AboxException(
+                $"Cannot read the output of '{command}': {exception.Message}",
+                exception
+            );
+        }
     }
 
     private static string Describe(ProcessResult result)
     {
         var text = (result.StandardError + result.StandardOutput).Trim();
         return string.IsNullOrEmpty(text) ? $"exit code {result.ExitCode}" : text;
-    }
-
-    private static DiagnoseReport ParseDiagnostics(string json)
-    {
-        using var document = JsonDocument.Parse(json);
-        if (!document.RootElement.TryGetProperty("checks", out var checks))
-        {
-            return new DiagnoseReport([]);
-        }
-
-        var parsed = new List<DiagnosticCheck>();
-        foreach (var check in checks.EnumerateArray())
-        {
-            parsed.Add(
-                new DiagnosticCheck(
-                    String(check, "name"),
-                    String(check, "status"),
-                    String(check, "message"),
-                    String(check, "hint")
-                )
-            );
-        }
-
-        return new DiagnoseReport(parsed);
-    }
-
-    private static IReadOnlyList<SandboxInfo> ParseSandboxes(string json)
-    {
-        if (string.IsNullOrWhiteSpace(json))
-        {
-            return [];
-        }
-
-        using var document = JsonDocument.Parse(json);
-        var items =
-            document.RootElement.ValueKind == JsonValueKind.Array
-                ? document.RootElement.EnumerateArray().ToList()
-                : [document.RootElement];
-
-        var sandboxes = new List<SandboxInfo>();
-        foreach (var item in items)
-        {
-            var name = String(item, "name");
-            if (string.IsNullOrEmpty(name))
-            {
-                continue;
-            }
-
-            sandboxes.Add(new SandboxInfo(name, String(item, "status"), ReadTimestamp(item)));
-        }
-
-        return sandboxes;
-    }
-
-    private static string String(JsonElement element, string property)
-    {
-        if (!element.TryGetProperty(property, out var value))
-        {
-            return string.Empty;
-        }
-
-        return value.ValueKind == JsonValueKind.String
-            ? value.GetString() ?? string.Empty
-            : value.ToString();
-    }
-
-    private static DateTimeOffset? ReadTimestamp(JsonElement element)
-    {
-        foreach (var property in (string[])["createdAt", "created_at", "CreatedAt"])
-        {
-            if (
-                element.TryGetProperty(property, out var value)
-                && value.ValueKind == JsonValueKind.String
-                && DateTimeOffset.TryParse(value.GetString(), out var timestamp)
-            )
-            {
-                return timestamp;
-            }
-        }
-
-        return null;
     }
 
     [GeneratedRegex(@"(\d+)\.(\d+)\.(\d+)")]

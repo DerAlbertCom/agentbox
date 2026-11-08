@@ -1,4 +1,3 @@
-using Abox.Configuration;
 using Abox.Infrastructure;
 
 namespace Abox.Configuration;

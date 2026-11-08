@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Abox.Infrastructure;
 using Abox.Sbx;
 
 namespace Abox.Cli;
@@ -9,7 +10,7 @@ namespace Abox.Cli;
 /// </summary>
 public static class ExecCommand
 {
-    public static Command Create(AboxServices services)
+    public static Command Create(ISbxClient sbx, TrailingArguments trailing, IConsole console)
     {
         var sandbox = new Argument<string>("sandbox")
         {
@@ -23,28 +24,26 @@ public static class ExecCommand
         };
 
         command.SetAction(
-            (Func<ParseResult, CancellationToken, Task<int>>)(
-                async (parseResult, cancellationToken) =>
+            async (parseResult, cancellationToken) =>
+            {
+                var argv = trailing.Values;
+                if (argv.Count == 0)
                 {
-                    var argv = services.Trailing.Values;
-                    if (argv.Count == 0)
-                    {
-                        services.Console.WriteError(
-                            "error: no command given. Use: abox exec <sandbox> -- <command>"
-                        );
-                        return 1;
-                    }
-
-                    return await CommandHandling.RunAsync(
-                        async () =>
-                            await services.Sbx.ExecAsync(
-                                new SbxExecRequest(parseResult.GetValue(sandbox)!, argv),
-                                cancellationToken
-                            ),
-                        services.Console
+                    console.WriteError(
+                        "error: no command given. Use: abox exec <sandbox> -- <command>"
                     );
+                    return 1;
                 }
-            )
+
+                return await CommandHandling.RunAsync(
+                    async () =>
+                        await sbx.ExecAsync(
+                            new SbxExecRequest(parseResult.GetValue(sandbox)!, argv),
+                            cancellationToken
+                        ),
+                    console
+                );
+            }
         );
 
         return command;

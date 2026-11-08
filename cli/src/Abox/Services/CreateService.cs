@@ -21,34 +21,19 @@ public sealed record CreateRequest(
 /// <summary>
 /// Creates the sandbox of a folder from the local build of its squad.
 /// </summary>
-public sealed class CreateService
+public sealed class CreateService(
+    BuildStore store,
+    SandboxRecordStore records,
+    AboxPaths paths,
+    ISbxClient sbx,
+    IConsole console
+)
 {
-    private readonly BuildStore _store;
-    private readonly SandboxRecordStore _records;
-    private readonly AboxPaths _paths;
-    private readonly ISbxClient _sbx;
-    private readonly IConsole _console;
-
-    public CreateService(
-        BuildStore store,
-        SandboxRecordStore records,
-        AboxPaths paths,
-        ISbxClient sbx,
-        IConsole console
-    )
-    {
-        _store = store;
-        _records = records;
-        _paths = paths;
-        _sbx = sbx;
-        _console = console;
-    }
-
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
     public async Task<int> CreateAsync(CreateRequest request, CancellationToken cancellationToken)
     {
         var manifest =
-            _store.Load(request.Squad, request.Tag)
+            store.Load(request.Squad, request.Tag)
             ?? throw new AboxException(
                 $"There is no local build of '{request.Squad}' with the tag '{request.Tag}'. "
                     + $"Build it first: abox build --squad {request.Squad}"
@@ -78,7 +63,7 @@ public sealed class CreateService
             .Select(group => group.First())
             .ToDictionary(group => group.Key, group => group.Value, StringComparer.Ordinal);
 
-        var outcome = await _sbx.CreateAsync(
+        var outcome = await sbx.CreateAsync(
             new SbxCreateRequest(
                 manifest.WorkloadKitDirectory,
                 location,
@@ -98,7 +83,7 @@ public sealed class CreateService
             );
         }
 
-        _records.Save(
+        records.Save(
             name,
             new SandboxRecord
             {
@@ -109,8 +94,8 @@ public sealed class CreateService
             }
         );
 
-        _console.WriteLine($"Created sandbox '{name}' for '{location}'.");
-        _console.WriteLine($"Open it with: abox run --location {location}");
+        console.WriteLine($"Created sandbox '{name}' for '{location}'.");
+        console.WriteLine($"Open it with: abox run --location {location}");
         return 0;
     }
 
@@ -121,7 +106,7 @@ public sealed class CreateService
         CancellationToken cancellationToken
     )
     {
-        var existing = await _sbx.FindSandboxAsync(name, cancellationToken);
+        var existing = await sbx.FindSandboxAsync(name, cancellationToken);
         if (existing is null)
         {
             return;
@@ -129,24 +114,26 @@ public sealed class CreateService
 
         if (!assumeYes)
         {
-            _console.WriteLine($"The sandbox '{name}' already exists for '{location}'.");
-            _console.WriteLine("Replacing it loses what is inside it:");
-            _console.WriteLine("  - the container, with everything in it");
-            _console.WriteLine("  - the worktrees under ~/worktrees");
-            _console.WriteLine("The state directories on the host are kept.");
-            _console.WriteLine();
+            console.WriteLine($"The sandbox '{name}' already exists for '{location}'.");
+            console.WriteLine("Replacing it loses what is inside it:");
+            console.WriteLine("  - the container, with everything in it");
+            console.WriteLine("  - the worktrees under ~/worktrees");
+            console.WriteLine("The state directories on the host are kept.");
+            console.WriteLine();
 
-            if (!_console.Confirm("Replace the sandbox?"))
+            if (!console.Confirm("Replace the sandbox?"))
             {
                 throw new AboxException("The sandbox was not replaced.");
             }
         }
 
-        _console.WriteLine($"Removing the sandbox '{name}'...");
-        var exitCode = await _sbx.RemoveSandboxAsync(name, cancellationToken);
-        if (exitCode != 0)
+        console.WriteLine($"Removing the sandbox '{name}'...");
+        var removal = await sbx.RemoveSandboxAsync(name, cancellationToken);
+        if (!removal.Succeeded)
         {
-            throw new AboxException($"sbx could not remove the sandbox '{name}'.");
+            throw new AboxException(
+                $"sbx could not remove the sandbox '{name}'." + Detail(removal)
+            );
         }
     }
 
@@ -156,7 +143,7 @@ public sealed class CreateService
 
         foreach (var state in manifest.State)
         {
-            var hostPath = Path.Combine(_paths.StateDirectory, name, state.RelativePath);
+            var hostPath = Path.Combine(paths.StateDirectory, name, state.RelativePath);
             Directory.CreateDirectory(hostPath);
             mounts.Add(new SbxMount(hostPath, state.SandboxPath));
         }
@@ -174,7 +161,7 @@ public sealed class CreateService
             return [];
         }
 
-        var registered = (await _sbx.ListMcpServersAsync(cancellationToken)).ToHashSet(
+        var registered = (await sbx.ListMcpServersAsync(cancellationToken)).ToHashSet(
             StringComparer.Ordinal
         );
         var servers = new List<string>();
@@ -193,16 +180,16 @@ public sealed class CreateService
             }
             else if (!registered.Contains(server.Name))
             {
-                _console.WriteLine($"Registering the MCP server '{server.Name}'...");
-                var exitCode = await _sbx.AddMcpServerAsync(
+                console.WriteLine($"Registering the MCP server '{server.Name}'...");
+                var outcome = await sbx.AddMcpServerAsync(
                     server.Name,
                     server.Url,
                     cancellationToken
                 );
-                if (exitCode != 0)
+                if (!outcome.Succeeded)
                 {
                     throw new AboxException(
-                        $"The MCP server '{server.Name}' could not be registered."
+                        $"The MCP server '{server.Name}' could not be registered." + Detail(outcome)
                     );
                 }
             }
@@ -211,5 +198,11 @@ public sealed class CreateService
         }
 
         return servers;
+    }
+
+    private static string Detail(SbxOutcome outcome)
+    {
+        var output = outcome.Output.Trim();
+        return output.Length > 0 ? $" {output}" : string.Empty;
     }
 }

@@ -1,4 +1,7 @@
 using System.CommandLine;
+using Abox.Configuration;
+using Abox.Health;
+using Abox.Infrastructure;
 using Abox.Services;
 
 namespace Abox.Cli;
@@ -8,7 +11,12 @@ namespace Abox.Cli;
 /// </summary>
 public static class BuildCommand
 {
-    public static Command Create(AboxServices services)
+    public static Command Create(
+        AboxConfig config,
+        Preflight preflight,
+        BuildService build,
+        IConsole console
+    )
     {
         var squad = new Option<string[]>("--squad")
         {
@@ -47,23 +55,23 @@ public static class BuildCommand
             {
                 var squads = parseResult.GetValue(squad);
                 var request = new BuildRequest(
-                    squads is { Length: > 0 } ? squads : [services.Config.DefaultSquad],
+                    squads is { Length: > 0 } ? squads : [config.DefaultSquad],
                     parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
-                    parseResult.GetValue(tag) ?? services.Config.DefaultTag,
+                    parseResult.GetValue(tag) ?? config.DefaultTag,
                     !parseResult.GetValue(verify)
                 );
 
                 return await CommandHandling.RunAsync(
                     async () =>
                     {
-                        if (!await services.Preflight.EnsureReadyAsync(cancellationToken))
+                        if (!await preflight.EnsureReadyAsync(cancellationToken))
                         {
                             return 1;
                         }
 
-                        return await services.Build.BuildAsync(request, cancellationToken);
+                        return await build.BuildAsync(request, cancellationToken);
                     },
-                    services.Console
+                    console
                 );
             }
         );

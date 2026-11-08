@@ -93,7 +93,24 @@ public sealed class ProcessRunner : IProcessRunner
             process.BeginErrorReadLine();
         }
 
-        await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            // A cancelled command must not leave the child running behind its back.
+            try
+            {
+                process.Kill();
+            }
+            catch (InvalidOperationException)
+            {
+                // The process already exited.
+            }
+
+            throw;
+        }
 
         return new ProcessResult(
             process.ExitCode,

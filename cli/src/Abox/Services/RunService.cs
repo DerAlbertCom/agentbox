@@ -16,62 +16,43 @@ public sealed record RunRequest(string LauncherId, string Location, IReadOnlyLis
 /// <summary>
 /// Starts a launcher for the sandbox of a folder.
 /// </summary>
-public sealed class RunService
+public sealed class RunService(
+    LauncherRegistry launchers,
+    BuildStore store,
+    SandboxRecordStore records,
+    CreateService create,
+    ISbxClient sbx,
+    IHostPrograms hostPrograms,
+    IConsole console
+)
 {
-    private readonly LauncherRegistry _launchers;
-    private readonly BuildStore _store;
-    private readonly SandboxRecordStore _records;
-    private readonly CreateService _create;
-    private readonly ISbxClient _sbx;
-    private readonly IHostPrograms _hostPrograms;
-    private readonly IConsole _console;
-
-    public RunService(
-        LauncherRegistry launchers,
-        BuildStore store,
-        SandboxRecordStore records,
-        CreateService create,
-        ISbxClient sbx,
-        IHostPrograms hostPrograms,
-        IConsole console
-    )
-    {
-        _launchers = launchers;
-        _store = store;
-        _records = records;
-        _create = create;
-        _sbx = sbx;
-        _hostPrograms = hostPrograms;
-        _console = console;
-    }
-
     /// <summary>Starts the launcher and returns the exit code of the command.</summary>
     public async Task<int> RunAsync(RunRequest request, CancellationToken cancellationToken)
     {
-        var launcher = _launchers.Get(request.LauncherId);
+        var launcher = launchers.Get(request.LauncherId);
 
         foreach (var requirement in launcher.HostRequirements)
         {
-            if (_hostPrograms.Exists(requirement.Program))
+            if (hostPrograms.Exists(requirement.Program))
             {
                 continue;
             }
 
-            _console.WriteError(
+            console.WriteError(
                 $"The launcher '{launcher.Id}' needs '{requirement.Program}' on the host."
             );
-            _console.WriteError(requirement.InstallHint);
+            console.WriteError(requirement.InstallHint);
             return 1;
         }
 
         var location = Path.GetFullPath(request.Location);
         var name = SandboxName.For(location);
 
-        var sandbox = await _sbx.FindSandboxAsync(name, cancellationToken);
+        var sandbox = await sbx.FindSandboxAsync(name, cancellationToken);
         if (sandbox is null)
         {
-            _console.WriteError($"There is no sandbox for '{location}'.");
-            _console.WriteError($"Create it with: abox create --location {location}");
+            console.WriteError($"There is no sandbox for '{location}'.");
+            console.WriteError($"Create it with: abox create --location {location}");
             return 1;
         }
 
@@ -82,15 +63,15 @@ public sealed class RunService
 
         foreach (var program in launcher.SandboxRequirements)
         {
-            if (await _sbx.HasProgramAsync(name, program, cancellationToken))
+            if (await sbx.HasProgramAsync(name, program, cancellationToken))
             {
                 continue;
             }
 
-            _console.WriteError(
+            console.WriteError(
                 $"The image of '{name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
             );
-            _console.WriteError(
+            console.WriteError(
                 $"Create the sandbox again for this folder: abox create --location {location}"
             );
             return 1;
@@ -101,8 +82,8 @@ public sealed class RunService
             name,
             await WorkspaceOfAsync(name, location, cancellationToken),
             request.Argv,
-            _sbx,
-            _console
+            sbx,
+            console
         );
 
         return await launcher.RunAsync(context, cancellationToken);
@@ -118,28 +99,28 @@ public sealed class RunService
         CancellationToken cancellationToken
     )
     {
-        var record = _records.Load(name);
+        var record = records.Load(name);
         if (record is null)
         {
             return true;
         }
 
-        var manifest = _store.Load(record.Squad, record.Tag);
+        var manifest = store.Load(record.Squad, record.Tag);
         if (manifest is null || manifest.CreatedAt <= record.BuildCreatedAt)
         {
             return true;
         }
 
-        _console.WriteLine(
+        console.WriteLine(
             $"The squad '{record.Squad}' has a newer build, from {manifest.CreatedAt:yyyy-MM-dd HH:mm}."
         );
 
-        if (!_console.Confirm("Replace the sandbox with it?"))
+        if (!console.Confirm("Replace the sandbox with it?"))
         {
             return true;
         }
 
-        return await _create.CreateAsync(
+        return await create.CreateAsync(
                 new CreateRequest(record.Squad, location, record.Tag, AssumeYes: true),
                 cancellationToken
             ) == 0;
@@ -155,7 +136,7 @@ public sealed class RunService
         CancellationToken cancellationToken
     )
     {
-        var workspace = await _sbx.GetWorkspaceDirectoryAsync(name, cancellationToken);
+        var workspace = await sbx.GetWorkspaceDirectoryAsync(name, cancellationToken);
         return workspace ?? location;
     }
 }

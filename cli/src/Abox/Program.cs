@@ -1,12 +1,21 @@
+using Abox;
 using Abox.Cli;
 using Abox.Infrastructure;
+using Microsoft.Extensions.DependencyInjection;
 
 var console = new SystemConsole();
-var services = new AboxServices(console);
-
 var (arguments, trailing) = CommandLine.Split(args);
-services.Trailing.Values = trailing;
 
-var root = AboxCommand.Create(services);
+var services = new ServiceCollection();
+services.AddAbox(console, new TrailingArguments { Values = trailing });
 
-return await root.Parse(arguments).InvokeAsync();
+try
+{
+    using var provider = services.BuildServiceProvider();
+    return await AboxCommand.Create(provider).Parse(arguments).InvokeAsync();
+}
+catch (AboxException exception)
+{
+    console.WriteError($"error: {exception.Message}");
+    return 1;
+}

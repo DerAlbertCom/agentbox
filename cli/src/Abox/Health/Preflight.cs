@@ -7,19 +7,8 @@ namespace Abox.Health;
 /// The checks every command runs before it does anything: sbx is installed, it is new
 /// enough for v3 kits, and it is healthy and signed in.
 /// </summary>
-public sealed class Preflight
+public sealed class Preflight(IConsole console, ISbxClient sbx, IHostPrograms hostPrograms)
 {
-    private readonly IConsole _console;
-    private readonly ISbxClient _sbx;
-    private readonly IHostPrograms _hostPrograms;
-
-    public Preflight(IConsole console, ISbxClient sbx, IHostPrograms hostPrograms)
-    {
-        _console = console;
-        _sbx = sbx;
-        _hostPrograms = hostPrograms;
-    }
-
     /// <summary>
     /// Runs the checks. Returns false when a check failed and the command must not go on.
     /// </summary>
@@ -40,17 +29,15 @@ public sealed class Preflight
 
     private async Task<bool> EnsureInstalledAsync(CancellationToken cancellationToken)
     {
-        if (_hostPrograms.Exists("sbx"))
+        if (hostPrograms.Exists("sbx"))
         {
             return true;
         }
 
-        _console.WriteError(
-            "sbx is not on PATH. abox needs it and never installs anything itself."
-        );
+        console.WriteError("sbx is not on PATH. abox needs it and never installs anything itself.");
         foreach (var line in InstallInstructions.ForCurrentSystem())
         {
-            _console.WriteError(line);
+            console.WriteError(line);
         }
 
         return false;
@@ -61,23 +48,23 @@ public sealed class Preflight
         Version version;
         try
         {
-            version = await _sbx.GetVersionAsync(cancellationToken);
+            version = await sbx.GetVersionAsync(cancellationToken);
         }
         catch (AboxException exception)
         {
-            _console.WriteError(exception.Message);
+            console.WriteError(exception.Message);
             return false;
         }
 
-        if (version >= new Version(SbxClient.MinimumVersion))
+        if (version >= new Version(ISbxClient.MinimumVersion))
         {
             return true;
         }
 
-        _console.WriteError(
-            $"sbx {version} is too old. abox needs {SbxClient.MinimumVersion} or later, the first version with v3 kits."
+        console.WriteError(
+            $"sbx {version} is too old. abox needs {ISbxClient.MinimumVersion} or later, the first version with v3 kits."
         );
-        _console.WriteError("Upgrade sbx and try again.");
+        console.WriteError("Upgrade sbx and try again.");
         return false;
     }
 
@@ -86,11 +73,11 @@ public sealed class Preflight
         DiagnoseReport report;
         try
         {
-            report = await _sbx.DiagnoseAsync(cancellationToken);
+            report = await sbx.DiagnoseAsync(cancellationToken);
         }
         catch (AboxException exception)
         {
-            _console.WriteError(exception.Message);
+            console.WriteError(exception.Message);
             return false;
         }
 
@@ -102,7 +89,7 @@ public sealed class Preflight
                 return false;
             }
 
-            report = await _sbx.DiagnoseAsync(cancellationToken);
+            report = await sbx.DiagnoseAsync(cancellationToken);
         }
 
         var failures = report.Failures;
@@ -113,10 +100,10 @@ public sealed class Preflight
 
         foreach (var failure in failures)
         {
-            _console.WriteError($"sbx check '{failure.Name}' failed: {failure.Message}");
+            console.WriteError($"sbx check '{failure.Name}' failed: {failure.Message}");
             if (!string.IsNullOrWhiteSpace(failure.Hint))
             {
-                _console.WriteError(failure.Hint);
+                console.WriteError(failure.Hint);
             }
         }
 
@@ -125,18 +112,18 @@ public sealed class Preflight
 
     private async Task<bool> SignInAsync(CancellationToken cancellationToken)
     {
-        if (!_console.IsInteractive)
+        if (!console.IsInteractive)
         {
-            _console.WriteError("sbx is not signed in. Run 'sbx login' and try again.");
+            console.WriteError("sbx is not signed in. Run 'sbx login' and try again.");
             return false;
         }
 
-        _console.WriteLine("Signing in to Docker...");
+        console.WriteLine("Signing in to Docker...");
 
-        var result = await _sbx.SignInAsync(cancellationToken);
+        var result = await sbx.SignInAsync(cancellationToken);
         if (!result)
         {
-            _console.WriteError("Signing in failed. Run 'sbx login' and try again.");
+            console.WriteError("Signing in failed. Run 'sbx login' and try again.");
             return false;
         }
 

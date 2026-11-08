@@ -6,12 +6,8 @@ namespace Abox.Kits;
 /// Resolves a squad: reads its <c>.abox</c> file, follows its base chain, checks that
 /// nothing is declared twice, and resolves the workload and the kits it names.
 /// </summary>
-public sealed class SquadResolver
+public sealed class SquadResolver(AboxConfig config)
 {
-    private readonly AboxConfig _config;
-
-    public SquadResolver(AboxConfig config) => _config = config;
-
     /// <summary>
     /// Resolves a squad from the configurations in a project and the personal
     /// configurations of the user.
@@ -129,7 +125,9 @@ public sealed class SquadResolver
         }
 
         throw new AboxException(
-            $"There is no configuration '{name}.abox' in '{directory}' or in one of its parent directories."
+            searchParents
+                ? $"There is no configuration '{name}.abox' in '{directory}' or in one of its parent directories."
+                : $"There is no configuration '{name}.abox' in '{directory}'."
         );
     }
 
@@ -194,7 +192,7 @@ public sealed class SquadResolver
 
     private string FindWorkloadFile(string directory, string name)
     {
-        var kitsDirectory = Path.Combine(directory, _config.KitsDirectory);
+        var kitsDirectory = Path.Combine(directory, config.KitsDirectory);
         var expected = Path.Combine(kitsDirectory, name + ".workload");
         if (File.Exists(expected))
         {
@@ -290,7 +288,7 @@ public sealed class SquadResolver
             return new KitSource(kit.Name, null, kit.Name, arguments);
         }
 
-        var directory = Path.Combine(file.Directory, _config.KitsDirectory, kit.Name);
+        var directory = Path.Combine(file.Directory, config.KitsDirectory, kit.Name);
         if (!Directory.Exists(directory))
         {
             throw new AboxException(

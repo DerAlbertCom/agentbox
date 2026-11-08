@@ -1,5 +1,3 @@
-using Abox.Sbx;
-
 namespace Abox.Sbx;
 
 /// <summary>
@@ -8,6 +6,9 @@ namespace Abox.Sbx;
 /// </summary>
 public interface ISbxClient
 {
+    /// <summary>The first sbx version with v3 kits.</summary>
+    const string MinimumVersion = "0.45.0";
+
     Task<Version> GetVersionAsync(CancellationToken cancellationToken);
 
     Task<DiagnoseReport> DiagnoseAsync(CancellationToken cancellationToken);
@@ -17,7 +18,8 @@ public interface ISbxClient
     Task<SandboxInfo?> FindSandboxAsync(string name, CancellationToken cancellationToken);
 
     Task<SbxOutcome> CreateAsync(SbxCreateRequest request, CancellationToken cancellationToken);
-    Task<int> RemoveSandboxAsync(string name, CancellationToken cancellationToken);
+
+    Task<SbxOutcome> RemoveSandboxAsync(string name, CancellationToken cancellationToken);
 
     Task<int> ExecAsync(SbxExecRequest request, CancellationToken cancellationToken);
 
@@ -26,14 +28,15 @@ public interface ISbxClient
     /// <summary>Where the runtime put the workspace of the sandbox, when it says.</summary>
     Task<string?> GetWorkspaceDirectoryAsync(string sandbox, CancellationToken cancellationToken);
 
-    Task<(int ExitCode, string Output)> InspectKitAsync(
-        string kitDirectory,
-        CancellationToken cancellationToken
-    );
+    Task<SbxOutcome> InspectKitAsync(string kitDirectory, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<string>> ListMcpServersAsync(CancellationToken cancellationToken);
 
-    Task<int> AddMcpServerAsync(string name, string url, CancellationToken cancellationToken);
+    Task<SbxOutcome> AddMcpServerAsync(
+        string name,
+        string url,
+        CancellationToken cancellationToken
+    );
 
     Task<HostSecrets> ListSecretsAsync(CancellationToken cancellationToken);
 

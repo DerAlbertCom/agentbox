@@ -8,14 +8,10 @@ public interface IHostPrograms
     bool Exists(string program);
 }
 
-public sealed class HostPrograms : IHostPrograms
+public sealed class HostPrograms(string pathDirectories) : IHostPrograms
 {
-    private readonly string _pathDirectories;
-
     public HostPrograms()
         : this(Environment.GetEnvironmentVariable("PATH") ?? string.Empty) { }
-
-    public HostPrograms(string pathDirectories) => _pathDirectories = pathDirectories;
 
     public bool Exists(string program)
     {
@@ -32,7 +28,7 @@ public sealed class HostPrograms : IHostPrograms
             : [string.Empty];
 
         foreach (
-            var directory in _pathDirectories.Split(
+            var directory in pathDirectories.Split(
                 Path.PathSeparator,
                 StringSplitOptions.RemoveEmptyEntries
             )

@@ -1,4 +1,7 @@
 using System.CommandLine;
+using Abox.Configuration;
+using Abox.Health;
+using Abox.Infrastructure;
 using Abox.Services;
 
 namespace Abox.Cli;
@@ -8,7 +11,12 @@ namespace Abox.Cli;
 /// </summary>
 public static class CreateCommand
 {
-    public static Command Create(AboxServices services)
+    public static Command Create(
+        AboxConfig config,
+        Preflight preflight,
+        CreateService create,
+        IConsole console
+    )
     {
         var squad = new Option<string>("--squad")
         {
@@ -51,32 +59,32 @@ public static class CreateCommand
             async (parseResult, cancellationToken) =>
             {
                 var request = new CreateRequest(
-                    parseResult.GetValue(squad) ?? services.Config.DefaultSquad,
+                    parseResult.GetValue(squad) ?? config.DefaultSquad,
                     parseResult.GetValue(location)
-                        ?? services.Config.DefaultLocation
+                        ?? config.DefaultLocation
                         ?? Directory.GetCurrentDirectory(),
-                    parseResult.GetValue(tag) ?? services.Config.DefaultTag,
+                    parseResult.GetValue(tag) ?? config.DefaultTag,
                     parseResult.GetValue(assumeYes)
                 );
 
                 return await CommandHandling.RunAsync(
                     async () =>
                     {
-                        if (!await services.Preflight.EnsureReadyAsync(cancellationToken))
+                        if (!await preflight.EnsureReadyAsync(cancellationToken))
                         {
                             return 1;
                         }
 
                         if (!parseResult.GetValue(localImage))
                         {
-                            services.Console.WriteError(
+                            console.WriteError(
                                 "note: this version of abox creates sandboxes from local images only."
                             );
                         }
 
-                        return await services.Create.CreateAsync(request, cancellationToken);
+                        return await create.CreateAsync(request, cancellationToken);
                     },
-                    services.Console
+                    console
                 );
             }
         );

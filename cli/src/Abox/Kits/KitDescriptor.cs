@@ -71,21 +71,8 @@ public sealed class KitDescriptor
         return new KitDescriptor(path, services);
     }
 
-    private static IReadOnlyList<string> ReadPhases(YamlEntry? config)
-    {
-        if (config is null)
-        {
-            return [];
-        }
-
-        var phase = config.GetString("phase");
-        if (!string.IsNullOrWhiteSpace(phase))
-        {
-            return [phase];
-        }
-
-        return config.GetStringList("phase");
-    }
+    private static IReadOnlyList<string> ReadPhases(YamlEntry? config) =>
+        config?.GetStrings("phase") ?? [];
 
     private static string? FindDescriptor(string kitDirectory)
     {

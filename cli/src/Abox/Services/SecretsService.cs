@@ -19,39 +19,26 @@ public sealed record SecretsRequest(
 /// The secrets of the host: the kits ask for a service, the configuration says how the
 /// value of that service is obtained, and sbx keeps it.
 /// </summary>
-public sealed class SecretsService
+public sealed class SecretsService(
+    SquadResolver resolver,
+    PersonalConfigurations personalConfigurations,
+    ISbxClient sbx,
+    IConsole console
+)
 {
-    private readonly SquadResolver _resolver;
-    private readonly PersonalConfigurations _personalConfigurations;
-    private readonly ISbxClient _sbx;
-    private readonly IConsole _console;
-
-    public SecretsService(
-        SquadResolver resolver,
-        PersonalConfigurations personalConfigurations,
-        ISbxClient sbx,
-        IConsole console
-    )
-    {
-        _resolver = resolver;
-        _personalConfigurations = personalConfigurations;
-        _sbx = sbx;
-        _console = console;
-    }
-
     /// <summary>Lists the services of the squad and whether they are stored.</summary>
     public async Task<int> ListAsync(SecretsRequest request, CancellationToken cancellationToken)
     {
         var squad = Resolve(request);
         var services = ServicesOf(squad);
-        var stored = await _sbx.ListSecretsAsync(cancellationToken);
+        var stored = await sbx.ListSecretsAsync(cancellationToken);
 
         var names = services
             .Keys.Union(squad.Secrets.Select(secret => secret.Service))
             .Order()
             .ToList();
 
-        _console.WriteLine(
+        console.WriteLine(
             $"{"SERVICE".PadRight(20)} {"KITS".PadRight(20)} {"STATE".PadRight(10)} NOTE"
         );
 
@@ -64,7 +51,7 @@ public sealed class SecretsService
             var declared = declaration is not null;
             var state = IsStored(name, declaration, stored) ? "stored" : "not set";
 
-            _console.WriteLine(
+            console.WriteLine(
                 $"{name.PadRight(20)} {kits.PadRight(20)} {state.PadRight(10)} {(declared ? "" : "not declared")}".TrimEnd()
             );
         }
@@ -85,7 +72,7 @@ public sealed class SecretsService
 
         if (wanted.Count == 0)
         {
-            _console.WriteError("There are no secrets to set.");
+            console.WriteError("There are no secrets to set.");
             return 1;
         }
 
@@ -96,7 +83,7 @@ public sealed class SecretsService
             var declaration = squad.Secrets.FirstOrDefault(secret => secret.Service == name);
             if (declaration is null)
             {
-                _console.WriteError(
+                console.WriteError(
                     $"The service '{name}' is not declared. Add it to the 'secrets' section of the configuration."
                 );
                 failed = true;
@@ -105,35 +92,35 @@ public sealed class SecretsService
 
             if (!services.ContainsKey(name))
             {
-                _console.WriteLine($"Note: no kit of the squad asks for the service '{name}'.");
+                console.WriteLine($"Note: no kit of the squad asks for the service '{name}'.");
             }
 
             var value = ReadValue(declaration);
             if (value is null)
             {
-                _console.WriteError($"The service '{name}' was not set.");
+                console.WriteError($"The service '{name}' was not set.");
                 failed = true;
                 continue;
             }
 
             var outcome = declaration.IsCustom
-                ? await _sbx.SetCustomSecretAsync(
+                ? await sbx.SetCustomSecretAsync(
                     declaration.Service,
                     declaration.Host,
                     declaration.EnvironmentVariable,
                     value,
                     cancellationToken
                 )
-                : await _sbx.SetSecretAsync(declaration.Service, value, cancellationToken);
+                : await sbx.SetSecretAsync(declaration.Service, value, cancellationToken);
 
             if (!outcome.Succeeded)
             {
-                _console.WriteError($"The secret '{name}' was not stored: {outcome.Output.Trim()}");
+                console.WriteError($"The secret '{name}' was not stored: {outcome.Output.Trim()}");
                 failed = true;
                 continue;
             }
 
-            _console.WriteLine($"Stored the secret '{name}'.");
+            console.WriteLine($"Stored the secret '{name}'.");
         }
 
         return failed ? 1 : 0;
@@ -154,21 +141,19 @@ public sealed class SecretsService
         foreach (var name in wanted)
         {
             var declaration = squad.Secrets.FirstOrDefault(secret => secret.Service == name);
-            var outcome = await _sbx.RemoveSecretAsync(
+            var outcome = await sbx.RemoveSecretAsync(
                 name,
                 declaration?.IsCustom == true ? declaration.Host : null,
                 cancellationToken
             );
             if (!outcome.Succeeded)
             {
-                _console.WriteError(
-                    $"The secret '{name}' was not removed: {outcome.Output.Trim()}"
-                );
+                console.WriteError($"The secret '{name}' was not removed: {outcome.Output.Trim()}");
                 failed = true;
                 continue;
             }
 
-            _console.WriteLine($"Removed the secret '{name}'.");
+            console.WriteLine($"Removed the secret '{name}'.");
         }
 
         return failed ? 1 : 0;
@@ -200,7 +185,7 @@ public sealed class SecretsService
             foreach (var input in declaration.Inputs)
             {
                 var prompt = input.Prompt ?? $"The {input.Name} of '{declaration.Service}'";
-                var part = _console.ReadSecret($"{prompt}: ");
+                var part = console.ReadSecret($"{prompt}: ");
                 if (part is null)
                 {
                     return null;
@@ -212,7 +197,7 @@ public sealed class SecretsService
         else
         {
             var prompt = declaration.Prompt ?? $"The secret '{declaration.Service}'";
-            var value = _console.ReadSecret($"{prompt}: ");
+            var value = console.ReadSecret($"{prompt}: ");
             if (value is null)
             {
                 return null;
@@ -269,5 +254,5 @@ public sealed class SecretsService
     }
 
     private ResolvedSquad Resolve(SecretsRequest request) =>
-        _resolver.Resolve(request.RootDirectory, request.Squad, _personalConfigurations.Files);
+        resolver.Resolve(request.RootDirectory, request.Squad, personalConfigurations.Files);
 }

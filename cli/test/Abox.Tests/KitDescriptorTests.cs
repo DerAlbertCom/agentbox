@@ -41,6 +41,30 @@ public sealed class KitDescriptorTests
     }
 
     [Fact]
+    public void AServiceWithSeveralPhasesIsRead()
+    {
+        _root.File(
+            "kits/pi-config/pi-config.yaml",
+            """
+            schemaVersion: "3"
+            kind: mixin
+            capabilities:
+              - type: com.docker.sandbox/credential@1
+                config:
+                  service: github
+                  phase:
+                    - build
+                    - runtime
+            """
+        );
+
+        var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
+
+        Assert.NotNull(descriptor);
+        Assert.Equal(["build", "runtime"], Assert.Single(descriptor!.Services).Phases);
+    }
+
+    [Fact]
     public void ACapabilityThatIsNotACredentialIsIgnored()
     {
         _root.File(

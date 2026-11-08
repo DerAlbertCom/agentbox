@@ -256,19 +256,43 @@ public sealed class YamlEntry
             throw new AboxException($"'{_source}': '{_key}.{key}' must be a list.");
         }
 
-        return sequence
-            .Children.Select(child =>
-            {
-                if (child is not YamlScalarNode scalar)
-                {
-                    throw new AboxException(
-                        $"'{_source}': '{_key}.{key}' must be a list of values."
-                    );
-                }
+        return sequence.Children.Select(child => Scalar(child, $"{_key}.{key}")).ToList();
+    }
 
-                return scalar.Value ?? string.Empty;
-            })
-            .ToList();
+    /// <summary>
+    /// The value of a key of the element, as a list of values: a single value counts as
+    /// a list of one.
+    /// </summary>
+    public IReadOnlyList<string> GetStrings(string key)
+    {
+        var mapping = Mapping();
+        if (!mapping.Children.TryGetValue(new YamlScalarNode(key), out var node))
+        {
+            return [];
+        }
+
+        if (node is YamlScalarNode)
+        {
+            var value = Scalar(node, $"{_key}.{key}");
+            return value.Length == 0 ? [] : [value];
+        }
+
+        if (node is not YamlSequenceNode sequence)
+        {
+            throw new AboxException($"'{_source}': '{_key}.{key}' must be a value or a list.");
+        }
+
+        return sequence.Children.Select(child => Scalar(child, $"{_key}.{key}")).ToList();
+    }
+
+    private string Scalar(YamlNode node, string key)
+    {
+        if (node is not YamlScalarNode scalar)
+        {
+            throw new AboxException($"'{_source}': '{key}' must be a value.");
+        }
+
+        return scalar.Value ?? string.Empty;
     }
 
     /// <summary>The value of a key of the element, when it is a mapping.</summary>

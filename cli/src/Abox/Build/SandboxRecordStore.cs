@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Abox.Configuration;
 
 namespace Abox.Build;
@@ -6,14 +7,10 @@ namespace Abox.Build;
 /// Keeps what abox knows about the sandboxes it created: the squad they come from and
 /// the build they were made of.
 /// </summary>
-public sealed class SandboxRecordStore
+public sealed class SandboxRecordStore(AboxPaths paths)
 {
-    private readonly AboxPaths _paths;
-
-    public SandboxRecordStore(AboxPaths paths) => _paths = paths;
-
     /// <summary>The directory the records live in.</summary>
-    public string RecordsDirectory => Path.Combine(_paths.StateDirectory, "sandboxes");
+    public string RecordsDirectory => Path.Combine(paths.StateDirectory, "sandboxes");
 
     /// <summary>The record of a sandbox, or null when abox did not create it.</summary>
     public SandboxRecord? Load(string sandbox)
@@ -24,14 +21,24 @@ public sealed class SandboxRecordStore
             return null;
         }
 
-        return System.Text.Json.JsonSerializer.Deserialize<SandboxRecord>(File.ReadAllText(path));
+        try
+        {
+            return JsonSerializer.Deserialize<SandboxRecord>(File.ReadAllText(path));
+        }
+        catch (JsonException exception)
+        {
+            throw new AboxException(
+                $"The record of the sandbox '{sandbox}' is not readable: {exception.Message}",
+                exception
+            );
+        }
     }
 
     /// <summary>Keeps the record of a sandbox.</summary>
     public void Save(string sandbox, SandboxRecord record)
     {
         Directory.CreateDirectory(RecordsDirectory);
-        File.WriteAllText(PathFor(sandbox), System.Text.Json.JsonSerializer.Serialize(record));
+        File.WriteAllText(PathFor(sandbox), JsonSerializer.Serialize(record));
     }
 
     /// <summary>Forgets a sandbox.</summary>

@@ -7,14 +7,10 @@ namespace Abox.Launchers;
 /// The launcher that opens a space in the Herdr desktop app. The Herdr app runs the agents
 /// in terminals that stay alive in <c>hc</c>, so they keep running when the window closes.
 /// </summary>
-public sealed class HerdrAppLauncher : ILauncher
+public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
 {
     private const string AppProgram = "herdr-app";
     private const string CoreProgram = "hc";
-
-    private readonly IProcessRunner _runner;
-
-    public HerdrAppLauncher(IProcessRunner runner) => _runner = runner;
 
     public string Id => "herdr-app";
 
@@ -64,7 +60,7 @@ public sealed class HerdrAppLauncher : ILauncher
             arguments.Add(JsonSerializer.Serialize(context.Argv));
         }
 
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(AppProgram, arguments, AttachConsole: true),
             cancellationToken
         );
@@ -84,7 +80,7 @@ public sealed class HerdrAppLauncher : ILauncher
         CancellationToken cancellationToken
     )
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(CoreProgram, ["machine", "ls", "--json"]),
             cancellationToken
         );
@@ -102,7 +98,7 @@ public sealed class HerdrAppLauncher : ILauncher
     private async Task AddMachineAsync(LauncherContext context, CancellationToken cancellationToken)
     {
         var via = $"abox pipe {context.SandboxName} -- sh -c";
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(
                 CoreProgram,
                 ["machine", "add", "--via", via, "--name", context.SandboxName]
@@ -128,7 +124,7 @@ public sealed class HerdrAppLauncher : ILauncher
         }
 
         // The app keeps running when it is started on its own.
-        await _runner.RunAsync(
+        await runner.RunAsync(
             new ProcessRequest(AppProgram, [], AttachConsole: false),
             cancellationToken
         );
@@ -136,7 +132,7 @@ public sealed class HerdrAppLauncher : ILauncher
 
     private async Task<bool> AppIsRunningAsync(CancellationToken cancellationToken)
     {
-        var result = await _runner.RunAsync(
+        var result = await runner.RunAsync(
             new ProcessRequest(AppProgram, ["status"]),
             cancellationToken
         );
