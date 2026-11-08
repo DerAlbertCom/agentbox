@@ -6,10 +6,12 @@ using Abox.Sbx;
 namespace Abox.Features.Secrets;
 
 /// <summary>What to do with the secrets of a squad.</summary>
+/// <param name="Team">The team the squad belongs to.</param>
 /// <param name="Squad">The squad whose secrets are meant.</param>
-/// <param name="RootDirectory">The directory the squad's configurations live in.</param>
+/// <param name="RootDirectory">The directory of the project that holds the teams folder.</param>
 /// <param name="Services">The services to act on. All of them when the list is empty.</param>
 public sealed record SecretsRequest(
+    string Team,
     string Squad,
     string RootDirectory,
     IReadOnlyList<string> Services
@@ -254,5 +256,10 @@ public sealed class SecretsService(
     }
 
     private ResolvedSquad Resolve(SecretsRequest request) =>
-        resolver.Resolve(request.RootDirectory, request.Squad, personalConfigurations.Files);
+        resolver.Resolve(
+            request.RootDirectory,
+            request.Team,
+            request.Squad,
+            personalConfigurations.Files
+        );
 }

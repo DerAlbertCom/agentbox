@@ -117,7 +117,7 @@ Implement the contract above, register the launcher under its id, and add a row 
 
 ## Configuration files
 
-References never include a file extension. The teams of a project live in a folder per team under `teams/`: `abox build` resolves `--team` to such a folder (case-insensitive), and `abox create` and `abox secrets` resolve `--squad` to an `.abox` file in one of the team folders: `AC` → `teams/<team>/ac.abox` (case-insensitive). `base` names resolve in the team folders of the project too. The `workload` named by the root config lives in the team folder, or, when it is shared, in the `kits` folder of the project.
+References never include a file extension. The teams of a project live in a folder per team under `teams/`: `abox build` resolves `--team` to such a folder (case-insensitive), and `abox create` and `abox secrets` resolve `--team` and `--squad` to an `.abox` file in the team folder: `AC` → `teams/<team>/ac.abox` (case-insensitive). `base` names are the file of the squad's own team folder first, then the team folders of the project; one that several other teams hold is an error. The `workload` named by the root config lives in the team folder, or, when it is shared, in the `kits` folder of the project.
 
 **`.workload`** (YAML)
 - `template`: container image to build on, as in `sbx run --template`. Default `docker.io/sbx/shell-docker-image`, a shell image with Docker Engine inside (`docker.io/sbx/shell-image` is the variant without it). Pin a tag or digest rather than `latest`. *(proposed)* Named `template` so `base` only means the parent `.abox`. *(name proposed)*

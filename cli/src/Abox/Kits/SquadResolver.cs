@@ -16,12 +16,18 @@ public sealed class SquadResolver(AboxConfig config)
     /// <param name="teamName">The name of the team.</param>
     public ResolvedTeam ResolveTeam(string rootDirectory, string teamName)
     {
+        return Plan(TeamDirectory(rootDirectory, teamName));
+    }
+
+    /// <summary>The folder of a team, in the teams folders of the directory or a parent one.</summary>
+    private string TeamDirectory(string rootDirectory, string teamName)
+    {
         var current = rootDirectory;
         while (true)
         {
             if (TeamFolder(current, teamName) is { } folder)
             {
-                return Plan(folder);
+                return folder;
             }
 
             var parent = Path.GetDirectoryName(current);
@@ -98,11 +104,14 @@ public sealed class SquadResolver(AboxConfig config)
     /// <param name="personalConfigurations">The personal <c>.abox</c> files of the user.</param>
     public ResolvedSquad Resolve(
         string rootDirectory,
+        string teamName,
         string squadName,
         IReadOnlyList<string> personalConfigurations
     )
     {
-        var projectChain = LoadChain(new ConfigRoot(rootDirectory, squadName), searchParents: true);
+        var team = TeamDirectory(rootDirectory, teamName);
+
+        var projectChain = LoadChain(new ConfigRoot(team, squadName), searchParents: true);
         var personalChains = personalConfigurations
             .Select(file =>
                 LoadChain(
@@ -148,14 +157,19 @@ public sealed class SquadResolver(AboxConfig config)
         var chain = new List<AboxFile>();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        var current = root;
+        var path =
+            FindConfigurationFileDirectly(root.Directory, root.Name)
+            ?? throw new AboxException(
+                $"There is no configuration '{root.Name}.abox' in '{root.Directory}'."
+            );
+
+        var directory = root.Directory;
         while (true)
         {
-            var path = FindConfigurationFile(current.Directory, current.Name, searchParents);
             if (!visited.Add(path))
             {
                 throw new AboxException(
-                    $"The configuration '{current.Name}' is part of a cycle: '{path}'."
+                    $"The configuration '{root.Name}' is part of a cycle: '{path}'."
                 );
             }
 
@@ -167,7 +181,17 @@ public sealed class SquadResolver(AboxConfig config)
                 break;
             }
 
-            current = new ConfigRoot(Path.GetDirectoryName(path)!, file.Base);
+            directory = Path.GetDirectoryName(path)!;
+            path = searchParents
+                ? FindBaseConfigurationFile(directory, file.Base)
+                : Path.Combine(directory, file.Base + ".abox");
+
+            if (!searchParents && !File.Exists(path))
+            {
+                throw new AboxException(
+                    $"There is no configuration '{file.Base}.abox' in '{directory}'."
+                );
+            }
         }
 
         chain.Reverse();
@@ -175,26 +199,28 @@ public sealed class SquadResolver(AboxConfig config)
     }
 
     /// <summary>
-    /// Finds the <c>.abox</c> file of a configuration. The name is matched without regard
-    /// to case, so <c>AC</c> finds <c>ac.abox</c>. The teams of a project live in its
-    /// team folders, and a project is looked for in the parent directories too, so the
-    /// command works from anywhere in it.
+    /// Finds the <c>.abox</c> file of a base. It is looked for in the team folders of
+    /// the given directory and of its parent ones, so the command works from anywhere
+    /// in a project. The name is matched without regard to case, so <c>AC</c> finds
+    /// <c>ac.abox</c>. A name that is in several team folders is an error: a base has
+    /// to name its file without a doubt.
     /// </summary>
-    private string FindConfigurationFile(string directory, string name, bool searchParents)
+    private string FindBaseConfigurationFile(string directory, string name)
     {
+        // A base that the same team holds does not need to be searched for: the squad
+        // declares what its team brings.
+        if (FindConfigurationFileDirectly(directory, name) is { } own)
+        {
+            return own;
+        }
+
         var current = directory;
 
         while (true)
         {
-            var found = FindConfigurationFileHere(current, name, searchParents);
-            if (found is not null)
+            if (FindBaseHere(current, name) is { } found)
             {
                 return found;
-            }
-
-            if (!searchParents)
-            {
-                break;
             }
 
             var parent = Path.GetDirectoryName(current);
@@ -207,45 +233,14 @@ public sealed class SquadResolver(AboxConfig config)
         }
 
         throw new AboxException(
-            searchParents
-                ? $"There is no squad '{name}' in the teams folders of '{directory}' or of one of its parent directories."
-                : $"There is no configuration '{name}.abox' in '{directory}'."
+            $"There is no configuration '{name}.abox' in the teams folders of '{directory}' or of one of its parent directories."
         );
     }
 
-    private string? FindConfigurationFileHere(string directory, string name, bool searchParents)
-    {
-        if (!Directory.Exists(directory))
-        {
-            return null;
-        }
-
-        // A personal squad lives in the configuration directory, one file each.
-        if (!searchParents)
-        {
-            if (FindConfigurationFileDirectly(directory, name) is { } found)
-            {
-                return found;
-            }
-            return null;
-        }
-
-        // A team of a project is a folder in its teams folder, and a squad is a file in it.
-        var teams = Path.Combine(directory, config.TeamsDirectory);
-        if (!Directory.Exists(teams))
-        {
-            return null;
-        }
-
-        return Directory
-            .EnumerateDirectories(teams)
-            .SelectMany(team => Directory.EnumerateFiles(team, "*.abox"))
-            .FirstOrDefault(file =>
-                Path.GetFileNameWithoutExtension(file)
-                    .Equals(name, StringComparison.OrdinalIgnoreCase)
-            );
-    }
-
+    /// <summary>
+    /// Finds the <c>.abox</c> file of a name inside one directory, without regard to
+    /// case, so <c>AC</c> finds <c>ac.abox</c>.
+    /// </summary>
     private static string? FindConfigurationFileDirectly(string directory, string name)
     {
         var expected = Path.Combine(directory, name + ".abox");
@@ -260,6 +255,35 @@ public sealed class SquadResolver(AboxConfig config)
                 Path.GetFileNameWithoutExtension(file)
                     .Equals(name, StringComparison.OrdinalIgnoreCase)
             );
+    }
+
+    private string? FindBaseHere(string directory, string name)
+    {
+        var teams = Path.Combine(directory, config.TeamsDirectory);
+        if (!Directory.Exists(teams))
+        {
+            return null;
+        }
+
+        var matches = Directory
+            .EnumerateDirectories(teams)
+            .SelectMany(team => Directory.EnumerateFiles(team, "*.abox"))
+            .Where(file =>
+                Path.GetFileNameWithoutExtension(file)
+                    .Equals(name, StringComparison.OrdinalIgnoreCase)
+            )
+            .ToList();
+
+        if (matches.Count > 1)
+        {
+            throw new AboxException(
+                $"The base '{name}' is in several team folders: "
+                    + string.Join(", ", matches.Select(file => $"'{file}'"))
+                    + ". A base has to name its file without a doubt."
+            );
+        }
+
+        return matches.FirstOrDefault();
     }
 
     private WorkloadFile ResolveWorkload(

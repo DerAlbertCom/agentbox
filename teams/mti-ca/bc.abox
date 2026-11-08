@@ -1,0 +1,3 @@
+# The BC squad of the mti-ca team: the base image of the team, with what the squad
+# adds.
+base: cape

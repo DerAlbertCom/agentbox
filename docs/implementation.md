@@ -13,7 +13,10 @@ built yet. It is the file to read first when you pick this work up.
    the user configuration `defaultTeam` is used.
 2. Builds every squad of the team that no other squad of the team names as its `base`
    — the squads named as a base are built with the squad that inherits from them.
-3. Reads the `.abox` of a squad and follows its `base` chain, the base first.
+3. Reads the `.abox` of a squad inside the team folder and follows its `base` chain,
+   the base first. A base is the file of the squad's own team folder first, then the
+   team folders of the parent directories; a base that several other teams hold is
+   an error.
 4. Checks the chain: a cycle, a kit, an MCP server, a parameter, a state directory or a
    secret that is declared twice, overlapping state directories, and a parameter that no
    configuration declares are errors. The error names the duplicate and the files that
@@ -72,7 +75,7 @@ the registry host and `abox publish` are not built yet.
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.
 
-### `abox secrets list|set|remove [--squad <name>] [--service <name>]`
+### `abox secrets list|set|remove --team <name> --squad <name> [--service <name>]`
 
 The kits of a squad ask for a service with the `credential@1` capability. The `secrets`
 section of the configuration says how the value of that service is obtained. abox keeps

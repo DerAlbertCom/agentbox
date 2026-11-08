@@ -31,7 +31,7 @@ named in this guide, and an unknown key is an error.
 ```
 abox build --team sample                     # make the kits of the team, check them
 abox create --team sample --location <folder>  # make a sandbox of the build for a folder
-abox secrets set --squad ac                  # store the values the kits of the squad ask for
+abox secrets set --team sample --squad ac    # store the values the kits of the squad ask for
 abox run --location <folder>                 # open the sandbox of the folder
 ```
 
@@ -96,10 +96,10 @@ secrets:                                     # the services the kits ask for
 | `state` | Directories inside the sandbox that keep their content when the sandbox is replaced. |
 | `secrets` | The services whose values are kept on the host. See [Secrets](#secrets). |
 
-**How the name of a squad is found.** `--squad ac` looks for `ac.abox` in the team
-folders of the project (`teams/<team>/ac.abox`), also in the parent directories of the
-project, so the command works from anywhere in it, and matches the name without case.
-The name of the file is the name of the squad.
+**How a squad is found.** The commands take `--team <name>`; the squad is the file of
+that team folder, matched without regard to case: `AC` → `teams/sample/ac.abox`. A
+`base` is the file of the squad's own team folder first, then the team folders of the
+parent directories — a base that several other teams hold is an error.
 
 **How inheritance works.** A squad that has a `base` adds kits, parameters, MCP
 servers, state directories and secrets to what its base declares. It never replaces or

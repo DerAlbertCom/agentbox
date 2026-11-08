@@ -251,7 +251,7 @@ public sealed class SecretsServiceTests
         _console.Answers.Add("the-token");
 
         await _service.SetAsync(
-            new SecretsRequest("ac", _root.Path, ["github"]),
+            new SecretsRequest("sample", "ac", _root.Path, ["github"]),
             CancellationToken.None
         );
 
@@ -304,7 +304,7 @@ public sealed class SecretsServiceTests
             .RemoveSecretAsync("elastic", "api.elastic.co", Arg.Any<CancellationToken>());
     }
 
-    private SecretsRequest Request() => new("ac", _root.Path, []);
+    private SecretsRequest Request() => new("sample", "ac", _root.Path, []);
 
     private void WriteKitWithService(string service)
     {

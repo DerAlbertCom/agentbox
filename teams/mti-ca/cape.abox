@@ -1,0 +1,4 @@
+# The base of every squad of the mti-ca team.
+#
+# Only the root configuration declares a workload. Every squad inherits from it.
+workload: mti-ca

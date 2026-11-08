@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 
@@ -9,11 +10,17 @@ namespace Abox.Features.Secrets;
 /// </summary>
 public sealed class SecretsCommand : Command
 {
-    public SecretsCommand(Preflight preflight, SecretsService secrets, IConsole console)
+    public SecretsCommand(
+        AboxConfig config,
+        Preflight preflight,
+        SecretsService secrets,
+        IConsole console
+    )
         : base("secrets", "Manage the host secrets the kits of a squad ask for.")
     {
         Subcommands.Add(
             SubCommand(
+                config,
                 preflight,
                 console,
                 "list",
@@ -24,6 +31,7 @@ public sealed class SecretsCommand : Command
         );
         Subcommands.Add(
             SubCommand(
+                config,
                 preflight,
                 console,
                 "set",
@@ -34,6 +42,7 @@ public sealed class SecretsCommand : Command
         );
         Subcommands.Add(
             SubCommand(
+                config,
                 preflight,
                 console,
                 "remove",
@@ -45,6 +54,7 @@ public sealed class SecretsCommand : Command
     }
 
     private static Command SubCommand(
+        AboxConfig config,
         Preflight preflight,
         IConsole console,
         string name,
@@ -53,6 +63,12 @@ public sealed class SecretsCommand : Command
         Func<SecretsRequest, CancellationToken, Task<int>> action
     )
     {
+        var team = new Option<string>("--team")
+        {
+            Description =
+                "The team the squad belongs to. Defaults to the team of the user configuration.",
+        };
+
         var squad = new Option<string>("--squad")
         {
             Description = "The squad whose secrets are managed. The command needs it.",
@@ -71,6 +87,7 @@ public sealed class SecretsCommand : Command
         };
 
         var command = new Command(name, description);
+        command.Options.Add(team);
         command.Options.Add(squad);
         command.Options.Add(root);
 
@@ -96,7 +113,15 @@ public sealed class SecretsCommand : Command
                             throw new AboxException("No squad is given. Give --squad <name>.");
                         }
 
+                        if (parseResult.GetValue(team) is not { } teamName)
+                        {
+                            throw new AboxException(
+                                "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
+                            );
+                        }
+
                         var request = new SecretsRequest(
+                            teamName,
                             squadName,
                             parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
                             wanted

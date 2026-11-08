@@ -57,6 +57,7 @@ public sealed class BuildService(
     {
         var squad = resolver.Resolve(
             request.RootDirectory,
+            teamName,
             squadName,
             personalConfigurations.Files
         );

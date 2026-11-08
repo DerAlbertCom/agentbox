@@ -18,6 +18,42 @@ public sealed class SquadResolverTests
     }
 
     [Fact]
+    public void ASquadIsResolvedInsideItsTeam()
+    {
+        _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
+        _root.File("teams/other/ac.abox", "base: cape\n");
+
+        var squad = _resolver.Resolve(_root.Path, "sample", "AC", []);
+
+        squad.Workload.Name.Should().Be("mti-ca-dotnet");
+    }
+
+    [Fact]
+    public void ABaseOfTheSameTeamWinsOverTheOtherTeams()
+    {
+        _root.File("teams/other/ac.abox", "base: cape\n");
+        _root.File("teams/sample/cape.abox", "workload: sample\n");
+        _root.File("teams/other/mti-ca.workload", "template: docker.io/sbx/shell-image\n");
+        _root.File("teams/other/cape.abox", "workload: mti-ca\n");
+
+        var squad = _resolver.Resolve(_root.Path, "other", "ac", []);
+
+        squad.Workload.Name.Should().Be("mti-ca");
+    }
+
+    [Fact]
+    public void ABaseThatSeveralOtherTeamsHoldIsAnError()
+    {
+        _root.File("teams/other/ac.abox", "base: cape\n");
+        _root.File("teams/sample/cape.abox", "workload: sample\n");
+        _root.File("teams/third/cape.abox", "workload: mti-ca\n");
+
+        var action = () => _resolver.Resolve(_root.Path, "other", "ac", []);
+
+        action.Should().Throw<AboxException>().WithMessage("*several team folders*");
+    }
+
+    [Fact]
     public void ATeamIsNamedByItsSquadsThatNothingElseUsesAsABase()
     {
         _root.File("teams/sample/cape.abox", "workload: mti-ca-dotnet\n");
@@ -81,7 +117,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var squad = _resolver.Resolve(_root.Path, "ac", []);
+        var squad = _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         squad.Name.Should().Be("ac");
         squad.Workload.Name.Should().Be("mti-ca-dotnet");
@@ -97,7 +133,7 @@ public sealed class SquadResolverTests
     {
         _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
 
-        var squad = _resolver.Resolve(_root.Path, "AC", []);
+        var squad = _resolver.Resolve(_root.Path, "sample", "AC", []);
 
         squad.Name.Should().Be("ac");
     }
@@ -123,7 +159,7 @@ public sealed class SquadResolverTests
         );
         _root.Directory_("kits/other-kit");
 
-        var squad = _resolver.Resolve(_root.Path, "ac", []);
+        var squad = _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         squad.Kits.Select(kit => kit.Name).Should().Equal("pi-config", "other-kit");
         squad.ConfigFiles.Should().HaveCount(2);
@@ -135,7 +171,7 @@ public sealed class SquadResolverTests
         _root.File("teams/sample/a.abox", "base: b\n");
         _root.File("teams/sample/b.abox", "base: a\n");
 
-        var action = () => _resolver.Resolve(_root.Path, "a", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "a", []);
 
         action.Should().Throw<AboxException>().WithMessage("*cycle*");
     }
@@ -160,7 +196,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         action.Should().Throw<AboxException>().WithMessage("*declared twice*");
     }
@@ -178,7 +214,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         action.Should().Throw<AboxException>().WithMessage("*declared twice*");
     }
@@ -203,7 +239,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         action.Should().Throw<AboxException>().WithMessage("*declared twice*");
     }
@@ -222,7 +258,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         action.Should().Throw<AboxException>().WithMessage("*missing*");
     }
@@ -243,7 +279,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var squad = _resolver.Resolve(_root.Path, "ac", []);
+        var squad = _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         var kit = squad.Kits.Should().ContainSingle().Which;
         kit.Arguments["url"].Should().Be("https://example.com");
@@ -262,7 +298,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         action.Should().Throw<AboxException>().WithMessage("*overlap*");
     }
@@ -279,7 +315,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var squad = _resolver.Resolve(_root.Path, "ac", []);
+        var squad = _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         var state = squad.State.Should().ContainSingle().Which;
         state.SandboxPath.Should().Be("/home/agent/.config/opencode/state");
@@ -291,7 +327,7 @@ public sealed class SquadResolverTests
     {
         _root.File("teams/sample/ac.abox", "kits:\n  - pi-config\n");
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         action.Should().Throw<AboxException>().WithMessage("*workload*");
     }
@@ -308,7 +344,7 @@ public sealed class SquadResolverTests
             """
         );
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", []);
 
         action.Should().Throw<AboxException>().WithMessage("*missing-kit*");
     }
@@ -319,7 +355,7 @@ public sealed class SquadResolverTests
         _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
         var folder = _root.Directory_("projects/one");
 
-        var squad = _resolver.Resolve(folder, "ac", []);
+        var squad = _resolver.Resolve(folder, "sample", "ac", []);
 
         squad.Workload.Name.Should().Be("mti-ca-dotnet");
     }
@@ -331,7 +367,7 @@ public sealed class SquadResolverTests
         _root.File("base.abox", "kits:\n  - pi-config\n");
         var personal = _root.File("personal/personal.abox", "base: base\n");
 
-        var action = () => _resolver.Resolve(_root.Path, "ac", [personal]);
+        var action = () => _resolver.Resolve(_root.Path, "sample", "ac", [personal]);
 
         action.Should().Throw<AboxException>().WithMessage("*no configuration 'base.abox'*");
     }
@@ -356,7 +392,7 @@ public sealed class SquadResolverTests
         );
         _root.Directory_("kits/personal-kit");
 
-        var squad = _resolver.Resolve(_root.Path, "ac", [personal]);
+        var squad = _resolver.Resolve(_root.Path, "sample", "ac", [personal]);
 
         squad.Kits.Select(kit => kit.Name).Should().Equal("pi-config", "personal-kit");
     }
