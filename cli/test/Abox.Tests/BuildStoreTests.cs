@@ -34,29 +34,6 @@ public sealed class BuildStoreTests
     }
 
     [Fact]
-    public void TheTagsOfASquadAreListed()
-    {
-        _store.Save(
-            new BuildManifest
-            {
-                Squad = "ac",
-                Tag = "latest",
-                CreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
-            }
-        );
-        _store.Save(
-            new BuildManifest
-            {
-                Squad = "ac",
-                Tag = "dev",
-                CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
-            }
-        );
-
-        Assert.Equal(["dev", "latest"], _store.AvailableTags("ac"));
-    }
-
-    [Fact]
     public void TheKitsAndStateOfABuildSurviveTheRoundTrip()
     {
         _store.Save(

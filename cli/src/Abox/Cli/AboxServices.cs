@@ -25,6 +25,7 @@ public sealed class AboxServices
         Preflight = new Preflight(console, Sbx, HostPrograms);
         Resolver = new SquadResolver(Config);
         Store = new BuildStore(Paths);
+        Records = new SandboxRecordStore(Paths);
         PersonalConfigurations = new PersonalConfigurations(Paths);
         Launchers = new LauncherRegistry([new ShellLauncher(), new HerdrAppLauncher(Runner)]);
         Build = new BuildService(
@@ -36,8 +37,8 @@ public sealed class AboxServices
             Sbx,
             console
         );
-        Create = new CreateService(Store, Paths, Sbx, console);
-        Run = new RunService(Launchers, Sbx, HostPrograms, console);
+        Create = new CreateService(Store, Records, Paths, Sbx, console);
+        Run = new RunService(Launchers, Store, Records, Create, Sbx, HostPrograms, console);
     }
 
     public IConsole Console { get; }
@@ -60,6 +61,9 @@ public sealed class AboxServices
     public SquadResolver Resolver { get; }
 
     public BuildStore Store { get; }
+
+    /// <summary>What abox knows about the sandboxes it created.</summary>
+    public SandboxRecordStore Records { get; }
 
     public PersonalConfigurations PersonalConfigurations { get; }
 

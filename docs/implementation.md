@@ -49,10 +49,13 @@ local build.
 1. Checks the programs the launcher needs on the host.
 2. Checks that the folder has a sandbox. Without one, the command prints the
    `abox create` command to run.
-3. Checks the programs the launcher needs in the sandbox. A missing one means the image
+3. Asks the runtime where the workspace of the sandbox is (`WORKSPACE_DIR`).
+4. Offers to replace the sandbox when the build of its squad is newer than the one the
+   sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
+   the sandboxes it created, in `<state dir>/sandboxes/`.
+5. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
-4. Asks the runtime where the workspace of the sandbox is (`WORKSPACE_DIR`) and starts
-   the launcher there.
+6. Starts the launcher.
 
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.

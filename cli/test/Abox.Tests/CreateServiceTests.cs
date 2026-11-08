@@ -13,6 +13,7 @@ public sealed class CreateServiceTests
     private readonly FakeSbxClient _sbx = new();
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
+    private readonly SandboxRecordStore _records;
     private readonly CreateService _service;
 
     public CreateServiceTests()
@@ -22,7 +23,8 @@ public sealed class CreateServiceTests
             Path.Combine(_root.Path, "state")
         );
         _store = new BuildStore(_paths);
-        _service = new CreateService(_store, _paths, _sbx, _console);
+        _records = new SandboxRecordStore(_paths);
+        _service = new CreateService(_store, _records, _paths, _sbx, _console);
     }
 
     [Fact]
@@ -118,6 +120,19 @@ public sealed class CreateServiceTests
         );
 
         Assert.Contains("not registered", exception.Message);
+    }
+
+    [Fact]
+    public async Task TheRecordOfTheSandboxIsKept()
+    {
+        SaveBuild();
+
+        await _service.CreateAsync(Request(), CancellationToken.None);
+
+        var record = _records.Load(SandboxName.For(_root.Path));
+        Assert.NotNull(record);
+        Assert.Equal("ac", record!.Squad);
+        Assert.Equal("latest", record.Tag);
     }
 
     private CreateRequest Request() => new("ac", _root.Path, "latest");

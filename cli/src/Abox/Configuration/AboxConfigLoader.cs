@@ -1,5 +1,5 @@
+using Abox.Configuration;
 using Abox.Infrastructure;
-using YamlDotNet.Serialization;
 
 namespace Abox.Configuration;
 
@@ -8,6 +8,14 @@ namespace Abox.Configuration;
 /// </summary>
 public static class AboxConfigLoader
 {
+    private static readonly string[] KnownKeys =
+    [
+        "defaultSquad",
+        "defaultLocation",
+        "kitsDirectory",
+        "defaultTag",
+    ];
+
     public static AboxConfig Load(AboxPaths paths)
     {
         if (!File.Exists(paths.ConfigFile))
@@ -15,32 +23,20 @@ public static class AboxConfigLoader
             return new AboxConfig();
         }
 
-        var yaml = File.ReadAllText(paths.ConfigFile);
-        var file = Yaml.Deserialize<UserConfigFile>(yaml, paths.ConfigFile);
+        var reader = YamlReader.LoadFile(paths.ConfigFile);
+        reader.RejectUnknownKeys(KnownKeys);
+
+        var defaults = new AboxConfig();
 
         return new AboxConfig
         {
-            DefaultSquad = string.IsNullOrWhiteSpace(file.DefaultSquad)
-                ? new AboxConfig().DefaultSquad
-                : file.DefaultSquad,
-            DefaultLocation = file.DefaultLocation,
-            KitsDirectory = string.IsNullOrWhiteSpace(file.KitsDirectory)
-                ? new AboxConfig().KitsDirectory
-                : file.KitsDirectory,
-            DefaultTag = string.IsNullOrWhiteSpace(file.DefaultTag)
-                ? new AboxConfig().DefaultTag
-                : file.DefaultTag,
+            DefaultSquad = Or(reader.GetString("defaultSquad"), defaults.DefaultSquad),
+            DefaultLocation = reader.GetString("defaultLocation"),
+            KitsDirectory = Or(reader.GetString("kitsDirectory"), defaults.KitsDirectory),
+            DefaultTag = Or(reader.GetString("defaultTag"), defaults.DefaultTag),
         };
     }
 
-    private sealed class UserConfigFile
-    {
-        public string? DefaultSquad { get; set; }
-
-        public string? DefaultLocation { get; set; }
-
-        public string? KitsDirectory { get; set; }
-
-        public string? DefaultTag { get; set; }
-    }
+    private static string Or(string? value, string fallback) =>
+        string.IsNullOrWhiteSpace(value) ? fallback : value;
 }

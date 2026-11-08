@@ -1,3 +1,5 @@
+using Abox.Build;
+using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Launchers;
 using Abox.Naming;
@@ -17,18 +19,27 @@ public sealed record RunRequest(string LauncherId, string Location, IReadOnlyLis
 public sealed class RunService
 {
     private readonly LauncherRegistry _launchers;
+    private readonly BuildStore _store;
+    private readonly SandboxRecordStore _records;
+    private readonly CreateService _create;
     private readonly ISbxClient _sbx;
     private readonly IHostPrograms _hostPrograms;
     private readonly IConsole _console;
 
     public RunService(
         LauncherRegistry launchers,
+        BuildStore store,
+        SandboxRecordStore records,
+        CreateService create,
         ISbxClient sbx,
         IHostPrograms hostPrograms,
         IConsole console
     )
     {
         _launchers = launchers;
+        _store = store;
+        _records = records;
+        _create = create;
         _sbx = sbx;
         _hostPrograms = hostPrograms;
         _console = console;
@@ -64,6 +75,11 @@ public sealed class RunService
             return 1;
         }
 
+        if (!await ReplaceWithANewerBuildAsync(name, location, cancellationToken))
+        {
+            return 1;
+        }
+
         foreach (var program in launcher.SandboxRequirements)
         {
             if (await _sbx.HasProgramAsync(name, program, cancellationToken))
@@ -90,6 +106,43 @@ public sealed class RunService
         );
 
         return await launcher.RunAsync(context, cancellationToken);
+    }
+
+    /// <summary>
+    /// Offers to replace the sandbox when the build of its squad is newer than the one it
+    /// was made of. Returns false when the command must not go on.
+    /// </summary>
+    private async Task<bool> ReplaceWithANewerBuildAsync(
+        string name,
+        string location,
+        CancellationToken cancellationToken
+    )
+    {
+        var record = _records.Load(name);
+        if (record is null)
+        {
+            return true;
+        }
+
+        var manifest = _store.Load(record.Squad, record.Tag);
+        if (manifest is null || manifest.CreatedAt <= record.BuildCreatedAt)
+        {
+            return true;
+        }
+
+        _console.WriteLine(
+            $"The squad '{record.Squad}' has a newer build, from {manifest.CreatedAt:yyyy-MM-dd HH:mm}."
+        );
+
+        if (!_console.Confirm("Replace the sandbox with it?"))
+        {
+            return true;
+        }
+
+        return await _create.CreateAsync(
+                new CreateRequest(record.Squad, location, record.Tag, AssumeYes: true),
+                cancellationToken
+            ) == 0;
     }
 
     /// <summary>

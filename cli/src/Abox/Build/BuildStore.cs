@@ -39,28 +39,6 @@ public sealed class BuildStore
         return manifest ?? throw new AboxException($"The build '{squad}:{tag}' is not readable.");
     }
 
-    /// <summary>The tags a squad has builds for, the newest build first.</summary>
-    public IReadOnlyList<string> AvailableTags(string squad)
-    {
-        var directory = Path.Combine(_paths.BuildsDirectory, squad);
-        if (!Directory.Exists(directory))
-        {
-            return [];
-        }
-
-        return Directory
-            .EnumerateDirectories(directory)
-            .Select(path => new
-            {
-                Tag = Path.GetFileName(path)!,
-                CreatedAt = Load(squad, Path.GetFileName(path)!)?.CreatedAt
-                    ?? DateTimeOffset.MinValue,
-            })
-            .OrderByDescending(build => build.CreatedAt)
-            .Select(build => build.Tag)
-            .ToList();
-    }
-
     /// <summary>Writes the manifest of a build.</summary>
     public void Save(BuildManifest manifest)
     {

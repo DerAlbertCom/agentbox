@@ -24,13 +24,21 @@ public sealed record CreateRequest(
 public sealed class CreateService
 {
     private readonly BuildStore _store;
+    private readonly SandboxRecordStore _records;
     private readonly AboxPaths _paths;
     private readonly ISbxClient _sbx;
     private readonly IConsole _console;
 
-    public CreateService(BuildStore store, AboxPaths paths, ISbxClient sbx, IConsole console)
+    public CreateService(
+        BuildStore store,
+        SandboxRecordStore records,
+        AboxPaths paths,
+        ISbxClient sbx,
+        IConsole console
+    )
     {
         _store = store;
+        _records = records;
         _paths = paths;
         _sbx = sbx;
         _console = console;
@@ -89,6 +97,17 @@ public sealed class CreateService
                 $"sbx could not create the sandbox '{name}'.{Environment.NewLine}{outcome.Output.Trim()}"
             );
         }
+
+        _records.Save(
+            name,
+            new SandboxRecord
+            {
+                Squad = request.Squad,
+                Tag = request.Tag,
+                BuildCreatedAt = manifest.CreatedAt,
+                CreatedAt = DateTimeOffset.Now,
+            }
+        );
 
         _console.WriteLine($"Created sandbox '{name}' for '{location}'.");
         _console.WriteLine($"Open it with: abox run --location {location}");
