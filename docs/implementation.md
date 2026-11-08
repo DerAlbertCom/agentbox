@@ -262,7 +262,8 @@ cli/src/Abox/
 ## What is not built yet
 
 - `abox publish`. The kit set is not published to a registry, and `abox prune` removes
-  only the template images of sbx, not the local builds of the build store.
+  only the template images of sbx, not the local builds of the build store. The block
+  is the artifact format of `sbx kit push`, see [artifact-format.md](artifact-format.md).
 - The `orca` launcher, and the `hc` helper and the `openssh-server` of the base image.
 - The Claude Code gateway to Copilot on GitHub Enterprise (open question 3).
 - The `worktrees` of the agents, which are lost when a sandbox is replaced (open
