@@ -22,10 +22,10 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.yaml"));
-        Assert.Contains("# syntax=docker/sandbox-kit:3", descriptor);
-        Assert.Contains("schemaVersion: \"3\"", descriptor);
-        Assert.Contains("kind: workload", descriptor);
-        Assert.Contains("com.docker.sandbox/sbx@1", descriptor);
+        descriptor.Should().Contain("# syntax=docker/sandbox-kit:3");
+        descriptor.Should().Contain("schemaVersion: \"3\"");
+        descriptor.Should().Contain("kind: workload");
+        descriptor.Should().Contain("com.docker.sandbox/sbx@1");
     }
 
     [Fact]
@@ -36,7 +36,7 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains("FROM docker.io/sbx/shell-image", dockerfile);
+        dockerfile.Should().Contain("FROM docker.io/sbx/shell-image");
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains($"FROM {WorkloadFile.DefaultTemplate}", dockerfile);
+        dockerfile.Should().Contain($"FROM {WorkloadFile.DefaultTemplate}");
     }
 
     [Fact]
@@ -64,9 +64,9 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains("mise use -g -y nodejs@24.4.3", dockerfile);
-        Assert.Contains("mise use -g -y dotnet@10.0.403", dockerfile);
-        Assert.Equal(2, CountOccurrences(dockerfile, "mise use -g -y"));
+        dockerfile.Should().Contain("mise use -g -y nodejs@24.4.3");
+        dockerfile.Should().Contain("mise use -g -y dotnet@10.0.403");
+        CountOccurrences(dockerfile, "mise use -g -y").Should().Be(2);
     }
 
     [Fact]
@@ -83,8 +83,8 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains("mise use -g -y dotnet@10.0.403 dotnet@9.0.303", dockerfile);
-        Assert.Equal(1, CountOccurrences(dockerfile, "mise use -g -y"));
+        dockerfile.Should().Contain("mise use -g -y dotnet@10.0.403 dotnet@9.0.303");
+        CountOccurrences(dockerfile, "mise use -g -y").Should().Be(1);
     }
 
     [Fact]
@@ -101,10 +101,10 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.True(
-            dockerfile.IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
-                < dockerfile.IndexOf("dotnet@9.0.303", StringComparison.Ordinal)
-        );
+        dockerfile
+            .IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(dockerfile.IndexOf("dotnet@9.0.303", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -121,10 +121,10 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.True(
-            dockerfile.IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
-                < dockerfile.IndexOf("nodejs@24.4.3", StringComparison.Ordinal)
-        );
+        dockerfile
+            .IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(dockerfile.IndexOf("nodejs@24.4.3", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -141,9 +141,9 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains("COPY scripts/ /tmp/abox-scripts/", dockerfile);
-        Assert.Contains("RUN bash /tmp/abox-scripts/enable-fzf.sh", dockerfile);
-        Assert.True(File.Exists(Path.Combine(_root.Path, "kit", "scripts", "enable-fzf.sh")));
+        dockerfile.Should().Contain("COPY scripts/ /tmp/abox-scripts/");
+        dockerfile.Should().Contain("RUN bash /tmp/abox-scripts/enable-fzf.sh");
+        File.Exists(Path.Combine(_root.Path, "kit", "scripts", "enable-fzf.sh")).Should().BeTrue();
     }
 
     [Fact]
@@ -154,7 +154,7 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains("WORKDIR /home/agent/workspace", dockerfile);
+        dockerfile.Should().Contain("WORKDIR /home/agent/workspace");
     }
 
     [Fact]
@@ -170,11 +170,10 @@ public sealed class WorkloadKitGeneratorTests
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        Assert.Contains(
-            $"--mount=type=secret,id={WorkloadKitGenerator.GitHubTokenSecret}",
-            dockerfile
-        );
-        Assert.DoesNotContain("--build-arg", dockerfile);
+        dockerfile
+            .Should()
+            .Contain($"--mount=type=secret,id={WorkloadKitGenerator.GitHubTokenSecret}");
+        dockerfile.Should().NotContain("--build-arg");
     }
 
     [Fact]
@@ -187,11 +186,9 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
-        var exception = Assert.Throws<AboxException>(() =>
-            _generator.Generate(workload, Path.Combine(_root.Path, "kit"))
-        );
+        var action = () => _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
-        Assert.Contains("missing.sh", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*missing.sh*");
     }
 
     private WorkloadFile WriteWorkload(string content)

@@ -9,8 +9,8 @@ public sealed class AboxPathsTests
     {
         var paths = AboxPaths.Resolve(null, null, "/home/albert", windows: false);
 
-        Assert.Equal(Path.Combine("/home/albert", ".config", "abox"), paths.ConfigDirectory);
-        Assert.Equal(Path.Combine("/home/albert", ".local", "state", "abox"), paths.StateDirectory);
+        paths.ConfigDirectory.Should().Be(Path.Combine("/home/albert", ".config", "abox"));
+        paths.StateDirectory.Should().Be(Path.Combine("/home/albert", ".local", "state", "abox"));
     }
 
     [Fact]
@@ -18,8 +18,8 @@ public sealed class AboxPathsTests
     {
         var paths = AboxPaths.Resolve(null, null, "C:\\Users\\albert", windows: true);
 
-        Assert.Equal(Path.Combine("C:\\Users\\albert", ".abox", "config"), paths.ConfigDirectory);
-        Assert.Equal(Path.Combine("C:\\Users\\albert", ".abox", "state"), paths.StateDirectory);
+        paths.ConfigDirectory.Should().Be(Path.Combine("C:\\Users\\albert", ".abox", "config"));
+        paths.StateDirectory.Should().Be(Path.Combine("C:\\Users\\albert", ".abox", "state"));
     }
 
     [Fact]
@@ -27,8 +27,8 @@ public sealed class AboxPathsTests
     {
         var paths = AboxPaths.Resolve("/xdg/config", "/xdg/state", "/home/albert", windows: false);
 
-        Assert.Equal(Path.Combine("/xdg/config", "abox"), paths.ConfigDirectory);
-        Assert.Equal(Path.Combine("/xdg/state", "abox"), paths.StateDirectory);
+        paths.ConfigDirectory.Should().Be(Path.Combine("/xdg/config", "abox"));
+        paths.StateDirectory.Should().Be(Path.Combine("/xdg/state", "abox"));
     }
 
     [Theory]
@@ -39,8 +39,8 @@ public sealed class AboxPathsTests
     {
         var paths = AboxPaths.Resolve(value, value, "/home/albert", windows: false);
 
-        Assert.Equal(Path.Combine("/home/albert", ".config", "abox"), paths.ConfigDirectory);
-        Assert.Equal(Path.Combine("/home/albert", ".local", "state", "abox"), paths.StateDirectory);
+        paths.ConfigDirectory.Should().Be(Path.Combine("/home/albert", ".config", "abox"));
+        paths.StateDirectory.Should().Be(Path.Combine("/home/albert", ".local", "state", "abox"));
     }
 
     [Fact]
@@ -48,9 +48,9 @@ public sealed class AboxPathsTests
     {
         var paths = AboxPaths.For("/config", "/state");
 
-        Assert.Equal(
-            Path.Combine("/state", "builds", "ac", "latest"),
-            paths.BuildDirectory("ac", "latest")
-        );
+        paths
+            .BuildDirectory("ac", "latest")
+            .Should()
+            .Be(Path.Combine("/state", "builds", "ac", "latest"));
     }
 }

@@ -14,7 +14,7 @@ public sealed class KitReferenceTests
     )]
     public void TheRepositoryIsTheNameWithoutItsTag(string reference, string expected)
     {
-        Assert.Equal(expected, KitReference.RepositoryOf(reference));
+        KitReference.RepositoryOf(reference).Should().Be(expected);
     }
 
     [Theory]
@@ -23,6 +23,6 @@ public sealed class KitReferenceTests
     [InlineData("docker.io/acme/pi-config:1.0", true)]
     public void AReferenceWithASlashOrAColonComesFromARegistry(string reference, bool expected)
     {
-        Assert.Equal(expected, KitReference.IsRegistryReference(reference));
+        KitReference.IsRegistryReference(reference).Should().Be(expected);
     }
 }

@@ -3,6 +3,7 @@ using Abox.Configuration;
 using Abox.Naming;
 using Abox.Sbx;
 using Abox.Services;
+using NSubstitute;
 
 namespace Abox.Tests;
 
@@ -10,7 +11,7 @@ public sealed class CreateServiceTests
 {
     private readonly TempDirectory _root = new();
     private readonly TestConsole _console = new();
-    private readonly FakeSbxClient _sbx = new();
+    private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
     private readonly SandboxRecordStore _records;
@@ -25,6 +26,14 @@ public sealed class CreateServiceTests
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
         _service = new CreateService(_store, _records, _paths, _sbx, _console);
+
+        _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(0, string.Empty));
+        _sbx.RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(0, string.Empty));
+        _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>()).Returns((IReadOnlyList<string>)[]);
+        _sbx.AddMcpServerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(0, string.Empty));
     }
 
     [Fact]
@@ -34,21 +43,26 @@ public sealed class CreateServiceTests
 
         var exitCode = await _service.CreateAsync(Request(), CancellationToken.None);
 
-        Assert.Equal(0, exitCode);
-        var request = Assert.Single(_sbx.Created);
-        Assert.Equal("/kits/workload", request.KitSource);
-        Assert.Equal(SandboxName.For(_root.Path), request.Name);
-        Assert.Contains("/kits/pi-config", request.Mixins);
+        exitCode.Should().Be(0);
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.KitSource == "/kits/workload"
+                    && request.Name == SandboxName.For(_root.Path)
+                    && request.Mixins.Contains("/kits/pi-config")
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
     public async Task ABuildThatIsNotThereIsAnError()
     {
-        var exception = await Assert.ThrowsAsync<AboxException>(() =>
-            _service.CreateAsync(Request(), CancellationToken.None)
-        );
+        var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
-        Assert.Contains("abox build --squad ac", exception.Message);
+        var exception = await action.Should().ThrowAsync<AboxException>();
+
+        exception.Which.Message.Should().Contain("abox build --squad ac");
     }
 
     [Fact]
@@ -56,13 +70,14 @@ public sealed class CreateServiceTests
     {
         SaveBuild();
         var name = SandboxName.For(_root.Path);
-        _sbx.Sandboxes.Add(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
 
         var exitCode = await _service.CreateAsync(Request(), CancellationToken.None);
 
-        Assert.Equal(0, exitCode);
-        Assert.Equal(name, Assert.Single(_sbx.Removed));
-        Assert.Contains("already exists", _console.AllText);
+        exitCode.Should().Be(0);
+        await _sbx.Received(1).RemoveSandboxAsync(name, Arg.Any<CancellationToken>());
+        _console.AllText.Should().Contain("already exists");
     }
 
     [Fact]
@@ -70,17 +85,19 @@ public sealed class CreateServiceTests
     {
         SaveBuild();
         _console.Answer = false;
-        _sbx.Sandboxes.Add(
-            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
-        );
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
 
-        var exception = await Assert.ThrowsAsync<AboxException>(() =>
-            _service.CreateAsync(Request(), CancellationToken.None)
-        );
+        var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
-        Assert.Contains("not replaced", exception.Message);
-        Assert.Empty(_sbx.Removed);
-        Assert.Empty(_sbx.Created);
+        var exception = await action.Should().ThrowAsync<AboxException>();
+
+        exception.Which.Message.Should().Contain("not replaced");
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -92,11 +109,17 @@ public sealed class CreateServiceTests
 
         var name = SandboxName.For(_root.Path);
         var hostPath = Path.Combine(_paths.StateDirectory, name, ".config", "opencode", "state");
-        Assert.True(Directory.Exists(hostPath));
+        Directory.Exists(hostPath).Should().BeTrue();
 
-        var mount = Assert.Single(Assert.Single(_sbx.Created).Mounts);
-        Assert.Equal(hostPath, mount.HostPath);
-        Assert.Equal("/home/agent/.config/opencode/state", mount.SandboxPath);
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.Mounts.Count == 1
+                    && request.Mounts[0].HostPath == hostPath
+                    && request.Mounts[0].SandboxPath == "/home/agent/.config/opencode/state"
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
@@ -106,8 +129,15 @@ public sealed class CreateServiceTests
 
         await _service.CreateAsync(Request(), CancellationToken.None);
 
-        Assert.Equal(["elastic"], _sbx.RegisteredMcpServers);
-        Assert.Equal(["elastic"], Assert.Single(_sbx.Created).StaticMcpServers);
+        await _sbx.Received(1)
+            .AddMcpServerAsync("elastic", "https://example.com/mcp", Arg.Any<CancellationToken>());
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.StaticMcpServers.SequenceEqual(new[] { "elastic" })
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
@@ -115,11 +145,11 @@ public sealed class CreateServiceTests
     {
         SaveBuild(mcp: [new ManifestMcp { Name = "elastic" }]);
 
-        var exception = await Assert.ThrowsAsync<AboxException>(() =>
-            _service.CreateAsync(Request(), CancellationToken.None)
-        );
+        var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
-        Assert.Contains("not registered", exception.Message);
+        var exception = await action.Should().ThrowAsync<AboxException>();
+
+        exception.Which.Message.Should().Contain("not registered");
     }
 
     [Fact]
@@ -130,9 +160,9 @@ public sealed class CreateServiceTests
         await _service.CreateAsync(Request(), CancellationToken.None);
 
         var record = _records.Load(SandboxName.For(_root.Path));
-        Assert.NotNull(record);
-        Assert.Equal("ac", record!.Squad);
-        Assert.Equal("latest", record.Tag);
+        record.Should().NotBeNull();
+        record!.Squad.Should().Be("ac");
+        record.Tag.Should().Be("latest");
     }
 
     private CreateRequest Request() => new("ac", _root.Path, "latest");

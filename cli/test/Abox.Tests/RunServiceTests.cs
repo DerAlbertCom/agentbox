@@ -1,9 +1,11 @@
 using Abox.Build;
 using Abox.Configuration;
+using Abox.Infrastructure;
 using Abox.Launchers;
 using Abox.Naming;
 using Abox.Sbx;
 using Abox.Services;
+using NSubstitute;
 
 namespace Abox.Tests;
 
@@ -11,7 +13,7 @@ public sealed class RunServiceTests
 {
     private readonly TempDirectory _root = new();
     private readonly TestConsole _console = new();
-    private readonly FakeSbxClient _sbx = new();
+    private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
     private readonly RunService _service;
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
@@ -21,6 +23,8 @@ public sealed class RunServiceTests
     public RunServiceTests()
     {
         var launchers = new LauncherRegistry([new ShellLauncher()]);
+        var hostPrograms = Substitute.For<IHostPrograms>();
+        hostPrograms.Exists(Arg.Any<string>()).Returns(true);
         _paths = AboxPaths.For(
             Path.Combine(_root.Path, "config"),
             Path.Combine(_root.Path, "state")
@@ -34,56 +38,77 @@ public sealed class RunServiceTests
             _records,
             _create,
             _sbx,
-            new StubHostPrograms(),
+            hostPrograms,
             _console
         );
+
+        _sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(0);
+        _sbx.HasProgramAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(true);
     }
 
     [Fact]
     public async Task TheShellRunsInTheWorkspaceOfTheSandbox()
     {
-        _sbx.Sandboxes.Add(
-            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
-        );
-        _sbx.WorkspaceDirectory = "/home/agent/workspace";
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>())
+            .Returns("/home/agent/workspace");
 
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
             CancellationToken.None
         );
 
-        Assert.Equal(0, exitCode);
-        var exec = Assert.Single(_sbx.Executed);
-        Assert.Equal(["bash", "-l"], exec.Command);
-        Assert.Equal("/home/agent/workspace", exec.WorkingDirectory);
-        Assert.True(exec.AllocateTty);
+        exitCode.Should().Be(0);
+        await _sbx.Received(1)
+            .ExecAsync(
+                Arg.Is<SbxExecRequest>(request =>
+                    request.Command.SequenceEqual(new[] { "bash", "-l" })
+                    && request.WorkingDirectory == "/home/agent/workspace"
+                    && request.AllocateTty
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
     public async Task TheShellRunsInTheFolderWhenTheRuntimeDoesNotSayWhereTheWorkspaceIs()
     {
-        _sbx.Sandboxes.Add(
-            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
-        );
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>()).Returns((string?)null);
 
         await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None);
 
-        Assert.Equal(_root.Path, Assert.Single(_sbx.Executed).WorkingDirectory);
+        await _sbx.Received(1)
+            .ExecAsync(
+                Arg.Is<SbxExecRequest>(request => request.WorkingDirectory == _root.Path),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
     public async Task TheShellRunsTheCommandThatIsGiven()
     {
-        _sbx.Sandboxes.Add(
-            new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.Now)
-        );
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
 
         await _service.RunAsync(
             new RunRequest("shell", _root.Path, ["ls", "-la"]),
             CancellationToken.None
         );
 
-        Assert.Equal(["ls", "-la"], Assert.Single(_sbx.Executed).Command);
+        await _sbx.Received(1)
+            .ExecAsync(
+                Arg.Is<SbxExecRequest>(request =>
+                    request.Command.SequenceEqual(new[] { "ls", "-la" })
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
@@ -94,26 +119,34 @@ public sealed class RunServiceTests
             CancellationToken.None
         );
 
-        Assert.Equal(1, exitCode);
-        Assert.Contains("abox create", _console.AllText);
-        Assert.Empty(_sbx.Executed);
+        exitCode.Should().Be(1);
+        _console.AllText.Should().Contain("abox create");
+        await _sbx.DidNotReceive()
+            .ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
     public async Task ALauncherThatIsNotKnownIsAnError()
     {
-        var exception = await Assert.ThrowsAsync<AboxException>(() =>
-            _service.RunAsync(new RunRequest("nope", _root.Path, []), CancellationToken.None)
-        );
+        var action = () =>
+            _service.RunAsync(new RunRequest("nope", _root.Path, []), CancellationToken.None);
 
-        Assert.Contains("no launcher 'nope'", exception.Message);
+        var exception = await action.Should().ThrowAsync<AboxException>();
+
+        exception.Which.Message.Should().Contain("no launcher 'nope'");
     }
 
     [Fact]
     public async Task ANewerBuildIsOfferedAndReplacesTheSandbox()
     {
         var name = SandboxName.For(_root.Path);
-        _sbx.Sandboxes.Add(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.RemoveSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(0, string.Empty));
+        _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(0, string.Empty));
+        _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>()).Returns((IReadOnlyList<string>)[]);
         _records.Save(
             name,
             new SandboxRecord
@@ -138,9 +171,9 @@ public sealed class RunServiceTests
             CancellationToken.None
         );
 
-        Assert.Equal(0, exitCode);
-        Assert.Contains("newer build", _console.AllText);
-        Assert.Equal(name, Assert.Single(_sbx.Removed));
+        exitCode.Should().Be(0);
+        _console.AllText.Should().Contain("newer build");
+        await _sbx.Received(1).RemoveSandboxAsync(name, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -148,7 +181,8 @@ public sealed class RunServiceTests
     {
         var name = SandboxName.For(_root.Path);
         _console.Answer = false;
-        _sbx.Sandboxes.Add(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
         _records.Save(
             name,
             new SandboxRecord
@@ -164,16 +198,13 @@ public sealed class RunServiceTests
                 Squad = "ac",
                 Tag = "latest",
                 CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
+                WorkloadKitDirectory = "/kits/workload",
             }
         );
 
         await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None);
 
-        Assert.Empty(_sbx.Removed);
-    }
-
-    private sealed class StubHostPrograms : Abox.Infrastructure.IHostPrograms
-    {
-        public bool Exists(string program) => true;
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

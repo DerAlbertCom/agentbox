@@ -13,7 +13,7 @@ public sealed class SandboxNameTests
     [InlineData("...", "folder")]
     public void TheFolderNameHoldsOnlyLettersDigitsAndHyphens(string folder, string expected)
     {
-        Assert.Equal(expected, SandboxName.NormalizeFolderName(folder));
+        SandboxName.NormalizeFolderName(folder).Should().Be(expected);
     }
 
     [Fact]
@@ -21,27 +21,27 @@ public sealed class SandboxNameTests
     {
         var name = SandboxName.For("/home/albert/projects/rwe");
 
-        Assert.StartsWith("rwe-abox-", name);
-        Assert.Equal(5, name["rwe-abox-".Length..].Length);
-        Assert.Matches("^[0-9A-F]{5}$", name["rwe-abox-".Length..]);
+        name.Should().StartWith("rwe-abox-");
+        name["rwe-abox-".Length..].Should().HaveLength(5);
+        name["rwe-abox-".Length..].Should().MatchRegex("^[0-9A-F]{5}$");
     }
 
     [Fact]
     public void TheSameFolderAlwaysGetsTheSameName()
     {
-        Assert.Equal(
-            SandboxName.For("/home/albert/projects/rwe"),
-            SandboxName.For("/home/albert/projects/rwe")
-        );
+        SandboxName
+            .For("/home/albert/projects/rwe")
+            .Should()
+            .Be(SandboxName.For("/home/albert/projects/rwe"));
     }
 
     [Fact]
     public void AnotherFolderGetsAnotherName()
     {
-        Assert.NotEqual(
-            SandboxName.For("/home/albert/projects/rwe"),
-            SandboxName.For("/home/albert/projects/other")
-        );
+        SandboxName
+            .For("/home/albert/projects/rwe")
+            .Should()
+            .NotBe(SandboxName.For("/home/albert/projects/other"));
     }
 
     [Fact]
@@ -49,12 +49,12 @@ public sealed class SandboxNameTests
     {
         var name = SandboxName.For("/home/albert/projects/My Project!");
 
-        Assert.True(name.Length >= 2);
-        Assert.True(char.IsAsciiLetterOrDigit(name[0]));
-        Assert.All(
-            name,
-            character =>
-                Assert.True(char.IsAsciiLetterOrDigit(character) || character is '-' or '.')
-        );
+        name.Length.Should().BeGreaterThanOrEqualTo(2);
+        char.IsAsciiLetterOrDigit(name[0]).Should().BeTrue();
+        name.ToCharArray()
+            .Should()
+            .AllSatisfy(character =>
+                (char.IsAsciiLetterOrDigit(character) || character is '-' or '.').Should().BeTrue()
+            );
     }
 }

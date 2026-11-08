@@ -28,13 +28,13 @@ public sealed class SquadResolverTests
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Equal("ac", squad.Name);
-        Assert.Equal("mti-ca-dotnet", squad.Workload.Name);
-        Assert.Equal("docker.io/sbx/shell-docker-image", squad.Workload.Template);
-        var kit = Assert.Single(squad.Kits);
-        Assert.Equal("pi-config", kit.Name);
-        Assert.True(kit.IsLocal);
-        Assert.EndsWith("kits/pi-config", kit.Directory);
+        squad.Name.Should().Be("ac");
+        squad.Workload.Name.Should().Be("mti-ca-dotnet");
+        squad.Workload.Template.Should().Be("docker.io/sbx/shell-docker-image");
+        var kit = squad.Kits.Should().ContainSingle().Which;
+        kit.Name.Should().Be("pi-config");
+        kit.IsLocal.Should().BeTrue();
+        kit.Directory.Should().EndWith("kits/pi-config");
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public sealed class SquadResolverTests
 
         var squad = _resolver.Resolve(_root.Path, "AC", []);
 
-        Assert.Equal("ac", squad.Name);
+        squad.Name.Should().Be("ac");
     }
 
     [Fact]
@@ -70,8 +70,8 @@ public sealed class SquadResolverTests
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Equal(["pi-config", "other-kit"], squad.Kits.Select(kit => kit.Name));
-        Assert.Equal(2, squad.ConfigFiles.Count);
+        squad.Kits.Select(kit => kit.Name).Should().Equal("pi-config", "other-kit");
+        squad.ConfigFiles.Should().HaveCount(2);
     }
 
     [Fact]
@@ -80,9 +80,9 @@ public sealed class SquadResolverTests
         _root.File("a.abox", "base: b\n");
         _root.File("b.abox", "base: a\n");
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "a", []));
+        var action = () => _resolver.Resolve(_root.Path, "a", []);
 
-        Assert.Contains("cycle", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*cycle*");
     }
 
     [Fact]
@@ -105,9 +105,9 @@ public sealed class SquadResolverTests
             """
         );
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
+        var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Contains("declared twice", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*declared twice*");
     }
 
     [Fact]
@@ -123,9 +123,9 @@ public sealed class SquadResolverTests
             """
         );
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
+        var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Contains("declared twice", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*declared twice*");
     }
 
     [Fact]
@@ -148,9 +148,9 @@ public sealed class SquadResolverTests
             """
         );
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
+        var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Contains("declared twice", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*declared twice*");
     }
 
     [Fact]
@@ -167,9 +167,9 @@ public sealed class SquadResolverTests
             """
         );
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
+        var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Contains("missing", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*missing*");
     }
 
     [Fact]
@@ -190,8 +190,8 @@ public sealed class SquadResolverTests
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
 
-        var kit = Assert.Single(squad.Kits);
-        Assert.Equal("https://example.com", kit.Arguments["url"]);
+        var kit = squad.Kits.Should().ContainSingle().Which;
+        kit.Arguments["url"].Should().Be("https://example.com");
     }
 
     [Fact]
@@ -207,9 +207,9 @@ public sealed class SquadResolverTests
             """
         );
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
+        var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Contains("overlap", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*overlap*");
     }
 
     [Fact]
@@ -226,9 +226,9 @@ public sealed class SquadResolverTests
 
         var squad = _resolver.Resolve(_root.Path, "ac", []);
 
-        var state = Assert.Single(squad.State);
-        Assert.Equal("/home/agent/.config/opencode/state", state.SandboxPath);
-        Assert.Equal(".config/opencode/state", state.RelativePath);
+        var state = squad.State.Should().ContainSingle().Which;
+        state.SandboxPath.Should().Be("/home/agent/.config/opencode/state");
+        state.RelativePath.Should().Be(".config/opencode/state");
     }
 
     [Fact]
@@ -236,9 +236,9 @@ public sealed class SquadResolverTests
     {
         _root.File("ac.abox", "kits:\n  - pi-config\n");
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
+        var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Contains("workload", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*workload*");
     }
 
     [Fact]
@@ -253,9 +253,9 @@ public sealed class SquadResolverTests
             """
         );
 
-        var exception = Assert.Throws<AboxException>(() => _resolver.Resolve(_root.Path, "ac", []));
+        var action = () => _resolver.Resolve(_root.Path, "ac", []);
 
-        Assert.Contains("missing-kit", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*missing-kit*");
     }
 
     [Fact]
@@ -266,7 +266,7 @@ public sealed class SquadResolverTests
 
         var squad = _resolver.Resolve(folder, "ac", []);
 
-        Assert.Equal("mti-ca-dotnet", squad.Workload.Name);
+        squad.Workload.Name.Should().Be("mti-ca-dotnet");
     }
 
     [Fact]
@@ -276,11 +276,9 @@ public sealed class SquadResolverTests
         _root.File("base.abox", "kits:\n  - pi-config\n");
         var personal = _root.File("personal/personal.abox", "base: base\n");
 
-        var exception = Assert.Throws<AboxException>(() =>
-            _resolver.Resolve(_root.Path, "ac", [personal])
-        );
+        var action = () => _resolver.Resolve(_root.Path, "ac", [personal]);
 
-        Assert.Contains("no configuration 'base.abox'", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*no configuration 'base.abox'*");
     }
 
     [Fact]
@@ -305,6 +303,6 @@ public sealed class SquadResolverTests
 
         var squad = _resolver.Resolve(_root.Path, "ac", [personal]);
 
-        Assert.Equal(["pi-config", "personal-kit"], squad.Kits.Select(kit => kit.Name));
+        squad.Kits.Select(kit => kit.Name).Should().Equal("pi-config", "personal-kit");
     }
 }

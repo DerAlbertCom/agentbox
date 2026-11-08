@@ -15,8 +15,8 @@ public sealed class ProcessRunnerTests
 
         var result = await new ProcessRunner().RunAsync(request, CancellationToken.None);
 
-        Assert.True(result.Succeeded);
-        Assert.Contains("the value", result.StandardOutput);
+        result.Succeeded.Should().BeTrue();
+        result.StandardOutput.Should().Contain("the value");
     }
 
     [Fact]
@@ -29,8 +29,8 @@ public sealed class ProcessRunnerTests
 
         var result = await new ProcessRunner().RunAsync(request, CancellationToken.None);
 
-        Assert.True(result.Succeeded);
-        Assert.Contains("a b", result.StandardOutput);
+        result.Succeeded.Should().BeTrue();
+        result.StandardOutput.Should().Contain("a b");
     }
 
     [Fact]
@@ -38,10 +38,10 @@ public sealed class ProcessRunnerTests
     {
         var request = new ProcessRequest("abox-does-not-exist", []);
 
-        var exception = await Assert.ThrowsAsync<AboxException>(() =>
-            new ProcessRunner().RunAsync(request, CancellationToken.None)
-        );
+        var action = () => new ProcessRunner().RunAsync(request, CancellationToken.None);
 
-        Assert.Contains("abox-does-not-exist", exception.Message);
+        var exception = await action.Should().ThrowAsync<AboxException>();
+
+        exception.Which.Message.Should().Contain("abox-does-not-exist");
     }
 }

@@ -22,15 +22,15 @@ public sealed class BuildStoreTests
 
         var manifest = _store.Load("ac", "latest");
 
-        Assert.NotNull(manifest);
-        Assert.Equal("ac", manifest!.Squad);
-        Assert.Equal("latest", manifest.Tag);
+        manifest.Should().NotBeNull();
+        manifest!.Squad.Should().Be("ac");
+        manifest.Tag.Should().Be("latest");
     }
 
     [Fact]
     public void ABuildThatIsNotThereIsNull()
     {
-        Assert.Null(_store.Load("ac", "latest"));
+        _store.Load("ac", "latest").Should().BeNull();
     }
 
     [Fact]
@@ -40,9 +40,9 @@ public sealed class BuildStoreTests
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "build.json"), "not json");
 
-        var exception = Assert.Throws<AboxException>(() => _store.Load("ac", "latest"));
+        var action = () => _store.Load("ac", "latest");
 
-        Assert.Contains("not readable", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*not readable*");
     }
 
     [Fact]
@@ -76,8 +76,12 @@ public sealed class BuildStoreTests
 
         var manifest = _store.Load("ac", "latest")!;
 
-        Assert.Equal("/kits/workload", manifest.WorkloadKitDirectory);
-        Assert.Equal("pi-config", Assert.Single(manifest.Kits).Name);
-        Assert.Equal("/home/agent/.config/opencode", Assert.Single(manifest.State).SandboxPath);
+        manifest.WorkloadKitDirectory.Should().Be("/kits/workload");
+        manifest.Kits.Should().ContainSingle().Which.Name.Should().Be("pi-config");
+        manifest
+            .State.Should()
+            .ContainSingle()
+            .Which.SandboxPath.Should()
+            .Be("/home/agent/.config/opencode");
     }
 }

@@ -16,10 +16,10 @@ public sealed class AboxConfigLoaderTests
 
         var config = AboxConfigLoader.Load(paths);
 
-        Assert.Equal("default-squad", config.DefaultSquad);
-        Assert.Equal("kits", config.KitsDirectory);
-        Assert.Equal("latest", config.DefaultTag);
-        Assert.Null(config.DefaultLocation);
+        config.DefaultSquad.Should().Be("default-squad");
+        config.KitsDirectory.Should().Be("kits");
+        config.DefaultTag.Should().Be("latest");
+        config.DefaultLocation.Should().BeNull();
     }
 
     [Fact]
@@ -41,10 +41,10 @@ public sealed class AboxConfigLoaderTests
             AboxPaths.For(config, Path.Combine(_root.Path, "state"))
         );
 
-        Assert.Equal("ac", loaded.DefaultSquad);
-        Assert.Equal("/home/albert/projects", loaded.DefaultLocation);
-        Assert.Equal("kits", loaded.KitsDirectory);
-        Assert.Equal("dev", loaded.DefaultTag);
+        loaded.DefaultSquad.Should().Be("ac");
+        loaded.DefaultLocation.Should().Be("/home/albert/projects");
+        loaded.KitsDirectory.Should().Be("kits");
+        loaded.DefaultTag.Should().Be("dev");
     }
 
     [Fact]
@@ -54,10 +54,9 @@ public sealed class AboxConfigLoaderTests
         Directory.CreateDirectory(config);
         File.WriteAllText(Path.Combine(config, "config.yaml"), "defaulSquad: ac\n");
 
-        var exception = Assert.Throws<AboxException>(() =>
-            AboxConfigLoader.Load(AboxPaths.For(config, Path.Combine(_root.Path, "state")))
-        );
+        var action = () =>
+            AboxConfigLoader.Load(AboxPaths.For(config, Path.Combine(_root.Path, "state")));
 
-        Assert.Contains("not a known key", exception.Message);
+        action.Should().Throw<AboxException>().WithMessage("*not a known key*");
     }
 }

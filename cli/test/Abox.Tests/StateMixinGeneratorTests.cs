@@ -19,11 +19,11 @@ public sealed class StateMixinGeneratorTests
         _generator.Generate(entries, Path.Combine(_root.Path, "state"));
 
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "state", "state.yaml"));
-        Assert.Contains("# syntax=docker/sandbox-kit:3", descriptor);
-        Assert.Contains("kind: mixin", descriptor);
-        Assert.Equal(2, CountOccurrences(descriptor, "com.docker.sandbox/host-mount@1"));
-        Assert.Contains("path: /home/agent/.config/opencode/state", descriptor);
-        Assert.Contains("path: /home/agent/.local/state/shell", descriptor);
+        descriptor.Should().Contain("# syntax=docker/sandbox-kit:3");
+        descriptor.Should().Contain("kind: mixin");
+        CountOccurrences(descriptor, "com.docker.sandbox/host-mount@1").Should().Be(2);
+        descriptor.Should().Contain("path: /home/agent/.config/opencode/state");
+        descriptor.Should().Contain("path: /home/agent/.local/state/shell");
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public sealed class StateMixinGeneratorTests
         _generator.Generate([], Path.Combine(_root.Path, "state"));
 
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "state", "state.yaml"));
-        Assert.DoesNotContain("host-mount@1", descriptor);
+        descriptor.Should().NotContain("host-mount@1");
     }
 
     private static int CountOccurrences(string text, string value)

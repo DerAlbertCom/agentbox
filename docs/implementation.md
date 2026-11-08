@@ -172,7 +172,7 @@ cli/src/Abox/
   check live in that one place. The arguments are always a list, never a shell string.
 - Each launcher is one class behind `ILauncher`.
 - The services take their dependencies in their constructor, so the tests can hand them
-  a fake sbx (`FakeSbxClient` in the test project).
+  a substitute sbx (NSubstitute in the test project).
 - The YAML is read in one place (`YamlReader`), so every file is read the same way and
   an unknown key is an error everywhere.
 

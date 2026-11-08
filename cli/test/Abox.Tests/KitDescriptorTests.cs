@@ -32,12 +32,12 @@ public sealed class KitDescriptorTests
 
         var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
 
-        Assert.NotNull(descriptor);
-        var service = Assert.Single(descriptor!.Services);
-        Assert.Equal("github", service.Service);
-        Assert.Equal(["runtime"], service.Phases);
-        Assert.Equal("GITHUB_TOKEN", service.EnvironmentVariable);
-        Assert.Equal(["api.github.com"], service.Domains);
+        descriptor.Should().NotBeNull();
+        var service = descriptor!.Services.Should().ContainSingle().Which;
+        service.Service.Should().Be("github");
+        service.Phases.Should().Equal("runtime");
+        service.EnvironmentVariable.Should().Be("GITHUB_TOKEN");
+        service.Domains.Should().Equal("api.github.com");
     }
 
     [Fact]
@@ -60,8 +60,12 @@ public sealed class KitDescriptorTests
 
         var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
 
-        Assert.NotNull(descriptor);
-        Assert.Equal(["build", "runtime"], Assert.Single(descriptor!.Services).Phases);
+        descriptor.Should().NotBeNull();
+        descriptor!
+            .Services.Should()
+            .ContainSingle()
+            .Which.Phases.Should()
+            .Equal("build", "runtime");
     }
 
     [Fact]
@@ -83,8 +87,8 @@ public sealed class KitDescriptorTests
 
         var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
 
-        Assert.NotNull(descriptor);
-        Assert.Empty(descriptor!.Services);
+        descriptor.Should().NotBeNull();
+        descriptor!.Services.Should().BeEmpty();
     }
 
     [Fact]
@@ -92,6 +96,6 @@ public sealed class KitDescriptorTests
     {
         _root.Directory_("kits/empty");
 
-        Assert.Null(KitDescriptor.Load(Path.Combine(_root.Path, "kits", "empty")));
+        KitDescriptor.Load(Path.Combine(_root.Path, "kits", "empty")).Should().BeNull();
     }
 }
