@@ -168,6 +168,9 @@ base image of the team is:
 # teams/sample/sample.workload
 template: docker.io/sbx/shell-docker-image   # the image the base is built on
 
+apt:                                         # the packages of the image
+  - git
+
 mise:                                        # the tools of the image
   - nodejs@24.22.2
   - dotnet@10.0.403                          # the last entry is the default
@@ -178,6 +181,8 @@ scripts:                                     # run while the image is built
 
 - Pin the `template` by tag or digest, not by `latest`. The default template carries a
   Docker Engine inside the sandbox, so agents can build and run containers there.
+- The `apt` entries are package names; they are installed with one `apt-get install`
+  step while the image is built, system before tools.
 - The tools are installed with mise. The versions of one tool are installed in one
   step, so a tool can carry several versions; the last entry decides which one an
   interactive shell starts with.

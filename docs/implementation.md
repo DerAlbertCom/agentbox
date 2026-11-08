@@ -163,6 +163,8 @@ The secrets say how a value is obtained:
 
 ```yaml
 template: docker.io/sbx/shell-docker-image   # the image the base is built on
+apt:
+  - git
 mise:
   - nodejs@24.22.2
   - dotnet@10.0.403                            # the last entry is the default
@@ -170,9 +172,11 @@ scripts:
   - enable-fzf.sh                             # run while the image is built
 ```
 
-The generator writes one install step per tool. The versions of one tool are installed in
-one step, so mise keeps them all, and every list is reversed, because mise activates the
-first entry of its list: the last entry of the workload is the default of the image.
+The packages of `apt` are installed in one step before the tools, with
+`--no-install-recommends`, and the package names are checked. The generator writes one
+install step per tool. The versions of one tool are installed in one step, so mise
+keeps them all, and every list is reversed, because mise activates the first entry of
+its list: the last entry of the workload is the default of the image.
 The GitHub token is passed as a BuildKit secret, so it never lands in a layer. The
 generated image has `/home/agent/workspace` as its working directory.
 

@@ -121,6 +121,7 @@ References never include a file extension. The teams of a project live in a fold
 
 **`.workload`** (YAML)
 - `template`: container image to build on, as in `sbx run --template`. Default `docker.io/sbx/shell-docker-image`, a shell image with Docker Engine inside (`docker.io/sbx/shell-image` is the variant without it). Pin a tag or digest rather than `latest`. *(proposed)* Named `template` so `base` only means the parent `.abox`. *(name proposed)*
+- `apt`: package names, installed with one `apt-get install` before the tools.
 - `mise`: tools. The last entry is the default. The generator writes each tool's list reversed, because mise activates the first entry.
 - `scripts`: run as the last steps of the generated Dockerfile, during the image build.
 

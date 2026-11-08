@@ -63,6 +63,29 @@ public sealed class WorkloadKitGenerator
             .AppendLine("    fi")
             .AppendLine();
 
+        if (workload.Apt.Count > 0)
+        {
+            var install = new StringBuilder()
+                .AppendLine("    apt-get update \\")
+                .AppendLine(
+                    "    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\"
+                );
+
+            foreach (var package in workload.Apt)
+            {
+                install.AppendLine($"    {package} \\");
+            }
+
+            install.Append("    && apt-get clean && rm -rf /var/lib/apt/lists/*");
+
+            dockerfile
+                .AppendLine("# The apt packages are installed in one step, system before tools.")
+                .AppendLine("RUN \\")
+                .Append(install.ToString())
+                .AppendLine()
+                .AppendLine();
+        }
+
         if (workload.Mise.Count > 0)
         {
             dockerfile

@@ -51,6 +51,49 @@ public sealed class WorkloadKitGeneratorTests
     }
 
     [Fact]
+    public void TheAptPackagesAreInstalledInOneStepBeforeTheTools()
+    {
+        var workload = WriteWorkload(
+            """
+            template: docker.io/sbx/shell-docker-image
+            apt:
+              - git
+              - jq
+            mise:
+              - nodejs@24.4.3
+            """
+        );
+
+        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
+
+        var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
+        dockerfile.Should().Contain("apt-get update");
+        dockerfile.Should().Contain("apt-get install -y --no-install-recommends");
+        dockerfile.Should().Contain("    git \\");
+        dockerfile.Should().Contain("    jq \\");
+        dockerfile.Should().Contain("apt-get clean");
+        CountOccurrences(dockerfile, "apt-get update").Should().Be(1);
+        dockerfile
+            .IndexOf("jq", StringComparison.Ordinal)
+            .Should()
+            .BeLessThan(dockerfile.IndexOf("nodejs@24.4.3", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void ANameThatIsNoPackageNameIsAnError()
+    {
+        var write = () =>
+            WriteWorkload(
+                """
+                apt:
+                  - "git; rm -rf /"
+                """
+            );
+
+        write.Should().Throw<AboxException>().WithMessage("*not a package name*");
+    }
+
+    [Fact]
     public void EveryToolHasItsOwnInstallStep()
     {
         var workload = WriteWorkload(
