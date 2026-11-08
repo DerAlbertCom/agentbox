@@ -6,42 +6,49 @@ built yet. It is the file to read first when you pick this work up.
 
 ## The commands
 
-### `abox build --squad <name> [--root <dir>] [--tag <tag>] [--no-verify]`
+### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify]`
 
-1. Reads the `<squad>.abox` file of a team folder under `teams` and follows its `base`
-   chain. The teams folder is looked for in the directory of the command and in its
-   parent directories, so the command works from anywhere in the project. `--squad`
-   can be given more than once.
-2. Checks the chain: a cycle, a kit, an MCP server, a parameter, a state directory or a
+1. Resolves the team: its folder under `teams`, found in the directory of the command
+   or one of its parent directories. `--team` can be given more than once; without it
+   the user configuration `defaultTeam` is used.
+2. Builds every squad of the team that no other squad of the team names as its `base`
+   — the squads named as a base are built with the squad that inherits from them.
+3. Reads the `.abox` of a squad and follows its `base` chain, the base first.
+4. Checks the chain: a cycle, a kit, an MCP server, a parameter, a state directory or a
    secret that is declared twice, overlapping state directories, and a parameter that no
    configuration declares are errors. The error names the duplicate and the files that
    declare it.
-3. Writes the workload kit: `workload.yaml` (the descriptor) and `workload.dockerfile`
+5. Writes the workload kit: `workload.yaml` (the descriptor) and `workload.dockerfile`
    (the recipe) in the build directory, with the scripts of the workload copied into it.
-4. Writes the state mixin: one `host-mount@1` per state directory.
-5. Builds and checks every local kit with `sbx kit inspect`, unless `--no-verify` is
+6. Writes the state mixin: one `host-mount@1` per state directory.
+7. Builds and checks every local kit with `sbx kit inspect`, unless `--no-verify` is
    given.
-6. Writes the manifest of the build: `build.json` in the build directory.
+8. Writes the manifest of the build: `build.json` in the build directory.
 
 The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unless the
 command or the user configuration says otherwise.
 
-### `abox create --squad <name> [--location <path>] [--tag <tag>] [--local-image] [--yes]`
+### `abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag>]
+[--local-image] [--yes]`
 
-1. Reads the manifest of the local build. Without one, the command says which build to
+1. Resolves the team like `abox build` does, from the folder the sandbox works on. The
+   team comes from `--team` or the user configuration `defaultTeam`. The squad comes
+   from `--squad`; without it the command asks which squad of the team to use, and
+   uses the only one without asking.
+2. Reads the manifest of the local build. Without one, the command says which build to
    make.
-2. Names the sandbox after the folder: `<folder>-abox-<hash>`, where the hash is the
+3. Names the sandbox after the folder: `<folder>-abox-<hash>`, where the hash is the
    first five characters of the SHA-256 of the absolute path.
-3. Asks before it replaces a sandbox that is already there, and lists what is lost.
+4. Asks before it replaces a sandbox that is already there, and lists what is lost.
    The state directories on the host are kept: the name of the sandbox does not change.
-4. Creates the state directories on the host under `<state dir>/<sandbox>/` and passes
+5. Creates the state directories on the host under `<state dir>/<sandbox>/` and passes
    one `--mount` per directory.
-5. Registers the MCP servers that have an url and are not registered yet, and passes
+6. Registers the MCP servers that have an url and are not registered yet, and passes
    the names of all of them with `--static-mcp`.
-6. Creates the sandbox: `sbx create <workload kit> <location> --name <sandbox> --kit
+7. Creates the sandbox: `sbx create <workload kit> <location> --name <sandbox> --kit
    <mixin>... --kit-arg <name>=<value>... --mount <host>:<path>... --static-mcp <names>`.
-7. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the squad it
-   comes from and the build it was made of.
+8. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the team
+   and the squad it comes from and the build it was made of.
 
 `--local-image` says that the sandbox is made from the local build. It is the only
 source in this version, so the flag is the default; `--tag` chooses the tag of the
@@ -219,8 +226,11 @@ cli/src/Abox/
   of the team), its `.workload` and the scripts of the workload live in it. The kits
   stay in the `kits` folder of the project, so every team can use them; the workload of
   a team lives in the team folder, a shared one can stay in the `kits` folder.
-- **The name of a squad is the name of its file.** `abox build --squad AC` finds
+- **The name of a squad is the name of its file.** `abox create --squad AC` finds
   `ac.abox` in a team folder and calls the squad `ac`.
+- **A build is of a team.** `--team` names the team folder, and the build makes every
+  squad of it that no other squad names as its base. When `abox create` is not asked
+  for a squad and the team has more than one, it asks which one.
 - **The workspace is where the runtime puts it.** The runtime mounts the folder of the
   host at the same path in the sandbox and says so with `WORKSPACE_DIR`, so the
   launcher asks for it instead of assuming `/home/agent/workspace`.

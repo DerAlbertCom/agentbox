@@ -16,6 +16,12 @@ public interface IConsole
     bool Confirm(string question);
 
     /// <summary>
+    /// Asks the user to pick one of the values, numbered. Returns the index of the pick,
+    /// or null when nothing was picked.
+    /// </summary>
+    int? Choose(string question, IReadOnlyList<string> choices);
+
+    /// <summary>
     /// Reads a value the user should not see, for example a secret. Returns null when
     /// there is nothing to read.
     /// </summary>

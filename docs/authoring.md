@@ -29,19 +29,27 @@ named in this guide, and an unknown key is an error.
 ## From files to a sandbox
 
 ```
-abox build --squad ac                       # make the kits of the squad, check them
-abox create --squad ac --location <folder>  # make a sandbox of the build for a folder
-abox secrets set                            # store the values the kits ask for
-abox run --location <folder>                # open the sandbox of the folder
+abox build --team sample                     # make the kits of the team, check them
+abox create --team sample --location <folder>  # make a sandbox of the build for a folder
+abox secrets set --squad ac                  # store the values the kits of the squad ask for
+abox run --location <folder>                 # open the sandbox of the folder
 ```
 
-- `build` writes the kits into the build directory (`<state dir>/builds/`) and checks
-  every local kit with sbx. With `--no-verify` it writes them without checking, and
-  `--tag` stores the build under another name than `latest`.
+- `build` makes the kits of the team: the workload and every squad of it that no other
+  squad of the team names as its `base`. A squad that others build on comes with the
+  squad that inherits from it. The kits go into the build directory
+  (`<state dir>/builds/`) and every local kit is checked with sbx; with `--no-verify`
+  they are written without checking, and `--tag` stores the build under another name
+  than `latest`.
 - `create` names the sandbox after the folder it works on and asks before it replaces
-  an existing one. `abox create --location <folder>` again replaces the sandbox.
+  an existing one. It creates the sandbox of `--squad`; without it, the command asks
+  which squad of the team to use, and uses the only one without asking.
+  `abox create --team sample --location <folder>` again replaces the sandbox.
 - `run` starts a launcher (a shell, unless said otherwise) in the sandbox. When the
   squad has a newer build than the sandbox was made of, it offers to replace first.
+
+The user configuration (in the abox config directory) can fix the defaults:
+`defaultTeam` is the team the commands use when they are not asked for one.
 
 ## The squad: `.abox`
 

@@ -6,20 +6,20 @@ using Abox.Sbx;
 namespace Abox.Features.Build;
 
 /// <summary>What to build.</summary>
-/// <param name="Squads">The squads to build.</param>
-/// <param name="RootDirectory">The directory the squads' configurations live in.</param>
+/// <param name="Teams">The teams to build, each with the squads a team build makes.</param>
+/// <param name="RootDirectory">The directory of the project that holds its teams folder.</param>
 /// <param name="Tag">The tag the builds are stored under.</param>
 /// <param name="Verify">Whether the kits are built and checked with sbx.</param>
 public sealed record BuildRequest(
-    IReadOnlyList<string> Squads,
+    IReadOnlyList<SquadResolver.ResolvedTeam> Teams,
     string RootDirectory,
     string Tag,
     bool Verify = true
 );
 
 /// <summary>
-/// Builds a squad: resolves its configuration, writes the workload kit and the state
-/// mixin, checks the kits with sbx and keeps the manifest of the result.
+/// Builds the squads of the teams: resolves each squad, writes the workload kit and
+/// the state mixin, checks the kits with sbx and keeps the manifest of the result.
 /// </summary>
 public sealed class BuildService(
     SquadResolver resolver,
@@ -31,14 +31,17 @@ public sealed class BuildService(
     IConsole console
 )
 {
-    /// <summary>Builds the squads and returns the exit code of the command.</summary>
+    /// <summary>Builds the squads of the teams and returns the exit code of the command.</summary>
     public async Task<int> BuildAsync(BuildRequest request, CancellationToken cancellationToken)
     {
-        foreach (var squad in request.Squads)
+        foreach (var team in request.Teams)
         {
-            if (!await BuildSquadAsync(squad, request, cancellationToken))
+            foreach (var squad in team.Squads)
             {
-                return 1;
+                if (!await BuildSquadAsync(team.Name, squad, request, cancellationToken))
+                {
+                    return 1;
+                }
             }
         }
 
@@ -46,6 +49,7 @@ public sealed class BuildService(
     }
 
     private async Task<bool> BuildSquadAsync(
+        string teamName,
         string squadName,
         BuildRequest request,
         CancellationToken cancellationToken
@@ -80,7 +84,7 @@ public sealed class BuildService(
 
         console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
         console.WriteLine(
-            $"Create a sandbox from it with: abox create --squad {squad.Name} --local-image"
+            $"Create a sandbox from it with: abox create --team {teamName} --squad {squad.Name}"
         );
 
         return true;

@@ -39,7 +39,18 @@ public sealed class TestConsole : IConsole
     /// <summary>The values the test hands out, in the order they are asked for.</summary>
     public List<string> Answers { get; } = [];
 
+    /// <summary>The picks the test hands out, one per question, in order.</summary>
+    public List<int> Picks { get; } = [];
+
     private int _next;
+
+    private int _picked;
+
+    public int? Choose(string question, IReadOnlyList<string> choices)
+    {
+        _output.Add(question);
+        return _picked < Picks.Count ? Picks[_picked++] : null;
+    }
 
     public string? ReadSecret(string prompt)
     {

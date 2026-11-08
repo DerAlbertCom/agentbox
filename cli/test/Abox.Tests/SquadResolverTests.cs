@@ -18,6 +18,58 @@ public sealed class SquadResolverTests
     }
 
     [Fact]
+    public void ATeamIsNamedByItsSquadsThatNothingElseUsesAsABase()
+    {
+        _root.File("teams/sample/cape.abox", "workload: mti-ca-dotnet\n");
+        _root.File("teams/sample/ac.abox", "base: cape\n");
+
+        var team = _resolver.ResolveTeam(_root.Path, "sample");
+
+        team.Name.Should().Be("sample");
+        team.Folder.Should().EndWith("sample");
+        team.Squads.Should().Equal("ac");
+    }
+
+    [Fact]
+    public void TheNameOfATeamIsMatchedWithoutRegardToCase()
+    {
+        _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
+
+        var team = _resolver.ResolveTeam(_root.Path, "SAMPLE");
+
+        team.Name.Should().Be("sample");
+        team.Squads.Should().Equal("ac");
+    }
+
+    [Fact]
+    public void ATeamFolderWithoutSquadsIsAnError()
+    {
+        _root.Directory_("teams/sample");
+
+        var action = () => _resolver.ResolveTeam(_root.Path, "sample");
+
+        action.Should().Throw<AboxException>().WithMessage("*no squads*");
+    }
+
+    [Fact]
+    public void SquadsThatAllAreBasesAreAnError()
+    {
+        _root.File("teams/sample/one.abox", "base: one\n");
+
+        var action = () => _resolver.ResolveTeam(_root.Path, "sample");
+
+        action.Should().Throw<AboxException>().WithMessage("*base of another one*");
+    }
+
+    [Fact]
+    public void ATeamThatIsNotThereIsAnError()
+    {
+        var action = () => _resolver.ResolveTeam(_root.Path, "missing");
+
+        action.Should().Throw<AboxException>().WithMessage("*There is no team 'missing'*");
+    }
+
+    [Fact]
     public void ASquadResolvesItsWorkloadAndItsKits()
     {
         _root.File(

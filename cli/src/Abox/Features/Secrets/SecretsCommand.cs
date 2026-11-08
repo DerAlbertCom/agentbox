@@ -1,5 +1,4 @@
 using System.CommandLine;
-using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 
@@ -10,17 +9,11 @@ namespace Abox.Features.Secrets;
 /// </summary>
 public sealed class SecretsCommand : Command
 {
-    public SecretsCommand(
-        AboxConfig config,
-        Preflight preflight,
-        SecretsService secrets,
-        IConsole console
-    )
+    public SecretsCommand(Preflight preflight, SecretsService secrets, IConsole console)
         : base("secrets", "Manage the host secrets the kits of a squad ask for.")
     {
         Subcommands.Add(
             SubCommand(
-                config,
                 preflight,
                 console,
                 "list",
@@ -31,7 +24,6 @@ public sealed class SecretsCommand : Command
         );
         Subcommands.Add(
             SubCommand(
-                config,
                 preflight,
                 console,
                 "set",
@@ -42,7 +34,6 @@ public sealed class SecretsCommand : Command
         );
         Subcommands.Add(
             SubCommand(
-                config,
                 preflight,
                 console,
                 "remove",
@@ -54,7 +45,6 @@ public sealed class SecretsCommand : Command
     }
 
     private static Command SubCommand(
-        AboxConfig config,
         Preflight preflight,
         IConsole console,
         string name,
@@ -65,8 +55,7 @@ public sealed class SecretsCommand : Command
     {
         var squad = new Option<string>("--squad")
         {
-            Description =
-                "The squad whose secrets are meant. Defaults to the squad of the user configuration.",
+            Description = "The squad whose secrets are managed. The command needs it.",
         };
 
         var root = new Option<string>("--root")
@@ -102,8 +91,13 @@ public sealed class SecretsCommand : Command
 
                         var wanted = withService ? parseResult.GetValue(service) ?? [] : [];
 
+                        if (parseResult.GetValue(squad) is not { } squadName)
+                        {
+                            throw new AboxException("No squad is given. Give --squad <name>.");
+                        }
+
                         var request = new SecretsRequest(
-                            parseResult.GetValue(squad) ?? config.DefaultSquad,
+                            squadName,
                             parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
                             wanted
                         );

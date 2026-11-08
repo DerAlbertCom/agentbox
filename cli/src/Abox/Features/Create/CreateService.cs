@@ -1,18 +1,21 @@
 using Abox.Build;
 using Abox.Configuration;
 using Abox.Infrastructure;
+using Abox.Kits;
 using Abox.Naming;
 using Abox.Sbx;
 
 namespace Abox.Features.Create;
 
 /// <summary>What to create.</summary>
-/// <param name="Squad">The squad the sandbox is created from.</param>
+/// <param name="Team">The team whose squads the sandbox is created from.</param>
+/// <param name="Squad">The squad the sandbox is created from, or null when the command asks for one.</param>
 /// <param name="Location">The folder the sandbox works on.</param>
 /// <param name="Tag">The tag of the local build to use.</param>
 /// <param name="AssumeYes">Whether the replacement of an existing sandbox is confirmed already.</param>
 public sealed record CreateRequest(
-    string Squad,
+    SquadResolver.ResolvedTeam Team,
+    string? Squad,
     string Location,
     string Tag,
     bool AssumeYes = false
@@ -32,11 +35,13 @@ public sealed class CreateService(
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
     public async Task<int> CreateAsync(CreateRequest request, CancellationToken cancellationToken)
     {
+        var squad = request.Squad ?? PickSquad(request.Team);
+
         var manifest =
-            store.Load(request.Squad, request.Tag)
+            store.Load(squad, request.Tag)
             ?? throw new AboxException(
-                $"There is no local build of '{request.Squad}' with the tag '{request.Tag}'. "
-                    + $"Build it first: abox build --squad {request.Squad}"
+                $"There is no local build of '{squad}' with the tag '{request.Tag}'. "
+                    + $"Build it first: abox build --team {request.Team.Name}"
             );
 
         var location = Path.GetFullPath(request.Location);
@@ -87,7 +92,8 @@ public sealed class CreateService(
             name,
             new SandboxRecord
             {
-                Squad = request.Squad,
+                Team = request.Team.Name,
+                Squad = squad,
                 Tag = request.Tag,
                 BuildCreatedAt = manifest.CreatedAt,
                 CreatedAt = DateTimeOffset.Now,
@@ -97,6 +103,27 @@ public sealed class CreateService(
         console.WriteLine($"Created sandbox '{name}' for '{location}'.");
         console.WriteLine($"Open it with: abox run --location {location}");
         return 0;
+    }
+
+    /// <summary>
+    /// Asks which squad of the team to use, when the command was not asked for one and
+    /// there is more than one to choose from.
+    /// </summary>
+    private string PickSquad(SquadResolver.ResolvedTeam team)
+    {
+        if (team.Squads.Count == 1)
+        {
+            return team.Squads[0];
+        }
+
+        var pick = console.Choose(
+            $"Which squad of the team '{team.Name}' shall the sandbox be made of?",
+            team.Squads
+        );
+
+        return pick is { } index
+            ? team.Squads[index]
+            : throw new AboxException("No squad is given and none was picked.");
     }
 
     private async Task ReplaceExistingSandboxAsync(

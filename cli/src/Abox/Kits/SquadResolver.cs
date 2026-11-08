@@ -9,6 +9,87 @@ namespace Abox.Kits;
 public sealed class SquadResolver(AboxConfig config)
 {
     /// <summary>
+    /// Resolves a team: its folder in the teams folder of the project, and the squads
+    /// of it that a team build makes, the ones no other squad names as its base.
+    /// </summary>
+    /// <param name="rootDirectory">The directory of the project that holds its teams folder.</param>
+    /// <param name="teamName">The name of the team.</param>
+    public ResolvedTeam ResolveTeam(string rootDirectory, string teamName)
+    {
+        var current = rootDirectory;
+        while (true)
+        {
+            if (TeamFolder(current, teamName) is { } folder)
+            {
+                return Plan(folder);
+            }
+
+            var parent = Path.GetDirectoryName(current);
+            if (parent is null || parent == current)
+            {
+                break;
+            }
+
+            current = parent;
+        }
+
+        throw new AboxException(
+            $"There is no team '{teamName}' in the teams folders of '{rootDirectory}' or of one of its parent directories."
+        );
+    }
+
+    private string? TeamFolder(string directory, string teamName)
+    {
+        var teams = Path.Combine(directory, config.TeamsDirectory);
+        if (!Directory.Exists(teams))
+        {
+            return null;
+        }
+
+        return Directory
+            .EnumerateDirectories(teams)
+            .FirstOrDefault(candidate =>
+                Path.GetFileName(candidate).Equals(teamName, StringComparison.OrdinalIgnoreCase)
+            );
+    }
+
+    /// <summary>
+    /// The squads of a team are the ones no other squad of it names as its base.
+    /// </summary>
+    private ResolvedTeam Plan(string folder)
+    {
+        var name = Path.GetFileName(folder);
+        var files = Directory.EnumerateFiles(folder, "*.abox").ToList();
+        if (files.Count == 0)
+        {
+            throw new AboxException($"There are no squads in the team folder '{folder}'.");
+        }
+
+        var bases = files
+            .Select(AboxFile.Load)
+            .Where(file => file.Base is not null)
+            .Select(file => file.Base!)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var squads = files
+            .Select(file => Path.GetFileNameWithoutExtension(file))
+            .Where(squad => !bases.Contains(squad))
+            .Order(StringComparer.Ordinal)
+            .ToList();
+
+        if (squads.Count == 0)
+        {
+            throw new AboxException(
+                $"Every squad in the team folder '{folder}' is the base of another one."
+            );
+        }
+
+        return new ResolvedTeam(name, folder, squads);
+    }
+
+    public sealed record ResolvedTeam(string Name, string Folder, IReadOnlyList<string> Squads);
+
+    /// <summary>
     /// Resolves a squad from the configurations in a project and the personal
     /// configurations of the user.
     /// </summary>

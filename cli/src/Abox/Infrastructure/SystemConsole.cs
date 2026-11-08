@@ -24,6 +24,24 @@ public sealed class SystemConsole : IConsole
             );
     }
 
+    public int? Choose(string question, IReadOnlyList<string> choices)
+    {
+        Console.Out.WriteLine(question);
+        for (var index = 0; index < choices.Count; index++)
+        {
+            Console.Out.WriteLine($"  {index + 1}. {choices[index]}");
+        }
+
+        Console.Out.Write("Number? ");
+        var answer = Console.ReadLine()?.Trim();
+        if (!int.TryParse(answer, out var pick) || pick < 1 || pick > choices.Count)
+        {
+            return null;
+        }
+
+        return pick - 1;
+    }
+
     public string? ReadSecret(string prompt)
     {
         Console.Out.Write(prompt);

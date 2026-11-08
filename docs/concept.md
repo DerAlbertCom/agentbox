@@ -25,8 +25,8 @@ Maintainers (team members who build base images) use `build` and `publish`. Ever
 
 Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit code of the shell or command it starts.
 
-- **`abox create --squad <name> [--location <path>] [--tag <tag> | --local-image]`**
-  - `--location` defaults to the current folder. `--squad` defaults to `default-squad` in the user config.
+- **`abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag> | --local-image]`**
+  - `--location` defaults to the current folder. `--team` resolves from the `teams` folder next to the location (or the user config `defaultTeam`). Without `--squad`, abox asks which squad of the team to use, when there is more than one.
   - Creates the sandbox from the squad's kit set in JFrog. The default tag is `latest`, pulled with `--pull always`, because sbx's default for kit sets is `missing`, which never refreshes a tag. `--tag` selects another tag. `--local-image` uses the set from the last `abox build` and never pulls. `create` does not read the repository. Personal `.abox` files are added as mixins (`--kit`, experimental in sbx). *(proposed: the resolved squad config travels with the set, see open question 2)*
   - A sandbox that already exists for the location is replaced after confirmation. The confirmation lists what will be lost. State directories are kept: the sandbox name does not change, so their host paths do not change either.
   - An existing sandbox keeps the image it was created from. A newer `latest` reaches only sandboxes created after it (inferred; verify).
@@ -34,7 +34,7 @@ Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit co
   - Starts the sandbox if it is stopped. Never creates a sandbox: if none exists, prints the `abox create` command to run.
   - `shell` works offline. Other launchers list their needs under Launchers.
   - If JFrog has a newer `latest`, asks whether to replace the sandbox now. Skipped offline. *(proposed placement)*
-- **`abox build --squad <names>`** resolves each squad's `.abox` file from the repository root (for now) and builds the squad's kit set: one workload and the mixins reached through `base`. Rejects duplicate kit repositories and file collisions between kits. Layers are shared, not repacked, so squads with common kits share blobs. *(proposed)*
+- **`abox build --team <names>`** resolves each team's folder under `teams` (from now on) and builds the kit set of every squad of it that no other squad of the team names as its `base`: one workload and the mixins reached through the chain. Rejects duplicate kit repositories and file collisions between kits. Layers are shared, not repacked, so squads with common kits share blobs.
 - **`abox publish --squad <names>`** pushes the kit set to JFrog as one reference, with the resolved squad config (see open question 2).
 - **`abox prune`** removes the template images of sbx that stopped being used: it keeps the newest assembled kit set and the kit sources it is built from, and removes the older sets and the kit sources nothing uses. Never removes sandboxes, secrets, or images of other repositories, nor anything an image of unknown age or id holds. *(proposed: also keep anything a stopped sandbox uses; also prune the local builds of the build store)*
 - **`abox secrets`** manages host-side secrets for kits, through `sbx secret` behind the scenes. *(proposed subcommands: `set`, `list`, `remove`)*
@@ -117,7 +117,7 @@ Implement the contract above, register the launcher under its id, and add a row 
 
 ## Configuration files
 
-References never include a file extension. The teams of a project live in a folder per team under `teams/`, and `abox build` resolves each `--squad` to an `.abox` file in one of the team folders: `AC` → `teams/<team>/ac.abox` (case-insensitive). `base` names resolve in the team folders of the project too. The `workload` named by the root config lives in the team folder, or, when it is shared, in the `kits` folder of the project.
+References never include a file extension. The teams of a project live in a folder per team under `teams/`: `abox build` resolves `--team` to such a folder (case-insensitive), and `abox create` and `abox secrets` resolve `--squad` to an `.abox` file in one of the team folders: `AC` → `teams/<team>/ac.abox` (case-insensitive). `base` names resolve in the team folders of the project too. The `workload` named by the root config lives in the team folder, or, when it is shared, in the `kits` folder of the project.
 
 **`.workload`** (YAML)
 - `template`: container image to build on, as in `sbx run --template`. Default `docker.io/sbx/shell-docker-image`, a shell image with Docker Engine inside (`docker.io/sbx/shell-image` is the variant without it). Pin a tag or digest rather than `latest`. *(proposed)* Named `template` so `base` only means the parent `.abox`. *(name proposed)*
@@ -215,7 +215,7 @@ Same rule for every XDG directory: use the variable if it is set, otherwise the 
 ## User configuration
 
 - Location: the `abox` config directory (see Base directories).
-- Contents: default squad, default location, GitHub Enterprise tenant (default `rwe`, giving `rwe.ghe.com`), build settings, and personal `.abox` files (proposed: stored here), which can add but never replace team values. *(proposed)* Also the SSH key pair for `orca`, in `ssh/`.
+- Contents: default team, default location, GitHub Enterprise tenant (default `rwe`, giving `rwe.ghe.com`), build settings, and personal `.abox` files (proposed: stored here), which can add but never replace team values. *(proposed)* Also the SSH key pair for `orca`, in `ssh/`.
 
 ## Agents
 

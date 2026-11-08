@@ -5,6 +5,9 @@ namespace Abox.Build;
 /// </summary>
 public sealed class SandboxRecord
 {
+    /// <summary>The team the sandbox was created from.</summary>
+    public string Team { get; set; } = string.Empty;
+
     /// <summary>The squad the sandbox was created from.</summary>
     public string Squad { get; set; } = string.Empty;
 

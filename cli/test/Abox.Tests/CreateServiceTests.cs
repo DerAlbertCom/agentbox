@@ -4,6 +4,7 @@ using Abox.Features.Create;
 using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
+using Abox.Kits;
 using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
@@ -59,13 +60,50 @@ public sealed class CreateServiceTests
     }
 
     [Fact]
+    public async Task TheOnlySquadOfTheTeamIsUsedWithoutAsking()
+    {
+        SaveBuild();
+        var request = new CreateRequest(
+            new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
+            null,
+            _root.Path,
+            "latest"
+        );
+
+        var exitCode = await _service.CreateAsync(request, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        _console.AllText.Should().NotContain("Which squad");
+        _records.Load(SandboxName.For(_root.Path))!.Squad.Should().Be("ac");
+    }
+
+    [Fact]
+    public async Task TheSquadIsAskedForWhenTheTeamHasMoreThanOne()
+    {
+        SaveBuild();
+        _console.Picks.Add(0);
+        var request = new CreateRequest(
+            new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac", "bd"]),
+            null,
+            _root.Path,
+            "latest"
+        );
+
+        var exitCode = await _service.CreateAsync(request, CancellationToken.None);
+
+        exitCode.Should().Be(0);
+        _console.AllText.Should().Contain("Which squad of the team 'sample'");
+        _records.Load(SandboxName.For(_root.Path))!.Squad.Should().Be("ac");
+    }
+
+    [Fact]
     public async Task ABuildThatIsNotThereIsAnError()
     {
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
         var exception = await action.Should().ThrowAsync<AboxException>();
 
-        exception.Which.Message.Should().Contain("abox build --squad ac");
+        exception.Which.Message.Should().Contain("abox build --team sample");
     }
 
     [Fact]
@@ -168,7 +206,13 @@ public sealed class CreateServiceTests
         record.Tag.Should().Be("latest");
     }
 
-    private CreateRequest Request() => new("ac", _root.Path, "latest");
+    private CreateRequest Request() =>
+        new(
+            new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
+            "ac",
+            _root.Path,
+            "latest"
+        );
 
     private void SaveBuild(List<ManifestMcp>? mcp = null)
     {

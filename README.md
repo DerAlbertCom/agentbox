@@ -13,8 +13,8 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 
 | Command | What it does |
 |---|---|
-| `abox build --squad <name>` | Builds the kit set of a squad: its workload, its kits and the mixin that keeps the state. The result is kept locally. |
-| `abox create --squad <name> [--location <path>]` | Creates the sandbox of a folder from the local build of a squad. |
+| `abox build --team <name>` | Builds the kit set of a team: its workload and the kits of every squad the team builds on. The result is kept locally. |
+| `abox create --team <name> [--squad <name>] [--location <path>]` | Creates the sandbox of a folder from the local build of a squad. Without `--squad`, the command asks which one. |
 | `abox run [<launcher>] [--location <path>] [-- <argv>...]` | Starts a launcher for the sandbox of a folder. The default launcher is a shell. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
 
@@ -52,7 +52,7 @@ reference sbx resolves.
 cd cli
 dotnet build
 dotnet test
-dotnet run --project src/Abox -- build --squad ac --root .. --no-verify
+dotnet run --project src/Abox -- build --team sample --root .. --no-verify
 ```
 
 The command line needs `sbx` on the PATH: it calls sbx for every sandbox operation and

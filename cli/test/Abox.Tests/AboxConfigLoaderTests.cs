@@ -16,7 +16,7 @@ public sealed class AboxConfigLoaderTests
 
         var config = AboxConfigLoader.Load(paths);
 
-        config.DefaultSquad.Should().Be("default-squad");
+        config.DefaultTeam.Should().BeNull();
         config.KitsDirectory.Should().Be("kits");
         config.DefaultTag.Should().Be("latest");
         config.DefaultLocation.Should().BeNull();
@@ -30,7 +30,7 @@ public sealed class AboxConfigLoaderTests
         File.WriteAllText(
             Path.Combine(config, "config.yaml"),
             """
-            defaultSquad: ac
+            defaultTeam: ac
             defaultLocation: /home/albert/projects
             kitsDirectory: kits
             defaultTag: dev
@@ -41,7 +41,7 @@ public sealed class AboxConfigLoaderTests
             AboxPaths.For(config, Path.Combine(_root.Path, "state"))
         );
 
-        loaded.DefaultSquad.Should().Be("ac");
+        loaded.DefaultTeam.Should().Be("ac");
         loaded.DefaultLocation.Should().Be("/home/albert/projects");
         loaded.KitsDirectory.Should().Be("kits");
         loaded.DefaultTag.Should().Be("dev");

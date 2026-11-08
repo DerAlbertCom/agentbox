@@ -2,6 +2,7 @@ using System.CommandLine;
 using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
+using Abox.Kits;
 
 namespace Abox.Features.Create;
 
@@ -13,15 +14,22 @@ public sealed class CreateCommand : Command
     public CreateCommand(
         AboxConfig config,
         Preflight preflight,
+        SquadResolver resolver,
         CreateService create,
         IConsole console
     )
         : base("create", "Create the sandbox of a folder from the local build of a squad.")
     {
+        var team = new Option<string>("--team")
+        {
+            Description =
+                "The team the squad belongs to. Defaults to the team of the user configuration.",
+        };
+
         var squad = new Option<string>("--squad")
         {
             Description =
-                "The squad the sandbox is created from. Defaults to the squad of the user configuration.",
+                "The squad the sandbox is created from. Without it, the command asks which squad to use.",
         };
 
         var location = new Option<string>("--location")
@@ -47,6 +55,7 @@ public sealed class CreateCommand : Command
             Description = "Replace an existing sandbox without asking.",
         };
 
+        Options.Add(team);
         Options.Add(squad);
         Options.Add(location);
         Options.Add(tag);
@@ -55,19 +64,31 @@ public sealed class CreateCommand : Command
 
         SetAction(
             async (parseResult, cancellationToken) =>
-            {
-                var request = new CreateRequest(
-                    parseResult.GetValue(squad) ?? config.DefaultSquad,
-                    parseResult.GetValue(location)
-                        ?? config.DefaultLocation
-                        ?? Directory.GetCurrentDirectory(),
-                    parseResult.GetValue(tag) ?? config.DefaultTag,
-                    parseResult.GetValue(assumeYes)
-                );
-
-                return await CommandHandling.RunAsync(
+                await CommandHandling.RunAsync(
                     async () =>
                     {
+                        var teamName =
+                            parseResult.GetValue(team)
+                            ?? config.DefaultTeam
+                            ?? throw new AboxException(
+                                "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
+                            );
+
+                        var resolved = resolver.ResolveTeam(
+                            Directory.GetCurrentDirectory(),
+                            teamName
+                        );
+
+                        var request = new CreateRequest(
+                            resolved,
+                            parseResult.GetValue(squad),
+                            parseResult.GetValue(location)
+                                ?? config.DefaultLocation
+                                ?? Directory.GetCurrentDirectory(),
+                            parseResult.GetValue(tag) ?? config.DefaultTag,
+                            parseResult.GetValue(assumeYes)
+                        );
+
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                         {
                             return 1;
@@ -83,8 +104,7 @@ public sealed class CreateCommand : Command
                         return await create.CreateAsync(request, cancellationToken);
                     },
                     console
-                );
-            }
+                )
         );
     }
 }

@@ -5,8 +5,8 @@ namespace Abox.Configuration;
 /// </summary>
 public sealed class AboxConfig
 {
-    /// <summary>The squad used when the command line does not name one.</summary>
-    public string DefaultSquad { get; init; } = "default-squad";
+    /// <summary>The team used when the command line does not name one. Null means none.</summary>
+    public string? DefaultTeam { get; init; }
 
     /// <summary>The folder used when the command line does not name one. Null means the current folder.</summary>
     public string? DefaultLocation { get; init; }

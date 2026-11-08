@@ -2,6 +2,7 @@ using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Create;
 using Abox.Infrastructure;
+using Abox.Kits;
 using Abox.Launchers;
 using Abox.Naming;
 using Abox.Sbx;
@@ -19,6 +20,7 @@ public sealed record RunRequest(string LauncherId, string Location, IReadOnlyLis
 /// </summary>
 public sealed class RunService(
     LauncherRegistry launchers,
+    SquadResolver resolver,
     BuildStore store,
     SandboxRecordStore records,
     CreateService create,
@@ -106,6 +108,13 @@ public sealed class RunService(
             return true;
         }
 
+        // A record without a team comes from an older version of abox; the command then
+        // cannot say which build is newer.
+        if (string.IsNullOrEmpty(record.Team))
+        {
+            return true;
+        }
+
         var manifest = store.Load(record.Squad, record.Tag);
         if (manifest is null || manifest.CreatedAt <= record.BuildCreatedAt)
         {
@@ -121,8 +130,10 @@ public sealed class RunService(
             return true;
         }
 
+        var team = resolver.ResolveTeam(Path.GetFullPath(location), record.Team);
+
         return await create.CreateAsync(
-                new CreateRequest(record.Squad, location, record.Tag, AssumeYes: true),
+                new CreateRequest(team, record.Squad, location, record.Tag, AssumeYes: true),
                 cancellationToken
             ) == 0;
     }

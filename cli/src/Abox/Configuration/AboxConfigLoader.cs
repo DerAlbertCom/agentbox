@@ -9,7 +9,7 @@ public static class AboxConfigLoader
 {
     private static readonly string[] KnownKeys =
     [
-        "defaultSquad",
+        "defaultTeam",
         "defaultLocation",
         "teamsDirectory",
         "kitsDirectory",
@@ -30,7 +30,7 @@ public static class AboxConfigLoader
 
         return new AboxConfig
         {
-            DefaultSquad = Or(reader.GetString("defaultSquad"), defaults.DefaultSquad),
+            DefaultTeam = reader.GetString("defaultTeam"),
             DefaultLocation = reader.GetString("defaultLocation"),
             TeamsDirectory = Or(reader.GetString("teamsDirectory"), defaults.TeamsDirectory),
             KitsDirectory = Or(reader.GetString("kitsDirectory"), defaults.KitsDirectory),

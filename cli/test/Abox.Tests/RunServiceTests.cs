@@ -5,6 +5,7 @@ using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
 using Abox.Infrastructure;
+using Abox.Kits;
 using Abox.Launchers;
 using Abox.Naming;
 using Abox.Sbx;
@@ -37,6 +38,7 @@ public sealed class RunServiceTests
         _create = new CreateService(_store, _records, _paths, _sbx, _console);
         _service = new RunService(
             launchers,
+            new SquadResolver(new AboxConfig()),
             _store,
             _records,
             _create,
@@ -150,10 +152,12 @@ public sealed class RunServiceTests
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
         _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>()).Returns((IReadOnlyList<string>)[]);
+        _root.File("teams/sample/ac.abox", "workload: sample\n");
         _records.Save(
             name,
             new SandboxRecord
             {
+                Team = "sample",
                 Squad = "ac",
                 Tag = "latest",
                 BuildCreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
@@ -186,10 +190,12 @@ public sealed class RunServiceTests
         _console.Answer = false;
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _root.File("teams/sample/ac.abox", "workload: sample\n");
         _records.Save(
             name,
             new SandboxRecord
             {
+                Team = "sample",
                 Squad = "ac",
                 Tag = "latest",
                 BuildCreatedAt = new DateTimeOffset(2026, 1, 1, 0, 0, 0, TimeSpan.Zero),
