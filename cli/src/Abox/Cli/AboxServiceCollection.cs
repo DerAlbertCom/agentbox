@@ -43,6 +43,7 @@ public static class AboxServiceCollection
         services.AddSingleton(provider => new LauncherRegistry(provider.GetServices<ILauncher>()));
         services.AddSingleton<BuildService>();
         services.AddSingleton<CreateService>();
+        services.AddSingleton<PruneService>();
         services.AddSingleton<SecretsService>();
         services.AddSingleton<RunService>();
         return services;

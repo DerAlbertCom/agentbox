@@ -39,6 +39,11 @@ public static class AboxCommand
                     services.GetRequiredService<TrailingArguments>(),
                     services.GetRequiredService<IConsole>()
                 ),
+                PruneCommand.Create(
+                    services.GetRequiredService<Preflight>(),
+                    services.GetRequiredService<PruneService>(),
+                    services.GetRequiredService<IConsole>()
+                ),
                 SecretsCommand.Create(
                     services.GetRequiredService<AboxConfig>(),
                     services.GetRequiredService<Preflight>(),
