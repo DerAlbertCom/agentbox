@@ -184,7 +184,8 @@ scripts:                                     # run while the image is built
 - Pin the `template` by tag or digest, not by `latest`. The default template carries a
   Docker Engine inside the sandbox, so agents can build and run containers there.
 - The `apt` entries are package names; they are installed with one `apt-get install`
-  step while the image is built, system before tools.
+  step while the image is built, as root and before the tools, so the tools then land
+  in the home of the agent user with the packages behind them.
 - The tools are installed with mise. The versions of one tool are installed in one
   step, so a tool can carry several versions; the last entry decides which one an
   interactive shell starts with.

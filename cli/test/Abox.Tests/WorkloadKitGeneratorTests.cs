@@ -80,6 +80,32 @@ public sealed class WorkloadKitGeneratorTests
     }
 
     [Fact]
+    public void ThePackagesAreInstalledAsRootAndTheToolsAsTheAgentUser()
+    {
+        var workload = WriteWorkload(
+            """
+            apt:
+              - git
+            mise:
+              - nodejs@24.4.3
+            """
+        );
+
+        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
+
+        var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
+        dockerfile.Should().Contain("USER root\nRUN \\\n    apt-get update");
+        dockerfile
+            .Should()
+            .Contain("lists/*\nUSER agent\n\n# mise manages the tools of this image");
+        dockerfile
+            .Should()
+            .Contain("# mise manages the tools of this image, as the agent user.\nENV PATH=");
+        CountOccurrences(dockerfile, "USER root").Should().Be(1);
+        CountOccurrences(dockerfile, "USER agent").Should().Be(2);
+    }
+
+    [Fact]
     public void ANameThatIsNoPackageNameIsAnError()
     {
         var write = () =>

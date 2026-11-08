@@ -182,8 +182,9 @@ scripts:
   - enable-fzf.sh                             # run while the image is built
 ```
 
-The packages of `apt` are installed in one step before the tools, with
-`--no-install-recommends`, and the package names are checked. The generator writes one
+The packages of `apt` are installed in one step before the tools, as root and with
+`--no-install-recommends`, and the package names are checked; the image switches back
+to the agent user after them. The generator writes one
 install step per tool. The versions of one tool are installed in one step, so mise
 keeps them all, and every list is reversed, because mise activates the first entry of
 its list: the last entry of the workload is the default of the image.
