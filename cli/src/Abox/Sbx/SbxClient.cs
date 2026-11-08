@@ -102,6 +102,44 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
         );
     }
 
+    /// <summary>The template images the local runtime holds.</summary>
+    public async Task<IReadOnlyList<TemplateImage>> ListTemplatesAsync(
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await runner.RunAsync(
+            new ProcessRequest(ExecutableName, ["template", "ls", "--json"]),
+            cancellationToken
+        );
+        if (!result.Succeeded)
+        {
+            throw new AboxException($"'sbx template ls' failed: {Describe(result)}");
+        }
+
+        return Deserialize<List<SbxTemplate>>(result.StandardOutput, "sbx template ls")
+            .Where(template => !string.IsNullOrEmpty(template.Tag))
+            .Select(template => new TemplateImage(
+                template.Repository ?? string.Empty,
+                template.Tag!,
+                template.Id ?? string.Empty,
+                template.CreatedAt
+            ))
+            .ToList();
+    }
+
+    /// <summary>Removes one template image by reference, without asking.</summary>
+    public async Task<SbxOutcome> RemoveTemplateAsync(
+        string reference,
+        CancellationToken cancellationToken
+    )
+    {
+        var result = await runner.RunAsync(
+            new ProcessRequest(ExecutableName, ["template", "rm", reference, "--force"]),
+            cancellationToken
+        );
+        return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
+    }
+
     /// <summary>Creates a sandbox from a workload kit and its mixins.</summary>
     public async Task<SbxOutcome> CreateAsync(
         SbxCreateRequest request,

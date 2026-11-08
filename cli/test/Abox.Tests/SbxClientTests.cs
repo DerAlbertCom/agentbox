@@ -57,6 +57,49 @@ public sealed class SbxClientTests
     }
 
     [Fact]
+    public async Task TheTemplatesAreReadFromTheJsonOutput()
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProcessResult(
+                    0,
+                    """
+                    [
+                      {
+                        "id": "527ef0280e47",
+                        "repository": "docker.io/library/sandbox-kit-assembled",
+                        "tag": "0307199587cd420e",
+                        "flavor": "shell-docker",
+                        "created_at": "2026-11-08T14:49:51Z",
+                        "size": 1389240008
+                      },
+                      {
+                        "id": "ecc48f9d23bd",
+                        "repository": "docker.io/library/sbx-kit-src",
+                        "tag": "pi-config-eacbe0b12b58",
+                        "created_at": "2026-11-08T14:55:39Z",
+                        "size": 6957
+                      }
+                    ]
+                    """,
+                    string.Empty
+                )
+            );
+
+        var templates = await _client.ListTemplatesAsync(CancellationToken.None);
+
+        templates.Should().HaveCount(2);
+        templates[0]
+            .Reference.Should()
+            .Be("docker.io/library/sandbox-kit-assembled:0307199587cd420e");
+        templates[0].Id.Should().Be("527ef0280e47");
+        templates[0].CreatedAt.Should().Be(DateTimeOffset.Parse("2026-11-08T14:49:51Z"));
+        templates[1].Repository.Should().Be("docker.io/library/sbx-kit-src");
+        templates[1].CreatedAt.Should().NotBeNull();
+    }
+
+    [Fact]
     public async Task TheDiagnoseReportIsReadFromTheJsonOutput()
     {
         _runner

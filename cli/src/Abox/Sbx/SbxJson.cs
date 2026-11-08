@@ -68,6 +68,25 @@ internal sealed class SbxCustomSecret
     public string? EnvironmentVariable { get; set; }
 }
 
+/// <summary>One template image of <c>sbx template ls --json</c>.</summary>
+internal sealed class SbxTemplate
+{
+    [JsonPropertyName("id")]
+    public string? Id { get; set; }
+
+    [JsonPropertyName("repository")]
+    public string? Repository { get; set; }
+
+    [JsonPropertyName("tag")]
+    public string? Tag { get; set; }
+
+    [JsonPropertyName("created_at")]
+    public DateTimeOffset? CreatedAt { get; set; }
+
+    [JsonPropertyName("size")]
+    public long? Size { get; set; }
+}
+
 /// <summary>One MCP server of <c>sbx mcp ls --json</c>.</summary>
 internal sealed class SbxMcpServer
 {

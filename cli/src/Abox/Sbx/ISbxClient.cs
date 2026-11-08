@@ -17,6 +17,12 @@ public interface ISbxClient
 
     Task<SandboxInfo?> FindSandboxAsync(string name, CancellationToken cancellationToken);
 
+    /// <summary>The template images the local runtime holds.</summary>
+    Task<IReadOnlyList<TemplateImage>> ListTemplatesAsync(CancellationToken cancellationToken);
+
+    /// <summary>Removes one template image by reference, without asking.</summary>
+    Task<SbxOutcome> RemoveTemplateAsync(string reference, CancellationToken cancellationToken);
+
     Task<SbxOutcome> CreateAsync(SbxCreateRequest request, CancellationToken cancellationToken);
 
     Task<SbxOutcome> RemoveSandboxAsync(string name, CancellationToken cancellationToken);
