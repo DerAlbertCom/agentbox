@@ -45,10 +45,16 @@ public sealed class BuildCommand : Command
             Description = "Write the kit sources without building and checking them with sbx.",
         };
 
+        var personal = new Option<bool>("--no-personal")
+        {
+            Description = "Exclude personal .abox files to make a build safe to publish.",
+        };
+
         Options.Add(teams);
         Options.Add(root);
         Options.Add(tag);
         Options.Add(verify);
+        Options.Add(personal);
 
         SetAction(
             async (parseResult, cancellationToken) =>
@@ -69,15 +75,17 @@ public sealed class BuildCommand : Command
                             );
                         }
 
-                        var rootDirectory =
-                            parseResult.GetValue(root) ?? Directory.GetCurrentDirectory();
+                        var rootDirectory = Path.GetFullPath(
+                            parseResult.GetValue(root) ?? Directory.GetCurrentDirectory()
+                        );
                         var request = new BuildRequest(
                             wanted
                                 .Select(team => resolver.ResolveTeam(rootDirectory, team))
                                 .ToList(),
                             rootDirectory,
                             parseResult.GetValue(tag) ?? config.DefaultTag,
-                            !parseResult.GetValue(verify)
+                            !parseResult.GetValue(verify),
+                            !parseResult.GetValue(personal)
                         );
 
                         if (!await preflight.EnsureReadyAsync(cancellationToken))

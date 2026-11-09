@@ -1,8 +1,8 @@
 namespace Abox.Features.Build;
 
 /// <summary>
-/// The name a team's kit set is published under. The registry host is not wired yet,
-/// so this is only the part abox owns: a tenant prefix and the team.
+/// The unqualified team reference kept in local build manifests. Publishing adds
+/// a registry prefix and a stable, separate squad path segment.
 /// </summary>
 public static class ImageName
 {

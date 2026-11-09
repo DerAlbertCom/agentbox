@@ -18,6 +18,9 @@ public sealed class BuildManifest
     /// <summary>The name of the workload the base image is built from.</summary>
     public string WorkloadName { get; set; } = string.Empty;
 
+    /// <summary>The JFrog repository selected by the resolved workload.</summary>
+    public string? PublishRepository { get; set; }
+
     /// <summary>The directory of the generated workload kit.</summary>
     public string WorkloadKitDirectory { get; set; } = string.Empty;
 
@@ -39,8 +42,14 @@ public sealed class BuildManifest
     /// <summary>The configuration files the squad is made of.</summary>
     public List<string> ConfigFiles { get; set; } = [];
 
-    /// <summary>The reference the kit set of the team is published under, registry host not included.</summary>
+    /// <summary>The unqualified team ownership marker; remote publication adds a squad path segment.</summary>
     public string? Reference { get; set; }
+
+    /// <summary>Whether personal configuration was merged; null means an older, unproven build.</summary>
+    public bool? IncludesPersonalConfigurations { get; set; }
+
+    /// <summary>SHA-256 fingerprints of the local source directories and configuration files.</summary>
+    public Dictionary<string, string> SourceHashes { get; set; } = [];
 }
 
 /// <summary>A kit of a local build.</summary>

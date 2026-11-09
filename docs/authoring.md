@@ -30,7 +30,7 @@ named in this guide, and an unknown key is an error.
 
 ```
 abox build --team sample                     # make the kits of the team, check them
-abox create --team sample --location <folder>  # make a sandbox of the build for a folder
+abox create --team sample --local --location <folder>  # test the local build for a folder
 abox secrets set --team sample --squad ac    # store the values the kits of the squad ask for
 abox run --location <folder>                 # open the sandbox of the folder
 ```
@@ -44,9 +44,10 @@ abox run --location <folder>                 # open the sandbox of the folder
 - `create` names the sandbox after the folder it works on and asks before it replaces
   an existing one. It creates the sandbox of `--squad`; without it, the command asks
   which squad of the team to use, and uses the only one without asking. `--tag` uses
-  another tag of the local build than `latest`, and `--local` uses the templates that
-  are in sbx and never pulls from the registry.
-  `abox create --team sample --location <folder>` again replaces the sandbox.
+   another tag than `latest`. By default it pulls the published set from the user's
+   `pullRepository` (`mtiae-docker-release` by default); `--local` uses the local kits
+   and never pulls. Both still need local build metadata for state and MCP settings.
+   `abox create --team sample --local --location <folder>` again replaces the sandbox.
 - `run` starts a launcher (a shell, unless said otherwise) in the sandbox. When the
   squad has a newer build than the sandbox was made of, it offers to replace first.
 
@@ -169,6 +170,7 @@ base image of the team is:
 ```yaml
 # teams/sample/sample.workload
 template: docker.io/sbx/shell-docker-image   # the image the base is built on
+publishRepository: mtiae-developer-container-images-local
 
 apt:                                         # the packages of the image
   - git
@@ -183,6 +185,13 @@ scripts:                                     # run while the image is built
 
 - Pin the `template` by tag or digest, not by `latest`. The default template carries a
   Docker Engine inside the sandbox, so agents can build and run containers there.
+- `publishRepository` is the JFrog repository name, not a URL or image reference.
+  `abox publish` uses `rwest.jfrog.io/<publishRepository>` for the squad's set and
+  all locally built components. Use one lowercase registry path segment: letters
+  and digits separated by `.`, `_`, `__` or one or more `-`; no host, slash, tag or
+  whitespace. It is optional for local builds, but required to publish; there is no
+  fallback repository. Each squad inherits the workload selected by its root
+  `.abox`, including this setting. Rebuild with `--no-personal` after changing it.
 - The `apt` entries are package names; they are installed with one `apt-get install`
   step while the image is built, as root and before the tools, so the tools then land
   in the home of the agent user with the packages behind them.

@@ -103,7 +103,7 @@ public sealed class RunService(
     )
     {
         var record = records.Load(name);
-        if (record is null)
+        if (record is null || record.KitReference is not null)
         {
             return true;
         }
@@ -133,7 +133,14 @@ public sealed class RunService(
         var team = resolver.ResolveTeam(Path.GetFullPath(location), record.Team);
 
         return await create.CreateAsync(
-                new CreateRequest(team, record.Squad, location, record.Tag, AssumeYes: true),
+                new CreateRequest(
+                    team,
+                    record.Squad,
+                    location,
+                    record.Tag,
+                    AssumeYes: true,
+                    Local: true
+                ),
                 cancellationToken
             ) == 0;
     }

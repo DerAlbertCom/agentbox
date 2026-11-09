@@ -14,6 +14,51 @@ public sealed class SbxClientTests
         _client = new SbxClient(_runner);
     }
 
+    [Theory]
+    [InlineData("rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest", "always")]
+    [InlineData("/kits/workload", "never")]
+    public async Task CreationPassesTheExplicitPullPolicy(string source, string pullPolicy)
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, string.Empty, string.Empty));
+
+        var outcome = await _client.CreateAsync(
+            new SbxCreateRequest(
+                source,
+                "/workspace",
+                "sample",
+                [],
+                new Dictionary<string, string>(),
+                [],
+                [],
+                pullPolicy
+            ),
+            CancellationToken.None
+        );
+
+        outcome.Succeeded.Should().BeTrue();
+        await _runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.SequenceEqual(
+                        new[]
+                        {
+                            "create",
+                            source,
+                            "/workspace",
+                            "--name",
+                            "sample",
+                            "--pull",
+                            pullPolicy,
+                        }
+                    )
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
     [Fact]
     public async Task TheVersionIsReadFromTheJsonOutput()
     {

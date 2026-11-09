@@ -10,11 +10,13 @@ namespace Abox.Features.Build;
 /// <param name="RootDirectory">The directory of the project that holds its teams folder.</param>
 /// <param name="Tag">The tag the builds are stored under.</param>
 /// <param name="Verify">Whether the kits are built and checked with sbx.</param>
+/// <param name="IncludePersonalConfigurations">Whether personal .abox files are merged into this local build.</param>
 public sealed record BuildRequest(
     IReadOnlyList<SquadResolver.ResolvedTeam> Teams,
     string RootDirectory,
     string Tag,
-    bool Verify = true
+    bool Verify = true,
+    bool IncludePersonalConfigurations = true
 );
 
 /// <summary>
@@ -55,12 +57,10 @@ public sealed class BuildService(
         CancellationToken cancellationToken
     )
     {
-        var squad = resolver.Resolve(
-            request.RootDirectory,
-            teamName,
-            squadName,
-            personalConfigurations.Files
-        );
+        var personalFiles = request.IncludePersonalConfigurations
+            ? personalConfigurations.Files
+            : [];
+        var squad = resolver.Resolve(request.RootDirectory, teamName, squadName, personalFiles);
         var buildDirectory = store.DirectoryFor(squad.Name, request.Tag);
 
         var workloadDirectory = Path.Combine(buildDirectory, WorkloadKitGenerator.KitName);
@@ -76,12 +76,22 @@ public sealed class BuildService(
             stateGenerator.Generate(squad.State, stateDirectory);
         }
 
+        var manifest = Manifest(teamName, squad, request, workloadDirectory, stateDirectory);
+        manifest.IncludesPersonalConfigurations = personalFiles.Count > 0;
+        if (!request.IncludePersonalConfigurations)
+        {
+            manifest.SourceHashes = BuildSources.Capture(manifest);
+        }
         if (request.Verify)
         {
             await VerifyAsync(squad, workloadDirectory, stateDirectory, cancellationToken);
         }
 
-        store.Save(Manifest(teamName, squad, request, workloadDirectory, stateDirectory));
+        if (!request.IncludePersonalConfigurations)
+        {
+            BuildSources.EnsureUnchanged(manifest);
+        }
+        store.Save(manifest);
 
         console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
         console.WriteLine(
@@ -141,9 +151,10 @@ public sealed class BuildService(
             CreatedAt = DateTimeOffset.Now,
             RootDirectory = squad.RootDirectory,
             WorkloadName = squad.Workload.Name,
+            PublishRepository = squad.Workload.PublishRepository,
             WorkloadKitDirectory = workloadDirectory,
             Template = squad.Workload.Template,
-            ConfigFiles = [.. squad.ConfigFiles],
+            ConfigFiles = [.. squad.ConfigFiles, squad.Workload.Path],
             StateMixinDirectory = stateDirectory,
         };
 

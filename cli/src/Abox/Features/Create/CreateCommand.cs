@@ -7,7 +7,7 @@ using Abox.Kits;
 namespace Abox.Features.Create;
 
 /// <summary>
-/// <c>abox create</c>: creates the sandbox of a folder from the local build of a squad.
+/// <c>abox create</c>: creates the sandbox of a folder from a published or local squad kit set.
 /// </summary>
 public sealed class CreateCommand : Command
 {
@@ -18,7 +18,10 @@ public sealed class CreateCommand : Command
         CreateService create,
         IConsole console
     )
-        : base("create", "Create the sandbox of a folder from the local build of a squad.")
+        : base(
+            "create",
+            "Create the sandbox of a folder from a published squad kit set, or a local build with --local."
+        )
     {
         var team = new Option<string>("--team")
         {
@@ -41,7 +44,7 @@ public sealed class CreateCommand : Command
         var tag = new Option<string>("--tag")
         {
             Description =
-                "The tag of the local build to use. Defaults to the tag of the user configuration.",
+                "The tag of the kit set and its local build metadata. Defaults to the tag of the user configuration.",
         };
 
         var local = new Option<bool>("--local")
@@ -85,19 +88,13 @@ public sealed class CreateCommand : Command
                                 ?? config.DefaultLocation
                                 ?? Directory.GetCurrentDirectory(),
                             parseResult.GetValue(tag) ?? config.DefaultTag,
-                            parseResult.GetValue(assumeYes)
+                            parseResult.GetValue(assumeYes),
+                            Local: parseResult.GetValue(local)
                         );
 
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                         {
                             return 1;
-                        }
-
-                        if (!parseResult.GetValue(local))
-                        {
-                            console.WriteError(
-                                "note: this version of abox uses the templates that are in sbx."
-                            );
                         }
 
                         return await create.CreateAsync(request, cancellationToken);

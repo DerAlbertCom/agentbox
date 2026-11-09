@@ -1,5 +1,6 @@
 using Abox.Build;
 using Abox.Configuration;
+using Abox.Features.Build;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Naming;
@@ -11,23 +12,26 @@ namespace Abox.Features.Create;
 /// <param name="Team">The team whose squads the sandbox is created from.</param>
 /// <param name="Squad">The squad the sandbox is created from, or null when the command asks for one.</param>
 /// <param name="Location">The folder the sandbox works on.</param>
-/// <param name="Tag">The tag of the local build to use.</param>
+/// <param name="Tag">The tag of the kit set and its local build metadata.</param>
 /// <param name="AssumeYes">Whether the replacement of an existing sandbox is confirmed already.</param>
+/// <param name="Local">Whether to use local kits instead of pulling the published set.</param>
 public sealed record CreateRequest(
     SquadResolver.ResolvedTeam Team,
     string? Squad,
     string Location,
     string Tag,
-    bool AssumeYes = false
+    bool AssumeYes = false,
+    bool Local = false
 );
 
 /// <summary>
-/// Creates the sandbox of a folder from the local build of its squad.
+/// Creates the sandbox of a folder from its squad's published set or local build.
 /// </summary>
 public sealed class CreateService(
     BuildStore store,
     SandboxRecordStore records,
     AboxPaths paths,
+    AboxConfig config,
     ISbxClient sbx,
     IConsole console
 )
@@ -36,13 +40,34 @@ public sealed class CreateService(
     public async Task<int> CreateAsync(CreateRequest request, CancellationToken cancellationToken)
     {
         var squad = request.Squad ?? PickSquad(request.Team);
+        var reference = request.Local
+            ? null
+            : RegistryImageName.OfSquad(
+                config.PullRepository,
+                request.Team.Name,
+                squad,
+                request.Tag
+            );
 
         var manifest =
             store.Load(squad, request.Tag)
             ?? throw new AboxException(
                 $"There is no local build of '{squad}' with the tag '{request.Tag}'. "
-                    + $"Build it first: abox build --team {request.Team.Name}"
+                    + $"Build it first: abox build --team {request.Team.Name} --tag {request.Tag}"
             );
+
+        if (
+            reference is not null
+            && manifest.Reference != ImageName.OfTeam(request.Team.Name, request.Tag)
+        )
+        {
+            throw new AboxException(
+                $"The local build metadata of '{squad}' is not for team '{request.Team.Name}'. "
+                    + $"Rebuild it: abox build --team {request.Team.Name} --tag {request.Tag}"
+            );
+        }
+
+        var kitSource = reference ?? manifest.WorkloadKitDirectory;
 
         var location = Path.GetFullPath(request.Location);
         if (!Directory.Exists(location))
@@ -56,27 +81,28 @@ public sealed class CreateService(
         var mounts = CreateStateDirectories(name, manifest);
         var servers = await EnsureMcpServersAsync(manifest, cancellationToken);
 
-        var mixins = manifest.Kits.Select(kit => kit.Reference).ToList();
-        if (manifest.StateMixinDirectory is not null)
+        var mixins = request.Local ? manifest.Kits.Select(kit => kit.Reference).ToList() : [];
+        if (request.Local && manifest.StateMixinDirectory is not null)
         {
             mixins.Add(manifest.StateMixinDirectory);
         }
 
-        var arguments = manifest
-            .Kits.SelectMany(kit => kit.Arguments)
+        var arguments = (request.Local ? manifest.Kits : [])
+            .SelectMany(kit => kit.Arguments)
             .GroupBy(argument => argument.Key, StringComparer.Ordinal)
             .Select(group => group.First())
             .ToDictionary(group => group.Key, group => group.Value, StringComparer.Ordinal);
 
         var outcome = await sbx.CreateAsync(
             new SbxCreateRequest(
-                manifest.WorkloadKitDirectory,
+                kitSource,
                 location,
                 name,
                 mixins,
                 arguments,
                 mounts,
-                servers
+                servers,
+                PullPolicy: request.Local ? "never" : "always"
             ),
             cancellationToken
         );
@@ -97,6 +123,7 @@ public sealed class CreateService(
                 Tag = request.Tag,
                 BuildCreatedAt = manifest.CreatedAt,
                 CreatedAt = DateTimeOffset.Now,
+                KitReference = reference,
             }
         );
 

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Abox.Infrastructure;
+using Abox.Naming;
 
 namespace Abox.Kits;
 
@@ -15,6 +16,7 @@ public sealed partial class WorkloadFile
     private WorkloadFile(
         string path,
         string template,
+        string? publishRepository,
         IReadOnlyList<string> apt,
         IReadOnlyList<string> mise,
         IReadOnlyList<string> scripts
@@ -22,6 +24,7 @@ public sealed partial class WorkloadFile
     {
         Path = path;
         Template = template;
+        PublishRepository = publishRepository;
         Apt = apt;
         Mise = mise;
         Scripts = scripts;
@@ -39,6 +42,9 @@ public sealed partial class WorkloadFile
     /// <summary>The image the workload builds on.</summary>
     public string Template { get; }
 
+    /// <summary>The JFrog repository to publish into; required only for publication.</summary>
+    public string? PublishRepository { get; }
+
     /// <summary>The packages, installed with apt-get while the image is built.</summary>
     public IReadOnlyList<string> Apt { get; }
 
@@ -52,7 +58,15 @@ public sealed partial class WorkloadFile
     public static WorkloadFile Load(string path)
     {
         var reader = YamlReader.LoadFile(path);
-        reader.RejectUnknownKeys("template", "apt", "mise", "scripts");
+        reader.RejectUnknownKeys("template", "publishRepository", "apt", "mise", "scripts");
+
+        var publishRepository = reader.GetString("publishRepository");
+        if (reader.Has("publishRepository") && !IsValidPublishRepository(publishRepository))
+        {
+            throw new AboxException(
+                $"'{path}': 'publishRepository' is not a valid repository name. Use one lowercase registry path segment, without a host, slash or tag."
+            );
+        }
 
         var apt = reader.GetStringList("apt");
         foreach (var package in apt)
@@ -69,11 +83,16 @@ public sealed partial class WorkloadFile
         return new WorkloadFile(
             path,
             string.IsNullOrWhiteSpace(template) ? DefaultTemplate : template,
+            publishRepository,
             apt,
             reader.GetStringList("mise"),
             reader.GetStringList("scripts")
         );
     }
+
+    /// <summary>Whether the JFrog repository is one valid registry path segment.</summary>
+    internal static bool IsValidPublishRepository(string? repository) =>
+        RegistryImageName.IsValidRepository(repository);
 
     [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9+.\\-]*$")]
     private static partial Regex PackageNamePattern();

@@ -1,5 +1,6 @@
 using Abox.Build;
 using Abox.Configuration;
+using Abox.Features.Build;
 using Abox.Features.Create;
 using Abox.Features.Prune;
 using Abox.Features.Run;
@@ -29,7 +30,7 @@ public sealed class CreateServiceTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _service = new CreateService(_store, _records, _paths, _sbx, _console);
+        _service = new CreateService(_store, _records, _paths, new AboxConfig(), _sbx, _console);
 
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
@@ -52,11 +53,131 @@ public sealed class CreateServiceTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource == "/kits/workload"
+                    && request.PullPolicy == "never"
                     && request.Name == SandboxName.For(_root.Path)
                     && request.Mixins.Contains("/kits/pi-config")
+                    && request.Mixins.Contains("/kits/state")
+                    && request.KitArguments["mode"] == "team"
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Theory]
+    [InlineData("mtiae-docker-release")]
+    [InlineData("team-docker-release")]
+    public async Task PublishedSetsArePulledFromTheConfiguredRepository(string repository)
+    {
+        SaveBuild(mcp: [new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
+        var service = new CreateService(
+            _store,
+            _records,
+            _paths,
+            new AboxConfig { PullRepository = repository },
+            _sbx,
+            _console
+        );
+
+        var exitCode = await service.CreateAsync(
+            Request() with
+            {
+                Local = false,
+            },
+            CancellationToken.None
+        );
+
+        exitCode.Should().Be(0);
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.KitSource
+                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac:latest"
+                    && request.PullPolicy == "always"
+                    && request.Mixins.Count == 0
+                    && request.KitArguments.Count == 0
+                    && request.Mounts.Count == 1
+                    && request.StaticMcpServers.SequenceEqual(new[] { "elastic" })
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        _records
+            .Load(SandboxName.For(_root.Path))!
+            .KitReference.Should()
+            .Be($"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac:latest");
+    }
+
+    [Fact]
+    public async Task PullFailuresAreReportedWithoutFallingBackToLocalKits()
+    {
+        SaveBuild();
+        _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(1, "registry access denied"));
+
+        var action = () =>
+            _service.CreateAsync(Request() with { Local = false }, CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage("*registry access denied*");
+        await _sbx.Received(1)
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+        _records.Load(SandboxName.For(_root.Path)).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("bad/path", "sample", "ac", "latest", "pullRepository")]
+    [InlineData("release", "bad/team", "ac", "latest", "team/squad")]
+    [InlineData("release", "sample", "bad/squad", "latest", "team/squad")]
+    [InlineData("release", "sample", "ac", "bad/tag", "registry tag")]
+    public async Task InvalidPullReferencesFailBeforeAnySandboxIsTouched(
+        string repository,
+        string team,
+        string squad,
+        string tag,
+        string error
+    )
+    {
+        var service = new CreateService(
+            _store,
+            _records,
+            _paths,
+            new AboxConfig { PullRepository = repository },
+            _sbx,
+            _console
+        );
+        var request = new CreateRequest(
+            new SquadResolver.ResolvedTeam(team, "teams/sample", [squad]),
+            squad,
+            _root.Path,
+            tag
+        );
+
+        var action = () => service.CreateAsync(request, CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage($"*{error}*");
+        await _sbx.DidNotReceive()
+            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("other-team")]
+    [InlineData("")]
+    public async Task PullingRequiresMetadataFromTheSelectedTeam(string team)
+    {
+        SaveBuild(reference: team == "" ? "" : ImageName.OfTeam(team, "latest"));
+
+        var action = () =>
+            _service.CreateAsync(Request() with { Local = false }, CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*metadata*team 'sample'*abox build*"
+        );
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -67,7 +188,8 @@ public sealed class CreateServiceTests
             new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
             null,
             _root.Path,
-            "latest"
+            "latest",
+            Local: true
         );
 
         var exitCode = await _service.CreateAsync(request, CancellationToken.None);
@@ -86,7 +208,8 @@ public sealed class CreateServiceTests
             new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac", "bd"]),
             null,
             _root.Path,
-            "latest"
+            "latest",
+            Local: true
         );
 
         var exitCode = await _service.CreateAsync(request, CancellationToken.None);
@@ -156,7 +279,7 @@ public sealed class CreateServiceTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.Mounts.Count == 1
-                    && request.Mounts[0].HostPath == hostPath
+                    && Path.GetFullPath(request.Mounts[0].HostPath) == Path.GetFullPath(hostPath)
                     && request.Mounts[0].SandboxPath == "/home/agent/.config/opencode/state"
                 ),
                 Arg.Any<CancellationToken>()
@@ -211,17 +334,20 @@ public sealed class CreateServiceTests
             new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
             "ac",
             _root.Path,
-            "latest"
+            "latest",
+            Local: true
         );
 
-    private void SaveBuild(List<ManifestMcp>? mcp = null)
+    private void SaveBuild(List<ManifestMcp>? mcp = null, string? reference = null)
     {
         _store.Save(
             new BuildManifest
             {
                 Squad = "ac",
                 Tag = "latest",
+                Reference = reference ?? ImageName.OfTeam("sample", "latest"),
                 WorkloadKitDirectory = "/kits/workload",
+                StateMixinDirectory = "/kits/state",
                 Kits =
                 [
                     new ManifestKit
@@ -229,6 +355,7 @@ public sealed class CreateServiceTests
                         Name = "pi-config",
                         Reference = "/kits/pi-config",
                         IsLocal = true,
+                        Arguments = new Dictionary<string, string> { ["mode"] = "team" },
                     },
                 ],
                 State =

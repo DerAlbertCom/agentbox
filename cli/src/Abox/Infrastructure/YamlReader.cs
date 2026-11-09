@@ -69,6 +69,12 @@ public sealed class YamlReader
     /// <summary>Whether the document has this key.</summary>
     public bool Has(string key) => _root.Children.ContainsKey(ScalarKey(key));
 
+    /// <summary>The nested value of a key, or null when it is absent.</summary>
+    public YamlEntry? GetEntry(string key) =>
+        _root.Children.TryGetValue(ScalarKey(key), out var node)
+            ? new YamlEntry(node, _source, key)
+            : null;
+
     /// <summary>The value of a key, when it is a scalar.</summary>
     public string? GetString(string key)
     {

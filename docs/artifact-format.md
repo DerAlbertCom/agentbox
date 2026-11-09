@@ -1,44 +1,55 @@
-# The artifact format blocks pushing a kit
+# Publishing the v3 artifact format
 
-A set of sbx template images carries no names a user can rely on. The build
-writes it into the store as `sandbox-kit-assembled:<build id>` (with
-`<build id>-kit-N` and `<build id>-template` tags) and the sources of the kits
-as `sbx-kit-src:<kit>-<hash>`. Those names are inside the kit build pipeline
-and abox does not reach them: no setting names them, and retreated from
-`sbx template ls` there is no export or rename.
+## The legacy push limitation
 
-The name a build is meant to be published under, `agentbox-rwest-<team>:<tag>`
-with `latest` as the default tag, lives in the manifest of the build. To put
-that name on an artifact, sbx offers `sbx kit push <directory> <reference>`.
-With sbx 0.51.0, that command rejects every shape we tried, including the
-examples of the [kit spec](https://github.com/docker/sandbox-kit-spec):
+Sbx's internal template tags (`sandbox-kit-assembled:<build id>`, the `-kit-N`
+and `-template` tags, and `sbx-kit-src:<kit>-<hash>`) are not a publishing interface.
+They cannot simply be renamed or exported through `sbx template`.
 
-| Tried `spec.yaml` | Error |
-|---|---|
-| our generated workload descriptor (`capabilities:` at the top) | `field capabilities not found in type spec.SpecFile` |
-| the schema's fields wrapped in a `spec:` root | `field spec not found in type spec.SpecFile` |
-| the spec repo's own `examples/hello/hello.yaml`, unchanged | `field author not found …` `provides …` `args …` `capabilities …` |
+The original experiment with `sbx kit push <directory> <reference>` on sbx 0.51.0
+also failed: its `spec.yaml` packager rejects the v3 descriptor's top-level
+`capabilities`, `author`, `provides` and `args` fields. Wrapping them under `spec:`
+does not fix the different grammar. Sbx 0.50.1's installed help still describes
+that legacy packager. This is an artifact-format mismatch, not a registry
+reachability problem.
 
-The `spec.SpecFile` the push validates against therefore speaks another format
-than the v3 descriptor schema of the kit spec
-(`schema/kit.schema.json`, where `capabilities`, `args` and friends are
-top-level). The spec repo carries an `assemble` flow that may publish a set
-under one reference; it is not wired into the CLI of 0.51.0.
+## The supported v3 publishing path
 
-## What this means
+The [official v3 frontend](https://github.com/docker/sandbox-kit-spec#publishing-a-set-as-one-kit)
+supports publication independently of that packager:
 
-- `abox publish` cannot be built until sbx can carry a kit set under the
-  reference `agentbox-rwest-<team>:<tag>`: either a newer sbx gains it, or abox
-  has to generate the layout `kit push` accepts.
-- Until then, `abox create` stays local (`--local`): the templates in the sbx
-  store and the manifest keep the flow whole; only the registry leg is missing.
-- The experiment was run against the daemon's own kit registry facade
-  (`127.0.0.1:5411`), which is reachable; the failure is in the artifact
-  format, not in reachability.
+1. Build each local kit with its descriptor as the Buildx `--file`. The first line
+   `# syntax=docker/sandbox-kit:3` selects the frontend. Push directly to the registry
+   with `--push`, rather than round-tripping through a classic Docker image store
+   that can discard descriptor annotations.
+2. Generate a `kind: set` descriptor whose `kits` list contains published references
+   and each kit's create-phase `args`. Local directories cannot appear in that list.
+3. Build and push the set with the same frontend. It resolves and pins the component
+   digests, validates composition, shares their layers and produces one ordinary
+   workload kit. Consumers never see `kind: set`.
 
-## Where to take it next
+`abox publish` uses this path for `rwest.jfrog.io/<publishRepository>`, using the
+repository selected in each resolved `.workload` and recorded in its local build
+manifest. The included workloads select `mtiae-developer-container-images-local`.
+Authentication uses Docker's host credential configuration. It does not depend on
+a change to the legacy `sbx kit push` implementation. The full command, naming and credential
+expectations are in [implementation.md](implementation.md).
 
-With the live registry: push one of the spec repo's examples, and if it also
-test fails there, raise it with the kit spec maintainers; the schema and the
-packaging code disagree. If it works with a newer sbx CLI, the fix is to
-upgrade and wire `abox publish` against it.
+Every squad uses the stable path `agentbox-rwest-<team>/<squad>:<tag>`, with
+components below a separate `/components/` segment. Builds must exclude personal
+configuration and retain matching source fingerprints. All selected inputs are
+validated/snapshotted before the first push. Uploaded artifact digests and every
+runnable platform descriptor are inspected remotely; only then is the verified
+candidate set promoted to the requested tag. No sbx preflight is needed to publish.
+
+Local verification with Docker Buildx 0.38.1 and frontend 3.0.0-m.11 confirmed that
+the generated configuration mixin builds as an OCI image and retains its v3
+descriptor in `vnd.docker.sandbox.kit.descriptor`. A declaration-only mixin with a
+required create-phase argument also built successfully. Create-phase values are
+fixed in the set descriptor, not passed as Buildx arguments; supplied build-phase
+arguments are rejected. No JFrog tags were changed during these checks. A live JFrog
+push still requires maintainer credentials and an explicitly chosen tag.
+
+Publishing and pulling the published set in `abox create` are implemented. Creation
+still uses a local manifest for state and MCP metadata; reading the bundled squad
+configuration remains separate work. `--local` uses local kits instead of pulling.

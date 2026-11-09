@@ -142,6 +142,8 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
             request.Location,
             "--name",
             request.Name,
+            "--pull",
+            request.PullPolicy,
         };
 
         foreach (var mixin in request.Mixins)

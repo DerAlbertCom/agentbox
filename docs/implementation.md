@@ -6,7 +6,7 @@ built yet. It is the file to read first when you pick this work up.
 
 ## The commands
 
-### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify]`
+### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal]`
 
 1. Resolves the team: its folder under `teams`, found in the directory of the command
    or one of its parent directories. `--team` can be given more than once; without it
@@ -26,20 +26,123 @@ built yet. It is the file to read first when you pick this work up.
 6. Writes the state mixin: one `host-mount@1` per state directory.
 7. Builds and checks every local kit with `sbx kit inspect`, unless `--no-verify` is
    given.
-8. Writes the manifest of the build: `build.json` in the build directory.
+8. Writes the manifest of the build: `build.json` in the build directory. It records
+   whether personal configuration was included and the resolved workload's
+   `publishRepository`. Only `--no-personal` builds capture SHA-256 fingerprints of
+   configuration files (including the `.workload`) and local source trees (including
+   generated workload/state kits), checking them before and after sbx verification.
 
 The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unless the
 command or the user configuration says otherwise.
 
+Personal `.abox` files remain included for local builds by default. Maintainers
+must use `--no-personal` to exclude them from builds intended for publication.
+Default/local builds do not run the publication fingerprint checks and retain
+their existing symbolic-link/reparse-point support. `--no-personal` builds are
+strict: their inputs must be ordinary files/directories. Even a default build
+with no personal files must be rebuilt with `--no-personal` before publishing,
+because it has no source fingerprints.
+
+### `abox publish --team <name> [--root <dir>] [--tag <tag>] [--builder <name>]`
+
+1. Resolves the teams like `build` does (`--team` can be repeated, or comes from
+   `defaultTeam`). The tag comes from `--tag`, `defaultTag`, or `latest`. Publishing
+   checks Docker/Buildx only; it does not call sbx or require its daemon/sign-in.
+2. Checks **all selected teams** before the first push: every leaf squad must have
+   a matching local build, known provenance excluding personal configuration,
+   a valid workload `publishRepository`, existing kit descriptors, and unchanged
+   source fingerprints. Legacy manifests
+   must be rebuilt. Invalid names and case-insensitive team/squad collisions are
+   rejected. All local source trees are copied to private temporary snapshots and
+   checked against the build's fingerprints before any registry write. Symbolic
+   links/reparse points in build inputs are rejected rather than followed.
+3. Builds and pushes the workload, every local mixin and the generated state mixin
+   through the v3 frontend, using `docker buildx build --file <descriptor> --push`.
+   Kits already named by registry reference are inspected and reused, not copied
+   or repushed. Supplied arguments must be declared **create-phase** arguments;
+   supplied `buildArg`/`buildSecret` arguments are explicitly unsupported and fail
+   before the first push. Arguments are fixed only in the set's `kits[].args`,
+   never duplicated as Buildx build arguments.
+4. Adds a small configuration mixin containing `/usr/share/abox/squad.json`: the
+   resolved team, squad, tag, build timestamp, kit names/arguments, MCP declarations
+   and state declarations. Host source paths, raw `.abox` files and secret values
+   are not included. Do not put credentials in kit arguments; use host secrets.
+5. Publishes a `kind: set` descriptor listing those references and their resolved
+   kit arguments. The frontend pins the references by digest and merges their
+   layers/declarations into one ordinary workload kit, without flattening the layers.
+   Explicit minimal provenance requests retained index annotations. Every pushed
+   digest is read from Buildx's metadata file and checked through
+   `docker buildx imagetools inspect --raw`. Every runnable platform manifest must
+   retain its v3 descriptor and expected kind; an index-only annotation is not
+   sufficient. Recognized attestation manifests are skipped.
+6. Pushes the set under a unique candidate tag and verifies it before promoting its
+   immutable digest with `imagetools create --prefer-index=false --tag <target>`.
+   The requested tag is inspected again before success is reported.
+
+The destination is **`rwest.jfrog.io/<publishRepository>`**, using the repository
+recorded from each squad's resolved `.workload` when it was built. The included
+workloads select `mtiae-developer-container-images-local`; there is no hardcoded
+repository fallback. Missing/invalid repositories fail before any Docker calls.
+Changing a workload (including its repository) requires a new `--no-personal`
+build, and older manifests without this setting must be rebuilt. A
+team always publishes **`agentbox-rwest-<team>/<squad>:<tag>`**, regardless of its
+squad count. Distinct path segments keep team, squad and component identities
+separate; adding another squad does not rename existing images. Names are
+lowercased, and case collisions are rejected. The current implementation moves
+the chosen tag, including `latest`; use a dedicated `--tag` to test without
+replacing it. Whether a different approval policy is wanted remains a product
+question. The local manifest's unqualified team `Reference` is an ownership marker,
+not the remote publication name.
+
+Each component uses a unique `publish-<id>` tag under
+`agentbox-rwest-<team>/<squad>/components/{workload,kit-N,state,config}`. The final
+set candidate uses `agentbox-rwest-<team>/<squad>:publish-<id>`. A failed component
+push or failed candidate inspection cannot move the requested tag. This is not
+a transaction across squads/teams; failures after promotion cannot automatically
+roll back a tag. Temporary snapshots/descriptors are removed even on failure;
+cleanup failures produce warnings without hiding the original error. Images
+already pushed remain in JFrog. Registry retention is separate; `abox prune` does
+not remove components or candidates.
+
+**Maintainer prerequisites and authentication:** Docker with the Buildx plugin and
+a working BuildKit builder. A `docker-container` builder is recommended to preserve
+OCI metadata and avoid the classic image store round trip:
+
+```sh
+docker buildx create --name abox-publisher --driver docker-container --bootstrap
+docker login rwest.jfrog.io
+abox build --team sample --no-personal
+abox publish --team sample --builder abox-publisher
+```
+
+`--builder` selects an existing builder; otherwise Buildx uses its selected builder
+(including `BUILDX_BUILDER`). Nothing is installed or provisioned automatically.
+The builder's default platform is published. The JFrog username and access token
+must have read/write access to the target repository; Buildx uses Docker's host
+credential configuration/credential helper, not `abox secrets` or sbx's sign-in.
+For automation, feed the token to `docker login --username <user> --password-stdin
+rwest.jfrog.io`. Credentials are never passed by abox as process arguments or
+included in image layers. If `GITHUB_TOKEN` is set in the host environment, the
+workload receives it through the existing `github_token` BuildKit secret mount.
+
+Publication builds from fingerprint-checked snapshots of the generated workload
+and local kits, not from sbx's internal template store. Source changes require a
+new build. This protects local inputs, not changing registry dependencies or
+network downloads in recipes: pin external images/digests and tool versions for
+reproducibility. `sbx kit push` is deliberately not used: its
+legacy `spec.yaml` packager does not understand these v3 descriptors; see
+[artifact-format.md](artifact-format.md).
+
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag>]
 [--local] [--yes]`
 
-1. Resolves the team like `abox build` does, from the folder the sandbox works on. The
+1. Resolves the team like `abox build` does, from the current directory and its parents. The
    team comes from `--team` or the user configuration `defaultTeam`. The squad comes
    from `--squad`; without it the command asks which squad of the team to use, and
    uses the only one without asking.
-2. Reads the manifest of the local build. Without one, the command says which build to
-   make.
+2. Reads the manifest of the local build for the selected tag, for state mounts and MCP
+   registration. Without one, the command says which build to make. Pulling also checks
+   that the metadata belongs to the selected team.
 3. Names the sandbox after the folder: `<folder>-abox-<hash>`, where the hash is the
    first five characters of the SHA-256 of the absolute path.
 4. Asks before it replaces a sandbox that is already there, and lists what is lost.
@@ -48,16 +151,27 @@ command or the user configuration says otherwise.
    one `--mount` per directory.
 6. Registers the MCP servers that have an url and are not registered yet, and passes
    the names of all of them with `--static-mcp`.
-7. Creates the sandbox: `sbx create <workload kit> <location> --name <sandbox> --kit
-   <mixin>... --kit-arg <name>=<value>... --mount <host>:<path>... --static-mcp <names>`.
+7. Creates the sandbox from
+   `rwest.jfrog.io/<pullRepository>/agentbox-rwest-<team>/<squad>:<tag>`, with
+   `--pull always`. The set already contains its mixins and arguments. With `--local`,
+   uses the workload kit directory, `--kit <mixin>... --kit-arg <name>=<value>...` and
+   `--pull never` instead. Both pass `--mount <host>:<path>... --static-mcp <names>`.
 8. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the team
-   and the squad it comes from and the build it was made of.
+   and the squad it comes from, the build metadata and the pulled reference (if any).
 
-`--local` says that the sandbox uses the templates that are in sbx and nothing is
-pulled from a registry; it is the only source in this version, so the flag is the
-default. `--tag` chooses the tag of the local build, `latest` by default. The manifest
-records the reference the kit set is published under: `agentbox-rwest-<team>:<tag>`;
-the registry host and `abox publish` are not built yet.
+The user setting `pullRepository` defaults to **`mtiae-docker-release`**. It accepts
+one lowercase JFrog repository path segment; an omitted or blank setting uses the
+default. It is independent of the workload's `publishRepository`. See
+[the settings file location and example](../README.md#user-settings).
+`--tag` chooses the published set and local build metadata tag, `latest` by default.
+`--local` opts into local kits and includes their local/personal customizations.
+Pull failures are reported without a silent local fallback.
+
+**Current limitation:** creation still requires team files and a local build manifest
+for state/MCP metadata. Keep it aligned with the published tag. The published set's
+bundled squad configuration is not read yet, and local kit arguments/mixins are not
+reapplied over the set. A pulled sandbox is not offered a local-build replacement by
+`abox run`; recreate it explicitly to refresh the published tag.
 
 ### `abox run [<launcher>] [--location <path>] [-- <argv>...]`
 
@@ -65,9 +179,9 @@ the registry host and `abox publish` are not built yet.
 2. Checks that the folder has a sandbox. Without one, the command prints the
    `abox create` command to run.
 3. Asks the runtime where the workspace of the sandbox is (`WORKSPACE_DIR`).
-4. Offers to replace the sandbox when the build of its squad is newer than the one the
+4. For a locally created sandbox, offers to replace it when the build of its squad is newer than the one the
    sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
-   the sandboxes it created, in `<state dir>/sandboxes/`.
+   the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local.
 5. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
 6. Starts the launcher.
@@ -173,6 +287,7 @@ The secrets say how a value is obtained:
 
 ```yaml
 template: docker.io/sbx/shell-docker-image   # the image the base is built on
+publishRepository: mtiae-developer-container-images-local
 apt:
   - git
 mise:
@@ -181,6 +296,12 @@ mise:
 scripts:
   - enable-fzf.sh                             # run while the image is built
 ```
+
+`publishRepository` is optional for local builds but required for publication.
+It names one lowercase registry path segment, not a host, URL, path or tag: letters
+and digits separated by `.`, `_`, `__` or one or more `-`, with no whitespace.
+The root `.abox` selects the workload; children inherit its publish repository
+along with its image settings, including when that workload is shared in `kits/`.
 
 The packages of `apt` are installed in one step before the tools, as root and with
 `--no-install-recommends`, and the package names are checked; the image switches back
@@ -199,6 +320,7 @@ cli/src/Abox/
   Cli/              the composition root: the service collection and the root command
   Features/
     Build/          abox build: the command and the service that does its work
+    Publish/        abox publish: v3 frontend builds, JFrog pushes and set assembly
     Create/         abox create: the command and the service that does its work
     Run/            abox run: the command and the service that does its work
     Secrets/        abox secrets: the command and the service that does its work
@@ -234,9 +356,11 @@ cli/src/Abox/
 
 ## The decisions this version took
 
-- **Local images only.** A build stays on the machine and `abox create` uses it. There
-  is no registry wired yet, so `--local` is the default; `--tag` chooses the tag of the
-  local build, `latest` by default.
+- **Published creation, explicit local builds.** `abox create` pulls a published set
+  from the user's `pullRepository`; `--local` uses the local build instead.
+  `abox publish` pushes v3 kit sets to the workload's `publishRepository` through
+  Buildx. Creation still needs local state/MCP metadata. `--tag` chooses the tag of
+  the local build and the published set, `latest` by default.
 - **The teams folder.** A team is a folder under `teams`. Its `.abox` files (the squads
   of the team), its `.workload` and the scripts of the workload live in it. The kits
   stay in the `kits` folder of the project, so every team can use them; the workload of
@@ -261,9 +385,10 @@ cli/src/Abox/
 
 ## What is not built yet
 
-- `abox publish`. The kit set is not published to a registry, and `abox prune` removes
-  only the template images of sbx, not the local builds of the build store. The block
-  is the artifact format of `sbx kit push`, see [artifact-format.md](artifact-format.md).
+- Reading the published set's bundled squad configuration in `abox create`, so creation
+  no longer needs team sources and local build metadata.
+- Pruning local builds in the build store and registry components. `abox prune`
+  currently removes only sbx template images.
 - The `orca` launcher, and the `hc` helper and the `openssh-server` of the base image.
 - The Claude Code gateway to Copilot on GitHub Enterprise (open question 3).
 - The `worktrees` of the agents, which are lost when a sandbox is replaced (open
@@ -277,9 +402,8 @@ cli/src/Abox/
 The open questions of [concept.md](concept.md) are the list of what is left. The ones
 that are ready to be picked up:
 
-1. **`abox publish`** — push the kit set of a squad to a registry as one reference, so
-   `abox create` can pull it. The build already produces everything a set needs: the
-   workload kit, the mixins and the manifest.
+1. **Self-contained remote `abox create`** — consume the published kit set's bundled squad
+   configuration, without requiring the source repository and a local build.
 2. **The rest of `abox prune`** — the local builds of the build store are not pruned
    yet. The build store knows what is there; the sandboxes say what is in use.
 3. **The agent kits** — the kits of `kits/` carry the credentials and the guidance of

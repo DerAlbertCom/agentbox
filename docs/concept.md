@@ -27,7 +27,7 @@ Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit co
 
 - **`abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag> | --local]`**
   - `--location` defaults to the current folder. `--team` resolves from the `teams` folder next to the location (or the user config `defaultTeam`). Without `--squad`, abox asks which squad of the team to use, when there is more than one.
-  - Creates the sandbox from the squad's kit set in JFrog. The default tag is `latest`, pulled with `--pull always`, because sbx's default for kit sets is `missing`, which never refreshes a tag. `--tag` selects another tag. `--local` uses the templates that are in sbx and never pulls. `create` does not read the repository. Personal `.abox` files are added as mixins (`--kit`, experimental in sbx). *(proposed: the resolved squad config travels with the set, see open question 2)*
+  - Creates the sandbox from the squad's kit set in JFrog, under `rwest.jfrog.io/<pullRepository>`. The user setting `pullRepository` defaults to `mtiae-docker-release` and is independent of the workload's publish repository. The default tag is `latest`, pulled with `--pull always`, because sbx's default for kit sets is `missing`, which never refreshes a tag. `--tag` selects another tag. `--local` uses the templates that are in sbx and never pulls. The goal is creation without the source repository; today, local team files and build metadata are still required for state and MCP settings. Personal `.abox` kit customizations currently require `--local`. *(proposed: consume the resolved squad config that travels with the set, see open question 2)*
   - A sandbox that already exists for the location is replaced after confirmation. The confirmation lists what will be lost. State directories are kept: the sandbox name does not change, so their host paths do not change either.
   - An existing sandbox keeps the image it was created from. A newer `latest` reaches only sandboxes created after it (inferred; verify).
 - **`abox run [<launcher>] [--location <path>] [-- <argv>...]`** starts a launcher for the folder's sandbox. The default launcher is `shell`. See Launchers.
@@ -35,13 +35,15 @@ Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit co
   - `shell` works offline. Other launchers list their needs under Launchers.
   - If JFrog has a newer `latest`, asks whether to replace the sandbox now. Skipped offline. *(proposed placement)*
 - **`abox build --team <names>`** resolves each team's folder under `teams` (from now on) and builds the kit set of every squad of it that no other squad of the team names as its `base`: one workload and the mixins reached through the chain. Rejects duplicate kit repositories and file collisions between kits. Layers are shared, not repacked, so squads with common kits share blobs.
-- **`abox publish --team <name>`** pushes the kit set to JFrog under `agentbox-rwest-<team>:<tag>`, `latest` by default, with the resolved squad config (see open question 2).
+- **`abox publish --team <name>`** pushes the kit set to `rwest.jfrog.io/<publishRepository>` (selected by the squad's resolved `.workload`) under `agentbox-rwest-<team>/<squad>:<tag>`, `latest` by default, with the resolved squad config. Every squad keeps the same name when others are added. Publication uses the v3 BuildKit frontend through Docker Buildx; its registry credentials stay in Docker's host credential store. Only builds explicitly excluding personal `.abox` configuration can be published.
 - **`abox prune [--full] [--sbx]`** removes the template images of sbx that stopped being used: it keeps the newest assembled kit set and the kit sources it is built from, and removes the older sets and the kit sources nothing uses. `--full` reaches for everything sbx holds: what a sandbox uses, sbx refuses and keeps. `--sbx` stops the running sandboxes first. Never touches secrets, or images of other repositories, nor anything an image of unknown age or id holds. *(proposed: also keep anything a stopped sandbox uses; also prune the local builds of the build store)*
 - **`abox secrets`** manages host-side secrets for kits, through `sbx secret` behind the scenes. *(proposed subcommands: `set`, `list`, `remove`)*
 
 ## Preflight
 
-Every command except `--help` and `--version` runs these checks first. `abox` never installs anything itself. *(proposed)*
+Every command except `--help`, `--version` and `publish` runs these checks first.
+`publish` uses Docker/Buildx instead and does not require sbx. `abox` never installs
+anything itself. *(proposed)*
 
 1. **Installed:** `sbx` must be on `PATH` (`sbx.exe` on Windows). If not, print the install steps for the current OS (below) and exit with an error.
 2. **Version:** `sbx version --json` must be 0.51.0 or later. An older version gets an upgrade hint.
@@ -121,6 +123,7 @@ References never include a file extension. The teams of a project live in a fold
 
 **`.workload`** (YAML)
 - `template`: container image to build on, as in `sbx run --template`. Default `docker.io/sbx/shell-docker-image`, a shell image with Docker Engine inside (`docker.io/sbx/shell-image` is the variant without it). Pin a tag or digest rather than `latest`. *(proposed)* Named `template` so `base` only means the parent `.abox`. *(name proposed)*
+- `publishRepository`: JFrog repository name on `rwest.jfrog.io`, required for publishing but optional for local builds. One lowercase registry path segment, without a host, slash or tag. Inherited with the root config's workload, recorded in the build manifest, and revalidated before publishing; changing it requires a rebuild. The included workloads use `mtiae-developer-container-images-local`.
 - `apt`: package names, installed with one `apt-get install` before the tools.
 - `mise`: tools. The last entry is the default. The generator writes each tool's list reversed, because mise activates the first entry.
 - `scripts`: run as the last steps of the generated Dockerfile, during the image build.
@@ -145,6 +148,7 @@ workload: sample
 ```yaml
 # teams/<team>/sample.workload
 template: docker.io/sbx/shell-docker-image     # default, can be omitted
+publishRepository: mtiae-developer-container-images-local
 mise:
   - nodejs@24.4.3
   - dotnet@9.0.303
@@ -260,7 +264,7 @@ Never call `sbx prune` (it removes every stopped sandbox on the machine) or `sbx
 3. Which gateway gives Claude Code access to Copilot?
 4. `abox secrets` runs `sbx secret` behind the scenes. Service secrets reach the sandbox through the proxy, and registry credentials (JFrog pulls and pushes) stay on the host. Confirm?
 5. Does the credentials proxy cover `api.github.com`? If not, `mise` inside a sandbox hits anonymous rate limits.
-6. Does `publish` move `latest`? A test publish would change what every `create` pulls. sbx also warns that a moving tag can require a newer sbx.
+6. Should `publish` move `latest`, or require additional approval? The current implementation moves the chosen tag after candidate verification, so test publication must use a dedicated `--tag`. This is not an agreed product policy; future remote `create` must account for moving tags and sbx compatibility.
 7. `create` while offline: fail, or use a cached image?
 8. Which launchers ship in v1? Proposed: `shell` and `herdr-app`. `orca` waits for open questions 10 and 11.
 9. Worktrees are lost when a sandbox is replaced. Show that in the confirmation, declare `~/worktrees` as state, or use `abox create --clone`, which keeps commits on the host through a `sandbox-<name>` git remote?

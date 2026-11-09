@@ -1,4 +1,5 @@
 using Abox.Infrastructure;
+using Abox.Naming;
 
 namespace Abox.Configuration;
 
@@ -14,6 +15,7 @@ public static class AboxConfigLoader
         "teamsDirectory",
         "kitsDirectory",
         "defaultTag",
+        "pullRepository",
     ];
 
     public static AboxConfig Load(AboxPaths paths)
@@ -27,6 +29,13 @@ public static class AboxConfigLoader
         reader.RejectUnknownKeys(KnownKeys);
 
         var defaults = new AboxConfig();
+        var pullRepository = Or(reader.GetString("pullRepository"), defaults.PullRepository);
+        if (!RegistryImageName.IsValidRepository(pullRepository))
+        {
+            throw new AboxException(
+                $"'{paths.ConfigFile}': 'pullRepository' is not a valid repository name. Use one lowercase registry path segment, without a host, slash or tag."
+            );
+        }
 
         return new AboxConfig
         {
@@ -35,6 +44,7 @@ public static class AboxConfigLoader
             TeamsDirectory = Or(reader.GetString("teamsDirectory"), defaults.TeamsDirectory),
             KitsDirectory = Or(reader.GetString("kitsDirectory"), defaults.KitsDirectory),
             DefaultTag = Or(reader.GetString("defaultTag"), defaults.DefaultTag),
+            PullRepository = pullRepository,
         };
     }
 

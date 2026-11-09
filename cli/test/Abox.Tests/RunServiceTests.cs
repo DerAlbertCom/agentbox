@@ -35,7 +35,7 @@ public sealed class RunServiceTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _create = new CreateService(_store, _records, _paths, _sbx, _console);
+        _create = new CreateService(_store, _records, _paths, new AboxConfig(), _sbx, _console);
         _service = new RunService(
             launchers,
             new SquadResolver(new AboxConfig()),
@@ -181,6 +181,50 @@ public sealed class RunServiceTests
         exitCode.Should().Be(0);
         _console.AllText.Should().Contain("newer build");
         await _sbx.Received(1).RemoveSandboxAsync(name, Arg.Any<CancellationToken>());
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.KitSource == "/kits/workload" && request.PullPolicy == "never"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task APulledSandboxIsNotReplacedByANewerLocalBuild()
+    {
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _records.Save(
+            name,
+            new SandboxRecord
+            {
+                Team = "sample",
+                Squad = "ac",
+                Tag = "latest",
+                BuildCreatedAt = DateTimeOffset.MinValue,
+                KitReference = "rwest.jfrog.io/team-docker-release/agentbox-rwest-sample/ac:latest",
+            }
+        );
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "latest",
+                CreatedAt = DateTimeOffset.Now,
+            }
+        );
+
+        var exitCode = await _service.RunAsync(
+            new RunRequest("shell", _root.Path, []),
+            CancellationToken.None
+        );
+
+        exitCode.Should().Be(0);
+        _console.AllText.Should().NotContain("newer build");
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]

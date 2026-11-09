@@ -14,7 +14,8 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | Command | What it does |
 |---|---|
 | `abox build --team <name>` | Builds the kit set of a team: its workload and the kits of every squad the team builds on. The result is kept locally. |
-| `abox create --team <name> [--squad <name>] [--location <path>]` | Creates the sandbox of a folder from the local build of a squad. Without `--squad`, the command asks which one. |
+| `abox publish --team <name> [--tag <tag>] [--builder <name>]` | Builds and pushes the local kit sets to `rwest.jfrog.io/<publishRepository>`, configured in each workload. Requires Docker Buildx and host registry sign-in. |
+| `abox create --team <name> [--squad <name>] [--location <path>] [--local]` | Pulls the published squad kit set to create a sandbox, or uses a local build with `--local`. Without `--squad`, the command asks which one. |
 | `abox run [<launcher>] [--location <path>] [-- <argv>...]` | Starts a launcher for the sandbox of a folder. The default launcher is a shell. |
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
@@ -100,10 +101,59 @@ test installation are under ignored `bin/` output. To check installation-directo
 independence, also run the installed command by its absolute path with `--help`
 from outside the repository. No sbx daemon is needed for help.
 
+### User settings
+
+Sandbox creation pulls from **`rwest.jfrog.io/mtiae-docker-release`** by default.
+Override the repository in abox's user `config.yaml`, alongside the existing defaults:
+
+```yaml
+defaultTeam: sample
+defaultTag: latest
+pullRepository: mtiae-docker-release
+```
+
+The file is at `$XDG_CONFIG_HOME/abox/config.yaml` when `XDG_CONFIG_HOME` is an
+absolute path; otherwise it is `~/.config/abox/config.yaml` on Linux/macOS or
+`%USERPROFILE%\.abox\config\config.yaml` on Windows. `pullRepository` is one
+lowercase JFrog repository name, not a URL, host, path or tag. Omitted or blank
+values use the default. It is independent of each workload's `publishRepository`.
+
+For example, `abox create --team sample --squad ac --tag latest` pulls
+`rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest` with
+`--pull always`. `abox create --team sample --local` uses local kits instead and
+never pulls. Creation still needs the team files and a matching local build
+manifest for state mounts and MCP registration. Keep that metadata aligned with
+the published tag; reading the published set's bundled configuration is not yet
+implemented. Local-only/personal kit customizations require `--local`.
+
 ### Sandbox prerequisites
 
-The command line needs `sbx` on the PATH: it calls sbx for every sandbox operation and
+The sandbox commands need `sbx` on the PATH: abox calls sbx for every sandbox operation and
 never installs anything itself.
+
+Maintainers publishing kits also need Docker with Buildx and a BuildKit builder.
+Set `publishRepository` in each `.workload` file (the included workloads use
+`mtiae-developer-container-images-local`). Sign in on the host with
+`docker login rwest.jfrog.io` using a JFrog identity with read/write access to the
+selected repository, then run:
+
+```sh
+abox build --team sample --no-personal
+abox publish --team sample --tag latest
+```
+
+Publishing updates the chosen tag (`latest` by default) after remote descriptor
+verification. Every squad has a stable reference, for example
+`rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac:latest`.
+Builds containing personal `.abox` configuration, default local builds without
+fingerprints, older builds without provenance, and builds whose local sources
+have changed must be rebuilt with `--no-personal` before publication. The build
+records the repository of its resolved workload; changing it also requires a rebuild.
+Link-free source enforcement and fingerprinting apply only to `--no-personal` builds;
+ordinary local builds retain their previous linked-input support.
+`publish` needs Docker/Buildx, but does not need sbx running or signed in.
+Registry credentials stay in Docker's host credential store; `abox secrets` does not
+configure publishing credentials. See [the publishing details](docs/implementation.md#abox-publish---team-name---root-dir---tag-tag---builder-name).
 
 ## The formatting and the hooks
 

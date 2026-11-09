@@ -3,6 +3,7 @@ using Abox.Configuration;
 using Abox.Features.Build;
 using Abox.Features.Create;
 using Abox.Features.Prune;
+using Abox.Features.Publish;
 using Abox.Features.Run;
 using Abox.Features.Sandbox;
 using Abox.Features.Secrets;
@@ -31,6 +32,7 @@ public static class AboxServiceCollection
         services
             .AddSharedServices(console, trailing)
             .AddBuildFeature()
+            .AddPublishFeature()
             .AddCreateFeature()
             .AddRunFeature()
             .AddSecretsFeature()

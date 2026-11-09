@@ -19,4 +19,7 @@ public sealed class AboxConfig
 
     /// <summary>The tag a local build is stored under when no tag is given.</summary>
     public string DefaultTag { get; init; } = "latest";
+
+    /// <summary>The JFrog repository used to pull published squad kit sets.</summary>
+    public string PullRepository { get; init; } = "mtiae-docker-release";
 }

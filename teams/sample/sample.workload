@@ -3,6 +3,7 @@
 # The workload becomes a sandbox kit: abox writes the descriptor and the Dockerfile
 # from these lines. The last tool of the list is the default of the image.
 template: docker.io/sbx/shell-docker-image
+publishRepository: mtiae-developer-container-images-local
 
 mise:
   - nodejs@24.22.2
