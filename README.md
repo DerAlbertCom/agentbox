@@ -47,6 +47,33 @@ the `kits` folder of the project. A kit named in a `.abox` file without a slash 
 colon is a directory in the `kits` folder; a name with a slash or a colon is a
 reference sbx resolves.
 
+## Installing the command line
+
+Install the [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0) first;
+it includes the .NET 10 runtime that abox needs. Once the package has been published
+to a configured NuGet source, install it globally:
+
+```sh
+dotnet tool install --global rwest-agentbox
+abox --help
+```
+
+The NuGet package is named `rwest-agentbox`; the installed command is **`abox`**.
+Make sure the global tools directory is on PATH: `$HOME/.dotnet/tools` on Linux and
+macOS, or `%USERPROFILE%\.dotnet\tools` on Windows. The installer reports any PATH
+setup that is needed.
+
+To update or remove the tool:
+
+```sh
+dotnet tool update --global rwest-agentbox
+dotnet tool uninstall --global rwest-agentbox
+```
+
+Installing the tool does not install sbx or the project's `teams/` and `kits/`
+configuration. Run project commands from a configured project directory, or use
+the command's `--root` or `--location` option where available.
+
 ## Building and running the command line
 
 ```sh
@@ -55,6 +82,25 @@ dotnet build
 dotnet test
 dotnet run --project src/Abox -- build --team sample --root .. --no-verify
 ```
+
+### Checking the tool package locally
+
+From the repository root, pack and install into a fresh isolated directory without
+changing your global tools or publishing anything:
+
+```sh
+dotnet pack cli/src/Abox/Abox.csproj --configuration Release --output cli/src/Abox/bin/packages
+dotnet tool install rwest-agentbox --source ./cli/src/Abox/bin/packages --tool-path ./cli/src/Abox/bin/tool-test
+./cli/src/Abox/bin/tool-test/abox --help
+dotnet tool uninstall rwest-agentbox --tool-path ./cli/src/Abox/bin/tool-test
+```
+
+`--source` restricts installation to the local package directory. The package and
+test installation are under ignored `bin/` output. To check installation-directory
+independence, also run the installed command by its absolute path with `--help`
+from outside the repository. No sbx daemon is needed for help.
+
+### Sandbox prerequisites
 
 The command line needs `sbx` on the PATH: it calls sbx for every sandbox operation and
 never installs anything itself.
