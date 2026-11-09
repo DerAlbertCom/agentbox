@@ -42,7 +42,8 @@ public sealed class BuildCommand : Command
 
         var verify = new Option<bool>("--no-verify")
         {
-            Description = "Write the kit sources without building and checking them with sbx.",
+            Description =
+                "Skip additional local kit inspection with sbx. Normal builds still build the workload image.",
         };
 
         var personal = new Option<bool>("--no-personal")
@@ -50,11 +51,18 @@ public sealed class BuildCommand : Command
             Description = "Exclude personal .abox files to make a build safe to publish.",
         };
 
+        var metadata = new Option<bool>("--metadata-only")
+        {
+            Description =
+                "Prepare source metadata without Docker or sbx (maintainers). Replaces the manifest and clears its local image selection; remote create does not need this.",
+        };
+
         Options.Add(teams);
         Options.Add(root);
         Options.Add(tag);
         Options.Add(verify);
         Options.Add(personal);
+        Options.Add(metadata);
 
         SetAction(
             async (parseResult, cancellationToken) =>
@@ -85,10 +93,14 @@ public sealed class BuildCommand : Command
                             rootDirectory,
                             parseResult.GetValue(tag) ?? config.DefaultTag,
                             !parseResult.GetValue(verify),
-                            !parseResult.GetValue(personal)
+                            !parseResult.GetValue(personal),
+                            parseResult.GetValue(metadata)
                         );
 
-                        if (!await preflight.EnsureReadyAsync(cancellationToken))
+                        if (
+                            !request.MetadataOnly
+                            && !await preflight.EnsureReadyAsync(cancellationToken)
+                        )
                         {
                             return 1;
                         }

@@ -9,19 +9,21 @@ namespace Abox.Features.Build;
 /// <param name="Teams">The teams to build, each with the squads a team build makes.</param>
 /// <param name="RootDirectory">The directory of the project that holds its teams folder.</param>
 /// <param name="Tag">The tag the builds are stored under.</param>
-/// <param name="Verify">Whether the kits are built and checked with sbx.</param>
+/// <param name="Verify">Whether additional local kit declarations are checked with sbx.</param>
 /// <param name="IncludePersonalConfigurations">Whether personal .abox files are merged into this local build.</param>
+/// <param name="MetadataOnly">Prepare only source/configuration metadata, without invoking external tools or selecting a local image.</param>
 public sealed record BuildRequest(
     IReadOnlyList<SquadResolver.ResolvedTeam> Teams,
     string RootDirectory,
     string Tag,
     bool Verify = true,
-    bool IncludePersonalConfigurations = true
+    bool IncludePersonalConfigurations = true,
+    bool MetadataOnly = false
 );
 
 /// <summary>
 /// Builds the squads of the teams: resolves each squad, writes the workload kit and
-/// the state mixin, checks the kits with sbx and keeps the manifest of the result.
+/// the state mixin, prebuilds the workload image and keeps the manifest of the result.
 /// </summary>
 public sealed class BuildService(
     SquadResolver resolver,
@@ -29,6 +31,7 @@ public sealed class BuildService(
     StateMixinGenerator stateGenerator,
     PersonalConfigurations personalConfigurations,
     BuildStore store,
+    LocalWorkloadImages images,
     ISbxClient sbx,
     IConsole console
 )
@@ -82,9 +85,23 @@ public sealed class BuildService(
         {
             manifest.SourceHashes = BuildSources.Capture(manifest);
         }
-        if (request.Verify)
+        if (!request.MetadataOnly)
         {
-            await VerifyAsync(squad, workloadDirectory, stateDirectory, cancellationToken);
+            if (request.Verify)
+            {
+                await VerifyAsync(squad, stateDirectory, cancellationToken);
+            }
+
+            manifest.LocalWorkload = await images.BuildAsync(
+                workloadDirectory,
+                Path.Combine(
+                    buildDirectory,
+                    "runtime",
+                    Guid.NewGuid().ToString("N"),
+                    WorkloadKitGenerator.KitName
+                ),
+                cancellationToken
+            );
         }
 
         if (!request.IncludePersonalConfigurations)
@@ -93,9 +110,21 @@ public sealed class BuildService(
         }
         store.Save(manifest);
 
-        console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
+        if (request.MetadataOnly)
+        {
+            console.WriteLine(
+                $"Prepared metadata only for squad '{squad.Name}:{request.Tag}'. No image was built or selected."
+            );
+            console.WriteLine(
+                "Any previous local image selection for this squad/tag is invalidated; existing image/runtime artifacts are not deleted. Run a build without --metadata-only before using --local."
+            );
+        }
+        else
+        {
+            console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
+        }
         console.WriteLine(
-            $"Create a sandbox from it with: abox create --team {teamName} --squad {squad.Name}"
+            $"Create a sandbox from {(request.MetadataOnly ? "the matching published set" : "it")} with: abox create --team {teamName} --squad {squad.Name} --tag {request.Tag}{(request.MetadataOnly ? "" : " --local")}"
         );
 
         return true;
@@ -103,33 +132,38 @@ public sealed class BuildService(
 
     private async Task VerifyAsync(
         ResolvedSquad squad,
-        string workloadDirectory,
         string? stateDirectory,
         CancellationToken cancellationToken
     )
     {
-        var kits = new List<(string Name, string Directory)>
-        {
-            (squad.Workload.Name, workloadDirectory),
-        };
+        var kits =
+            new List<(
+                string Name,
+                string Directory,
+                IReadOnlyDictionary<string, string> Arguments
+            )>();
 
         kits.AddRange(
-            squad.Kits.Where(kit => kit.IsLocal).Select(kit => (kit.Name, kit.Directory!))
+            squad
+                .Kits.Where(kit => kit.IsLocal)
+                .Select(kit => (kit.Name, kit.Directory!, kit.Arguments))
         );
 
         if (stateDirectory is not null)
         {
-            kits.Add((StateMixinGenerator.MixinName, stateDirectory));
+            kits.Add(
+                (StateMixinGenerator.MixinName, stateDirectory, new Dictionary<string, string>())
+            );
         }
 
-        foreach (var (name, directory) in kits)
+        foreach (var (name, directory, arguments) in kits)
         {
-            console.WriteLine($"Building kit '{name}'...");
-            var outcome = await sbx.InspectKitAsync(directory, cancellationToken);
+            console.WriteLine($"Checking kit declarations '{name}'...");
+            var outcome = await sbx.InspectKitAsync(directory, cancellationToken, arguments);
             if (!outcome.Succeeded)
             {
                 throw new AboxException(
-                    $"The kit '{name}' does not build:{Environment.NewLine}{outcome.Output.Trim()}"
+                    $"The kit '{name}' could not be inspected (use --no-verify for recipe-based mixins; sbx inspect is declaration-only):{Environment.NewLine}{outcome.Output.Trim()}"
                 );
             }
         }

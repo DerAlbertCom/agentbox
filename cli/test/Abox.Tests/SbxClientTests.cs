@@ -91,6 +91,41 @@ public sealed class SbxClientTests
     }
 
     [Fact]
+    public async Task ThinLocalKitsUseTheHostBuilderAndRecordedDockerContext()
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "", ""));
+        await _client.CreateAsync(
+            new SbxCreateRequest(
+                "/runtime/workload",
+                "/workspace",
+                "sample",
+                ["/kits/config"],
+                new Dictionary<string, string> { ["mode"] = "team" },
+                [],
+                ["elastic"],
+                HostDockerContext: "desktop-linux"
+            ),
+            CancellationToken.None
+        );
+
+        await _runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Environment!["SBX_KIT_BUILDER"] == "host"
+                    && request.Environment["BUILDX_BUILDER"] == "desktop-linux"
+                    && request.Environment["DOCKER_CONTEXT"] == "desktop-linux"
+                    && request.Arguments.Contains("mode=team")
+                    && request.Arguments.Contains("/kits/config")
+                    && request.Arguments.Contains("elastic")
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
     public async Task AVersonlessAnswerIsAnError()
     {
         _runner

@@ -37,7 +37,11 @@ public interface ISbxClient
     /// <summary>Where the runtime put the workspace of the sandbox, when it says.</summary>
     Task<string?> GetWorkspaceDirectoryAsync(string sandbox, CancellationToken cancellationToken);
 
-    Task<SbxOutcome> InspectKitAsync(string kitDirectory, CancellationToken cancellationToken);
+    Task<SbxOutcome> InspectKitAsync(
+        string kitDirectory,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? arguments = null
+    );
 
     Task<IReadOnlyList<string>> ListMcpServersAsync(CancellationToken cancellationToken);
 

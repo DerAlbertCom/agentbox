@@ -5,6 +5,7 @@ using Abox.Features.Create;
 using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
+using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Naming;
 using Abox.Sbx;
@@ -17,6 +18,7 @@ public sealed class CreateServiceTests
     private readonly TempDirectory _root = new();
     private readonly TestConsole _console = new();
     private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
+    private readonly IPublishedSquadSource _published = PublishedSquadTest.Source();
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
     private readonly SandboxRecordStore _records;
@@ -30,7 +32,16 @@ public sealed class CreateServiceTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _service = new CreateService(_store, _records, _paths, new AboxConfig(), _sbx, _console);
+        _service = new CreateService(
+            _store,
+            _records,
+            _paths,
+            new AboxConfig(),
+            _sbx,
+            LocalWorkloadTest.Images(),
+            _console,
+            _published
+        );
 
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
@@ -49,10 +60,13 @@ public sealed class CreateServiceTests
         var exitCode = await _service.CreateAsync(Request(), CancellationToken.None);
 
         exitCode.Should().Be(0);
+        _published.ReceivedCalls().Should().BeEmpty("--local must not pull registry metadata");
         await _sbx.Received(1)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
-                    request.KitSource == "/kits/workload"
+                    request.KitSource
+                        == _store.Load("ac", "latest")!.LocalWorkload!.RuntimeKitDirectory
+                    && request.HostDockerContext == "test-context"
                     && request.PullPolicy == "never"
                     && request.Name == SandboxName.For(_root.Path)
                     && request.Mixins.Contains("/kits/pi-config")
@@ -75,7 +89,11 @@ public sealed class CreateServiceTests
             _paths,
             new AboxConfig { PullRepository = repository },
             _sbx,
-            _console
+            LocalWorkloadTest.Images(),
+            _console,
+            PublishedSquadTest.Source([
+                new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
+            ])
         );
 
         var exitCode = await service.CreateAsync(
@@ -91,8 +109,9 @@ public sealed class CreateServiceTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac:latest"
+                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
                     && request.PullPolicy == "always"
+                    && request.HostDockerContext == null
                     && request.Mixins.Count == 0
                     && request.KitArguments.Count == 0
                     && request.Mounts.Count == 1
@@ -103,7 +122,9 @@ public sealed class CreateServiceTests
         _records
             .Load(SandboxName.For(_root.Path))!
             .KitReference.Should()
-            .Be($"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac:latest");
+            .Be(
+                $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
+            );
     }
 
     [Fact]
@@ -141,7 +162,9 @@ public sealed class CreateServiceTests
             _paths,
             new AboxConfig { PullRepository = repository },
             _sbx,
-            _console
+            LocalWorkloadTest.Images(),
+            _console,
+            _published
         );
         var request = new CreateRequest(
             new SquadResolver.ResolvedTeam(team, "teams/sample", [squad]),
@@ -164,20 +187,16 @@ public sealed class CreateServiceTests
     [Theory]
     [InlineData("other-team")]
     [InlineData("")]
-    public async Task PullingRequiresMetadataFromTheSelectedTeam(string team)
+    public async Task PullingIgnoresLocalMetadataEvenWhenItBelongsToAnotherTeam(string team)
     {
         SaveBuild(reference: team == "" ? "" : ImageName.OfTeam(team, "latest"));
 
-        var action = () =>
-            _service.CreateAsync(Request() with { Local = false }, CancellationToken.None);
-
-        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
-            "*metadata*team 'sample'*abox build*"
-        );
-        await _sbx.DidNotReceive()
-            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await _sbx.DidNotReceive()
-            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+        (await _service.CreateAsync(Request() with { Local = false }, CancellationToken.None))
+            .Should()
+            .Be(0);
+        await _published
+            .Received(1)
+            .LoadAsync(Arg.Any<string>(), "sample", "ac", "latest", Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -264,6 +283,88 @@ public sealed class CreateServiceTests
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DecliningReplacementDoesNotRegisterMcpOrCreateStateDirectories(bool local)
+    {
+        var mcp = new List<ManifestMcp>
+        {
+            new() { Name = "elastic", Url = "https://example.com/mcp" },
+        };
+        SaveBuild(mcp);
+        var service = new CreateService(
+            _store,
+            _records,
+            _paths,
+            new AboxConfig(),
+            _sbx,
+            LocalWorkloadTest.Images(),
+            _console,
+            PublishedSquadTest.Source(mcp)
+        );
+        _console.Answer = false;
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+
+        var action = () =>
+            service.CreateAsync(Request() with { Local = local }, CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage("*not replaced*");
+        await _sbx.DidNotReceive()
+            .AddMcpServerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Directory.Exists(Path.Combine(_paths.StateDirectory, name)).Should().BeFalse();
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task McpRegistrationFailureAfterConsentDoesNotRemoveTheExistingSandbox()
+    {
+        SaveBuild([new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.AddMcpServerAsync("elastic", Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                _console.AllText.Should().Contain("Replace the sandbox?");
+                return new SbxOutcome(1, "registration failed");
+            });
+
+        var action = () => _service.CreateAsync(Request(), CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*could not be registered*"
+        );
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Directory.Exists(Path.Combine(_paths.StateDirectory, name)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AllMcpRegistrationsAreValidatedReadOnlyBeforeAskingForReplacement()
+    {
+        SaveBuild([
+            new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
+            new ManifestMcp { Name = "missing" },
+        ]);
+        var action = () => _service.CreateAsync(Request(), CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage("*missing*not registered*");
+        await _sbx.DidNotReceive()
+            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .AddMcpServerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        Directory
+            .Exists(Path.Combine(_paths.StateDirectory, SandboxName.For(_root.Path)))
+            .Should()
+            .BeFalse();
+    }
+
     [Fact]
     public async Task TheStateDirectoriesAreKeptOnTheHostUnderTheNameOfTheSandbox()
     {
@@ -338,6 +439,284 @@ public sealed class CreateServiceTests
             Local: true
         );
 
+    [Fact]
+    public async Task OldLocalManifestsAreRejectedWithoutTouchingAnExistingSandbox()
+    {
+        SaveBuild();
+        var build = _store.Load("ac", "latest")!;
+        build.LocalWorkload = null;
+        _store.Save(build);
+
+        var action = () => _service.CreateAsync(Request(), CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*no prebuilt local workload*abox build*without --metadata-only*"
+        );
+        await _sbx.DidNotReceive()
+            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task ChangedThinKitFailsBeforeReplacementRatherThanBuildingSources()
+    {
+        SaveBuild();
+        var build = _store.Load("ac", "latest")!;
+        File.AppendAllText(
+            Path.Combine(build.LocalWorkload!.RuntimeKitDirectory, "workload.dockerfile"),
+            "RUN install-again\n"
+        );
+
+        var action = () =>
+            _service.CreateAsync(Request() with { AssumeYes = true }, CancellationToken.None);
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage("*runtime kit changed*");
+        await _sbx.DidNotReceive()
+            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoteCreationConsumesOnlyThePublishedSetEvenWithoutALocalImage()
+    {
+        SaveBuild();
+        var build = _store.Load("ac", "latest")!;
+        Directory.Delete(build.LocalWorkload!.RuntimeKitDirectory, recursive: true);
+        build.LocalWorkload = null;
+        _store.Save(build);
+        var runner = LocalWorkloadTest.Runner();
+        var service = new CreateService(
+            _store,
+            _records,
+            _paths,
+            new AboxConfig(),
+            _sbx,
+            LocalWorkloadTest.Images(runner),
+            _console,
+            _published
+        );
+
+        var exitCode = await service.CreateAsync(
+            Request() with
+            {
+                Local = false,
+            },
+            CancellationToken.None
+        );
+
+        exitCode.Should().Be(0);
+        await runner
+            .DidNotReceive()
+            .RunAsync(Arg.Any<Abox.Infrastructure.ProcessRequest>(), Arg.Any<CancellationToken>());
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.KitSource
+                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
+                    && request.Mixins.Count == 0
+                    && request.KitArguments.Count == 0
+                    && request.HostDockerContext == null
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task MetadataOnlyPreparationDoesNotEnableLocalCreateOrSupplyRemoteMetadata()
+    {
+        _root.File(
+            "teams/sample/ac.abox",
+            "workload: sample\nkits:\n  - name: probe\n    args:\n      mode: team\nstate: [~/.probe-state]\nmcp: [elastic]\n"
+        );
+        _root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
+        _root.File(
+            "kits/probe/probe.yaml",
+            "schemaVersion: \"3\"\nkind: mixin\nargs:\n  mode:\n    required: true\n    env: MODE\n"
+        );
+        var resolver = new SquadResolver(new AboxConfig());
+        var team = resolver.ResolveTeam(_root.Path, "sample");
+        var runner = Substitute.For<IProcessRunner>();
+        var programs = Substitute.For<IHostPrograms>();
+        var images = new LocalWorkloadImages(programs, runner, _console);
+        var build = new BuildService(
+            resolver,
+            new WorkloadKitGenerator(),
+            new StateMixinGenerator(),
+            new PersonalConfigurations(_paths),
+            _store,
+            images,
+            _sbx,
+            _console
+        );
+        await build.BuildAsync(
+            new BuildRequest([team], _root.Path, "latest", MetadataOnly: true),
+            CancellationToken.None
+        );
+        _store.Load("ac", "latest")!.LocalWorkload.Should().BeNull();
+        _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<string>)["elastic"]);
+        var service = new CreateService(
+            _store,
+            _records,
+            _paths,
+            new AboxConfig(),
+            _sbx,
+            images,
+            _console,
+            PublishedSquadTest.Source([new ManifestMcp { Name = "elastic" }])
+        );
+
+        var exitCode = await service.CreateAsync(
+            Request() with
+            {
+                Team = team,
+                Local = false,
+            },
+            CancellationToken.None
+        );
+
+        exitCode.Should().Be(0);
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.KitSource
+                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
+                    && request.Mixins.Count == 0
+                    && request.KitArguments.Count == 0
+                    && request.HostDockerContext == null
+                    && request.Mounts.Count == 1
+                    && request.StaticMcpServers.SequenceEqual(new[] { "elastic" })
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        runner.ReceivedCalls().Should().BeEmpty();
+        programs.ReceivedCalls().Should().BeEmpty();
+        _sbx.ClearReceivedCalls();
+
+        var local = () =>
+            service.CreateAsync(Request() with { Team = team }, CancellationToken.None);
+
+        (await local.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*no prebuilt local workload*abox build --team sample --tag latest*without --metadata-only*"
+        );
+        _sbx.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RemoteCreateNeedsNoLocalBuildAndUsesPublishedState()
+    {
+        (await _service.CreateAsync(Request() with { Local = false }, CancellationToken.None))
+            .Should()
+            .Be(0);
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request =>
+                    request.Mounts[0].SandboxPath == "/home/agent/.published"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task UnreadablePublishedMetadataCannotDeleteAnExistingSandboxEvenWithYes()
+    {
+        SaveBuild();
+        _published
+            .LoadAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns<PublishedSquad>(_ =>
+                throw new AboxException("Invalid bundled metadata; republish the set.")
+            );
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+
+        var action = () =>
+            _service.CreateAsync(
+                Request() with
+                {
+                    Local = false,
+                    AssumeYes = true,
+                },
+                CancellationToken.None
+            );
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage("*republish*");
+        _sbx.ReceivedCalls()
+            .Should()
+            .BeEmpty(
+                "metadata must be validated before any sandbox lookup or deletion, with no local fallback"
+            );
+        _records.Load(name).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task MissingPublishedMcpRegistrationFailsBeforeSandboxReplacement()
+    {
+        _published
+            .LoadAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(
+                new PublishedSquad(
+                    "pinned-set",
+                    new BuildManifest { Mcp = [new ManifestMcp { Name = "missing" }] }
+                )
+            );
+
+        var action = () =>
+            _service.CreateAsync(
+                Request() with
+                {
+                    Local = false,
+                    AssumeYes = true,
+                },
+                CancellationToken.None
+            );
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage("*not registered*");
+        await _sbx.DidNotReceive()
+            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task UnusablePublishedStateDirectoryFailsBeforeSandboxReplacement()
+    {
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _root.File($"state/{name}/.published", "a file blocks the state directory");
+        var action = () =>
+            _service.CreateAsync(
+                Request() with
+                {
+                    Local = false,
+                    AssumeYes = true,
+                },
+                CancellationToken.None
+            );
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*state director*not replaced*"
+        );
+        await _sbx.Received(1).FindSandboxAsync(name, Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     private void SaveBuild(List<ManifestMcp>? mcp = null, string? reference = null)
     {
         _store.Save(
@@ -347,6 +726,7 @@ public sealed class CreateServiceTests
                 Tag = "latest",
                 Reference = reference ?? ImageName.OfTeam("sample", "latest"),
                 WorkloadKitDirectory = "/kits/workload",
+                LocalWorkload = LocalWorkloadTest.Artifact(_root),
                 StateMixinDirectory = "/kits/state",
                 Kits =
                 [

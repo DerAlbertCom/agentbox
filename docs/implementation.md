@@ -6,7 +6,11 @@ built yet. It is the file to read first when you pick this work up.
 
 ## The commands
 
-### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal]`
+### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal] [--metadata-only]`
+
+Normal builds run the following full image-building path. The explicit
+`--metadata-only` exception is described after the steps; `--no-verify` alone
+does not skip the workload image build.
 
 1. Resolves the team: its folder under `teams`, found in the directory of the command
    or one of its parent directories. `--team` can be given more than once; without it
@@ -24,16 +28,53 @@ built yet. It is the file to read first when you pick this work up.
 5. Writes the workload kit: `workload.yaml` (the descriptor) and `workload.dockerfile`
    (the recipe) in the build directory, with the scripts of the workload copied into it.
 6. Writes the state mixin: one `host-mount@1` per state directory.
-7. Builds and checks every local kit with `sbx kit inspect`, unless `--no-verify` is
-   given.
-8. Writes the manifest of the build: `build.json` in the build directory. It records
+7. Optionally checks additional local kit declarations with `sbx kit inspect`,
+   passing their resolved arguments, unless `--no-verify` is given. Inspection
+   **does not build images**. sbx 0.51.0 cannot inspect recipe-based local kits;
+   those require `--no-verify` and are processed by sbx at creation.
+8. Builds the generated workload through the v3 frontend with host
+   `docker buildx build --file workload.yaml --load --provenance=false`, using the
+   current Docker context's docker-driver builder. Workload apt, mise and scripts
+   run here, not at every sandbox create. BuildKit reuses
+   unchanged instruction/layer caches. No images are pushed. A unique local tag
+   `docker.io/library/abox-workload:<id>` and its actual immutable Docker image
+   content ID are reported; source changes during building fail the build.
+9. Writes a separate versioned thin runtime kit: the same v3 workload descriptor
+   and a companion Dockerfile containing only `FROM <unique-local-image>`.
+   The original generated sources remain unchanged for publication. The versioned
+   runtime directory keeps an unsuccessful rebuild from overwriting the previous
+   build's runtime kit.
+10. Writes the manifest of the build: `build.json` in the build directory. It records
    whether personal configuration was included and the resolved workload's
    `publishRepository`. Only `--no-personal` builds capture SHA-256 fingerprints of
    configuration files (including the `.workload`) and local source trees (including
-   generated workload/state kits), checking them before and after sbx verification.
+   generated workload/state kits), checking them before and after verification and
+   image building. `LocalWorkload` records the unique tag, image content ID,
+   Docker context, runtime kit directory and its fingerprint on image builds.
 
 The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unless the
 command or the user configuration says otherwise.
+
+**Metadata-only preparation:** `--metadata-only` resolves configurations, writes
+generated workload/state sources and saves the manifest, but skips sbx preflight,
+all kit inspection and all Docker/Buildx/image operations. `LocalWorkload` is
+always null. No sbx or Docker installation/daemon/authentication is required for
+this maintainer preparation. Remote `create` does not use it: it reads published
+metadata with Docker/Buildx and creates the sandbox with sbx.
+The command reports that no image was built/selected and prints the remote create
+command. `--no-personal` still excludes personal declarations and captures source
+fingerprints; all existing publication provenance checks remain in force.
+
+This mode explicitly replaces the selected squad/tag manifest and **invalidates
+any previous local image selection, even with identical inputs**. It does not
+delete existing images, runtime kit directories or sandboxes, and does not retain
+an image whose validity could require Docker checks. To retain another local
+manifest, use a distinct tag. To use `create --local` after metadata-only
+preparation, run a normal `abox build` without `--metadata-only`; local create
+fails with that instruction instead of rebuilding implicitly. `--no-verify` is
+independent and still builds the workload image on a normal build.
+Existing local sandboxes remain runnable; `abox run` does not offer a metadata-only
+manifest as a newer local image build.
 
 Personal `.abox` files remain included for local builds by default. Maintainers
 must use `--no-personal` to exclude them from builds intended for publication.
@@ -136,26 +177,37 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag>]
 [--local] [--yes]`
 
-1. Resolves the team like `abox build` does, from the current directory and its parents. The
-   team comes from `--team` or the user configuration `defaultTeam`. The squad comes
-   from `--squad`; without it the command asks which squad of the team to use, and
-   uses the only one without asking.
-2. Reads the manifest of the local build for the selected tag, for state mounts and MCP
-   registration. Without one, the command says which build to make. Pulling also checks
-   that the metadata belongs to the selected team.
+1. Takes the team from `--team` or `defaultTeam`. Remote create requires `--squad`
+   and never resolves local team folders; it works from any directory without a
+   config file, source tree, local manifest or build. Only `--local` resolves the
+   team like `build` and asks for an omitted squad (or uses its only squad).
+2. Remote create resolves the published tag with Docker Buildx, selects the host's
+   Linux platform manifest, validates its processed v3 workload descriptor, then
+   pulls its digest-pinned configuration mixin from the retained `kits` list.
+   Docker's host credentials need read access to both repositories. It reads
+   `squad.json` from a temporary `docker image save` archive, without file extraction,
+   builds or container execution. The cached config image is retained. The metadata
+   schema/identity, state paths and matching host-mount capabilities are validated;
+   missing/invalid metadata requires maintainer republication, never local fallback.
+   Only `--local` reads the local build manifest for state and MCP metadata.
 3. Names the sandbox after the folder: `<folder>-abox-<hash>`, where the hash is the
    first five characters of the SHA-256 of the absolute path.
-4. Asks before it replaces a sandbox that is already there, and lists what is lost.
+4. Validates MCP registrations read-only, then asks before replacing an existing
+   sandbox and lists what is lost. After consent, registers missing MCP servers
+   with URLs and prepares host state directories before deletion. A refusal
+   registers no MCP servers and creates no state directories.
    The state directories on the host are kept: the name of the sandbox does not change.
-5. Creates the state directories on the host under `<state dir>/<sandbox>/` and passes
-   one `--mount` per directory.
-6. Registers the MCP servers that have an url and are not registered yet, and passes
-   the names of all of them with `--static-mcp`.
+5. Passes one `--mount` per state directory under `<state dir>/<sandbox>/` on the host.
+6. Passes the validated MCP server names with `--static-mcp`. A server with no URL
+   must already be registered; a missing registration fails before replacement.
 7. Creates the sandbox from
+   the immutable platform digest resolved from
    `rwest.jfrog.io/<pullRepository>/agentbox-rwest-<team>/<squad>:<tag>`, with
-   `--pull always`. The set already contains its mixins and arguments. With `--local`,
-   uses the workload kit directory, `--kit <mixin>... --kit-arg <name>=<value>...` and
-   `--pull never` instead. Both pass `--mount <host>:<path>... --static-mcp <names>`.
+   `--pull always`, preventing moving-tag metadata drift. The set already contains
+   its mixins and arguments. With `--local`,
+    uses the **thin prebuilt-workload runtime kit**, `--kit <mixin>...`
+    `--kit-arg <name>=<value>...` and `--pull never` instead. Both pass
+    `--mount <host>:<path>... --static-mcp <names>`.
 8. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the team
    and the squad it comes from, the build metadata and the pulled reference (if any).
 
@@ -163,14 +215,41 @@ The user setting `pullRepository` defaults to **`mtiae-docker-release`**. It acc
 one lowercase JFrog repository path segment; an omitted or blank setting uses the
 default. It is independent of the workload's `publishRepository`. See
 [the settings file location and example](../README.md#user-settings).
-`--tag` chooses the published set and local build metadata tag, `latest` by default.
+`--tag` chooses the published set or local build tag, `latest` by default.
 `--local` opts into local kits and includes their local/personal customizations.
 Pull failures are reported without a silent local fallback.
 
-**Current limitation:** creation still requires team files and a local build manifest
-for state/MCP metadata. Keep it aligned with the published tag. The published set's
-bundled squad configuration is not read yet, and local kit arguments/mixins are not
-reapplied over the set. A pulled sandbox is not offered a local-build replacement by
+For `--local`, before replacement or state/MCP changes, creation verifies the
+runtime kit fingerprint and checks the unique image tag still has the recorded
+Docker content ID in its recorded context. A metadata-only or legacy manifest
+without `LocalWorkload`, missing image/context, replaced image or edited runtime kit fails
+with an explicit rebuild instruction. `create` never regenerates the runtime
+recipe or falls back to the original workload sources. Changing workload sources
+only takes effect after a successful new `build`; previous images keep their
+own unique tags and Docker's layer/build caches remain reusable.
+
+Sbx receives `SBX_KIT_BUILDER=host`, `BUILDX_BUILDER=<recorded-context>` and
+`DOCKER_CONTEXT=<recorded-context>` for local creation only. The context's
+docker-driver builder shares the prebuilt host image store; a selected remote or
+docker-container builder is not substituted. The thin v3 frontend build stages
+declarations and exports/imports layers into sbx's separate runtime store, then
+sbx composes mixins and applies mount, credential, policy and other v3 requests.
+No `--template` override or v2 conversion is used. Workload installation is absent
+from this path, but the first thin build/layer transfer can still take time.
+Frontend resolution, registry-kit metadata and custom mixin recipes can still
+need network/build work; `--local` does not promise fully offline creation or
+prebuild arbitrary mixin recipes. The repository's mixins are declaration-only.
+
+Remote create instead consumes the published set's already built/processed
+workload and mixin layers and their merged v3 declarations. It does not pass
+team-local kit sources, local arguments or a host-builder override. No team
+workload installations are repeated. User-specific local overlays on published
+sets remain future work; none are applied implicitly.
+
+Remote create needs host Docker/Buildx with a running engine and sbx, not team
+sources or preparation. The bundled metadata format and compatibility rules are
+in [artifact-format.md](artifact-format.md). Remote squad discovery is not supported;
+give `--squad`. A pulled sandbox is not offered a local-build replacement by
 `abox run`; recreate it explicitly to refresh the published tag.
 
 ### `abox run [<launcher>] [--location <path>] [-- <argv>...]`
@@ -359,16 +438,22 @@ cli/src/Abox/
 - **Published creation, explicit local builds.** `abox create` pulls a published set
   from the user's `pullRepository`; `--local` uses the local build instead.
   `abox publish` pushes v3 kit sets to the workload's `publishRepository` through
-  Buildx. Creation still needs local state/MCP metadata. `--tag` chooses the tag of
+  Buildx. Remote state/MCP metadata comes exclusively from the pinned published set.
+  `--tag` chooses the tag of
   the local build and the published set, `latest` by default.
+- **Expensive local workload build before create.** `build` produces host-Docker
+  content using the v3 frontend. Local create only wraps that image in a thin v3
+  workload and composes kits. It checks recorded content identity and never
+  silently reruns the original workload recipe. Publication still builds from
+  independently fingerprint-checked original source snapshots.
 - **The teams folder.** A team is a folder under `teams`. Its `.abox` files (the squads
   of the team), its `.workload` and the scripts of the workload live in it. The kits
   stay in the `kits` folder of the project, so every team can use them; the workload of
   a team lives in the team folder, a shared one can stay in the `kits` folder.
-- **The name of a squad is the name of its file.** `abox create --squad AC` finds
+- **The name of a local squad is the name of its file.** `abox create --local --squad AC` finds
   `ac.abox` in a team folder and calls the squad `ac`.
 - **A build is of a team.** `--team` names the team folder, and the build makes every
-  squad of it that no other squad names as its base. When `abox create` is not asked
+  squad of it that no other squad names as its base. When `abox create --local` is not asked
   for a squad and the team has more than one, it asks which one.
 - **The workspace is where the runtime puts it.** The runtime mounts the folder of the
   host at the same path in the sandbox and says so with `WORKSPACE_DIR`, so the
@@ -385,10 +470,9 @@ cli/src/Abox/
 
 ## What is not built yet
 
-- Reading the published set's bundled squad configuration in `abox create`, so creation
-  no longer needs team sources and local build metadata.
-- Pruning local builds in the build store and registry components. `abox prune`
-  currently removes only sbx template images.
+- Discovering published squads remotely when `--squad` is omitted.
+- Pruning local builds, versioned runtime kits, host-Docker `abox-workload` images
+  and registry components. `abox prune` currently removes only sbx template images.
 - The `orca` launcher, and the `hc` helper and the `openssh-server` of the base image.
 - The Claude Code gateway to Copilot on GitHub Enterprise (open question 3).
 - The `worktrees` of the agents, which are lost when a sandbox is replaced (open
@@ -402,11 +486,9 @@ cli/src/Abox/
 The open questions of [concept.md](concept.md) are the list of what is left. The ones
 that are ready to be picked up:
 
-1. **Self-contained remote `abox create`** — consume the published kit set's bundled squad
-   configuration, without requiring the source repository and a local build.
-2. **The rest of `abox prune`** — the local builds of the build store are not pruned
+1. **The rest of `abox prune`** — the local builds of the build store are not pruned
    yet. The build store knows what is there; the sandboxes say what is in use.
-3. **The agent kits** — the kits of `kits/` carry the credentials and the guidance of
+2. **The agent kits** — the kits of `kits/` carry the credentials and the guidance of
    the agents, but not their configuration files yet.
-4. **The `orca` launcher** — the SSH key pair, the host entry and the Orca CLI are
+3. **The `orca` launcher** — the SSH key pair, the host entry and the Orca CLI are
    described in the concept and have not been written.

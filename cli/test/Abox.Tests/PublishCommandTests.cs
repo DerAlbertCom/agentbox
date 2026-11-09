@@ -88,6 +88,7 @@ public sealed class PublishCommandTests
             new StateMixinGenerator(),
             new PersonalConfigurations(AboxPaths.For(_root.Path, _root.Path)),
             _store,
+            LocalWorkloadTest.Images(),
             Substitute.For<Abox.Sbx.ISbxClient>(),
             _console
         );

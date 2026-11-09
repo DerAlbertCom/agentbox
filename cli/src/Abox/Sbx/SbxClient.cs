@@ -171,7 +171,18 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
         }
 
         var result = await runner.RunAsync(
-            new ProcessRequest(ExecutableName, arguments),
+            new ProcessRequest(
+                ExecutableName,
+                arguments,
+                Environment: request.HostDockerContext is { } context
+                    ? new Dictionary<string, string>
+                    {
+                        ["SBX_KIT_BUILDER"] = "host",
+                        ["BUILDX_BUILDER"] = context,
+                        ["DOCKER_CONTEXT"] = context,
+                    }
+                    : null
+            ),
             cancellationToken
         );
         return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);
@@ -274,16 +285,20 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
         return string.IsNullOrEmpty(directory) ? null : directory;
     }
 
-    /// <summary>Builds a kit from source and reports what it found.</summary>
+    /// <summary>Reads kit declarations; this command does not build recipe-based kits.</summary>
     public async Task<SbxOutcome> InspectKitAsync(
         string kitDirectory,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? arguments = null
     )
     {
-        // The output is only shown to the user when the kit does not build, so it stays
-        // in the human-readable format.
+        var command = new List<string> { "kit", "inspect", kitDirectory };
+        foreach (var (name, value) in arguments ?? new Dictionary<string, string>())
+        {
+            command.AddRange(["--kit-arg", $"{name}={value}"]);
+        }
         var result = await runner.RunAsync(
-            new ProcessRequest(ExecutableName, ["kit", "inspect", kitDirectory]),
+            new ProcessRequest(ExecutableName, command),
             cancellationToken
         );
         return new SbxOutcome(result.ExitCode, result.StandardOutput + result.StandardError);

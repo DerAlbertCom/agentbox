@@ -127,7 +127,7 @@ public static class BuildSources
         }
     }
 
-    private static string DirectoryHash(string directory)
+    internal static string DirectoryHash(string directory)
     {
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         foreach (

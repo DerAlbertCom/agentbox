@@ -11,6 +11,7 @@ public static class CreateFeature
     public static IServiceCollection AddCreateFeature(this IServiceCollection services)
     {
         services.AddSingleton<CreateService>();
+        services.AddSingleton<IPublishedSquadSource, PublishedSquadSource>();
         services.AddSingleton<Command, CreateCommand>();
         return services;
     }

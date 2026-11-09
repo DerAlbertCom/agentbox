@@ -24,6 +24,9 @@ public sealed class BuildManifest
     /// <summary>The directory of the generated workload kit.</summary>
     public string WorkloadKitDirectory { get; set; } = string.Empty;
 
+    /// <summary>The prebuilt local content and its thin v3 runtime kit; null on metadata-only or older manifests.</summary>
+    public LocalWorkloadImage? LocalWorkload { get; set; }
+
     /// <summary>The directory of the generated mixin that declares the state directories.</summary>
     public string? StateMixinDirectory { get; set; }
 
@@ -50,6 +53,16 @@ public sealed class BuildManifest
 
     /// <summary>SHA-256 fingerprints of the local source directories and configuration files.</summary>
     public Dictionary<string, string> SourceHashes { get; set; } = [];
+}
+
+/// <summary>A unique local tag guarded by its immutable Docker content ID.</summary>
+public sealed class LocalWorkloadImage
+{
+    public string Reference { get; set; } = string.Empty;
+    public string ImageId { get; set; } = string.Empty;
+    public string DockerContext { get; set; } = string.Empty;
+    public string RuntimeKitDirectory { get; set; } = string.Empty;
+    public string RuntimeKitHash { get; set; } = string.Empty;
 }
 
 /// <summary>A kit of a local build.</summary>

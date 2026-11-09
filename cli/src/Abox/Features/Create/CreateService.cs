@@ -12,7 +12,7 @@ namespace Abox.Features.Create;
 /// <param name="Team">The team whose squads the sandbox is created from.</param>
 /// <param name="Squad">The squad the sandbox is created from, or null when the command asks for one.</param>
 /// <param name="Location">The folder the sandbox works on.</param>
-/// <param name="Tag">The tag of the kit set and its local build metadata.</param>
+/// <param name="Tag">The tag of the published kit set or local build.</param>
 /// <param name="AssumeYes">Whether the replacement of an existing sandbox is confirmed already.</param>
 /// <param name="Local">Whether to use local kits instead of pulling the published set.</param>
 public sealed record CreateRequest(
@@ -33,13 +33,23 @@ public sealed class CreateService(
     AboxPaths paths,
     AboxConfig config,
     ISbxClient sbx,
-    IConsole console
+    LocalWorkloadImages images,
+    IConsole console,
+    IPublishedSquadSource published
 )
 {
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
     public async Task<int> CreateAsync(CreateRequest request, CancellationToken cancellationToken)
     {
-        var squad = request.Squad ?? PickSquad(request.Team);
+        var squad =
+            request.Squad
+            ?? (
+                request.Local
+                    ? PickSquad(request.Team)
+                    : throw new AboxException(
+                        "Remote create requires --squad <name>; published squad discovery is not supported."
+                    )
+            );
         var reference = request.Local
             ? null
             : RegistryImageName.OfSquad(
@@ -49,37 +59,74 @@ public sealed class CreateService(
                 request.Tag
             );
 
-        var manifest =
-            store.Load(squad, request.Tag)
-            ?? throw new AboxException(
-                $"There is no local build of '{squad}' with the tag '{request.Tag}'. "
-                    + $"Build it first: abox build --team {request.Team.Name} --tag {request.Tag}"
-            );
-
-        if (
-            reference is not null
-            && manifest.Reference != ImageName.OfTeam(request.Team.Name, request.Tag)
-        )
-        {
-            throw new AboxException(
-                $"The local build metadata of '{squad}' is not for team '{request.Team.Name}'. "
-                    + $"Rebuild it: abox build --team {request.Team.Name} --tag {request.Tag}"
-            );
-        }
-
-        var kitSource = reference ?? manifest.WorkloadKitDirectory;
-
         var location = Path.GetFullPath(request.Location);
         if (!Directory.Exists(location))
         {
             throw new AboxException($"The folder '{location}' does not exist.");
         }
 
-        var name = SandboxName.For(location);
-        await ReplaceExistingSandboxAsync(name, location, request.AssumeYes, cancellationToken);
+        var remote = reference is null
+            ? null
+            : await published.LoadAsync(
+                reference,
+                request.Team.Name,
+                squad,
+                request.Tag,
+                cancellationToken
+            );
+        var manifest = request.Local
+            ? (
+                store.Load(squad, request.Tag)
+                ?? throw new AboxException(
+                    $"There is no local build of '{squad}' with the tag '{request.Tag}'. "
+                        + $"Prepare it first: abox build --team {request.Team.Name} --tag {request.Tag}"
+                )
+            )
+            : remote!.Metadata;
 
+        if (
+            request.Local
+            && (
+                manifest.Reference != ImageName.OfTeam(request.Team.Name, request.Tag)
+                || manifest.Squad != squad
+                || manifest.Tag != request.Tag
+            )
+        )
+        {
+            throw new AboxException(
+                $"The local build metadata of '{squad}' is not for team '{request.Team.Name}'. "
+                    + $"Prepare it again: abox build --team {request.Team.Name} --tag {request.Tag}"
+            );
+        }
+
+        var localImage = request.Local
+            ? manifest.LocalWorkload
+                ?? throw new AboxException(
+                    $"This manifest has no prebuilt local workload (metadata-only or legacy build). Run 'abox build --team {request.Team.Name} --tag {request.Tag}' without --metadata-only before using --local. Create will not build the workload from sources."
+                )
+            : null;
+
+        if (localImage is not null)
+        {
+            await images.EnsureAvailableAsync(localImage, cancellationToken);
+        }
+
+        var kitSource = remote?.Reference ?? localImage!.RuntimeKitDirectory;
+
+        var name = SandboxName.For(location);
+        var mcpToRegister = await FindMcpServersToRegisterAsync(manifest, cancellationToken);
+        var replace = await ConfirmReplacementAsync(
+            name,
+            location,
+            request.AssumeYes,
+            cancellationToken
+        );
+        await RegisterMcpServersAsync(mcpToRegister, cancellationToken);
         var mounts = CreateStateDirectories(name, manifest);
-        var servers = await EnsureMcpServersAsync(manifest, cancellationToken);
+        if (replace)
+        {
+            await RemoveExistingSandboxAsync(name, cancellationToken);
+        }
 
         var mixins = request.Local ? manifest.Kits.Select(kit => kit.Reference).ToList() : [];
         if (request.Local && manifest.StateMixinDirectory is not null)
@@ -101,8 +148,9 @@ public sealed class CreateService(
                 mixins,
                 arguments,
                 mounts,
-                servers,
-                PullPolicy: request.Local ? "never" : "always"
+                manifest.Mcp.Select(server => server.Name).ToList(),
+                PullPolicy: request.Local ? "never" : "always",
+                HostDockerContext: localImage?.DockerContext
             ),
             cancellationToken
         );
@@ -123,7 +171,7 @@ public sealed class CreateService(
                 Tag = request.Tag,
                 BuildCreatedAt = manifest.CreatedAt,
                 CreatedAt = DateTimeOffset.Now,
-                KitReference = reference,
+                KitReference = remote?.Reference,
             }
         );
 
@@ -153,7 +201,7 @@ public sealed class CreateService(
             : throw new AboxException("No squad is given and none was picked.");
     }
 
-    private async Task ReplaceExistingSandboxAsync(
+    private async Task<bool> ConfirmReplacementAsync(
         string name,
         string location,
         bool assumeYes,
@@ -163,7 +211,7 @@ public sealed class CreateService(
         var existing = await sbx.FindSandboxAsync(name, cancellationToken);
         if (existing is null)
         {
-            return;
+            return false;
         }
 
         if (!assumeYes)
@@ -181,6 +229,11 @@ public sealed class CreateService(
             }
         }
 
+        return true;
+    }
+
+    private async Task RemoveExistingSandboxAsync(string name, CancellationToken cancellationToken)
+    {
         console.WriteLine($"Removing the sandbox '{name}'...");
         var removal = await sbx.RemoveSandboxAsync(name, cancellationToken);
         if (!removal.Succeeded)
@@ -198,14 +251,25 @@ public sealed class CreateService(
         foreach (var state in manifest.State)
         {
             var hostPath = Path.Combine(paths.StateDirectory, name, state.RelativePath);
-            Directory.CreateDirectory(hostPath);
+            try
+            {
+                Directory.CreateDirectory(hostPath);
+            }
+            catch (Exception exception)
+                when (exception is IOException or UnauthorizedAccessException)
+            {
+                throw new AboxException(
+                    $"Cannot prepare the state directory '{hostPath}'. Check its permissions and remove any conflicting file. The existing sandbox was not replaced.",
+                    exception
+                );
+            }
             mounts.Add(new SbxMount(hostPath, state.SandboxPath));
         }
 
         return mounts;
     }
 
-    private async Task<IReadOnlyList<string>> EnsureMcpServersAsync(
+    private async Task<IReadOnlyList<ManifestMcp>> FindMcpServersToRegisterAsync(
         BuildManifest manifest,
         CancellationToken cancellationToken
     )
@@ -218,7 +282,7 @@ public sealed class CreateService(
         var registered = (await sbx.ListMcpServersAsync(cancellationToken)).ToHashSet(
             StringComparer.Ordinal
         );
-        var servers = new List<string>();
+        var pending = new List<ManifestMcp>();
 
         foreach (var server in manifest.Mcp)
         {
@@ -234,24 +298,29 @@ public sealed class CreateService(
             }
             else if (!registered.Contains(server.Name))
             {
-                console.WriteLine($"Registering the MCP server '{server.Name}'...");
-                var outcome = await sbx.AddMcpServerAsync(
-                    server.Name,
-                    server.Url,
-                    cancellationToken
-                );
-                if (!outcome.Succeeded)
-                {
-                    throw new AboxException(
-                        $"The MCP server '{server.Name}' could not be registered." + Detail(outcome)
-                    );
-                }
+                pending.Add(server);
             }
-
-            servers.Add(server.Name);
         }
 
-        return servers;
+        return pending;
+    }
+
+    private async Task RegisterMcpServersAsync(
+        IReadOnlyList<ManifestMcp> servers,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var server in servers)
+        {
+            console.WriteLine($"Registering the MCP server '{server.Name}'...");
+            var outcome = await sbx.AddMcpServerAsync(server.Name, server.Url!, cancellationToken);
+            if (!outcome.Succeeded)
+            {
+                throw new AboxException(
+                    $"The MCP server '{server.Name}' could not be registered." + Detail(outcome)
+                );
+            }
+        }
     }
 
     private static string Detail(SbxOutcome outcome)

@@ -12,6 +12,8 @@ public sealed class BuildServiceTests
 {
     private readonly TempDirectory _root = new();
     private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
+    private readonly IProcessRunner _runner = LocalWorkloadTest.Runner();
+    private readonly TestConsole _console = new();
     private readonly BuildStore _store;
     private readonly SquadResolver _resolver = new(new AboxConfig());
     private readonly BuildService _service;
@@ -27,7 +29,11 @@ public sealed class BuildServiceTests
         _root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
         _root.File("config/personal.abox", "kits: [private]\n");
         _root.File("kits/private/private.yaml", "schemaVersion: \"3\"\nkind: mixin\n");
-        _sbx.InspectKitAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _sbx.InspectKitAsync(
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>()
+            )
             .Returns(new SbxOutcome(0, ""));
         _service = new BuildService(
             _resolver,
@@ -35,8 +41,9 @@ public sealed class BuildServiceTests
             new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             _store,
+            LocalWorkloadTest.Images(_runner),
             _sbx,
-            new TestConsole()
+            _console
         );
     }
 
@@ -164,7 +171,8 @@ public sealed class BuildServiceTests
             await _sbx.Received(1)
                 .InspectKitAsync(
                     Path.Combine(_root.Path, "kits", "private"),
-                    Arg.Any<CancellationToken>()
+                    Arg.Any<CancellationToken>(),
+                    Arg.Any<IReadOnlyDictionary<string, string>>()
                 );
         }
         else
@@ -181,11 +189,16 @@ public sealed class BuildServiceTests
     [Fact]
     public async Task SourcesChangedDuringVerificationAreNotSavedAsAVerifiedBuild()
     {
-        _sbx.InspectKitAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+        _root.File("teams/sample/ac.abox", "workload: sample\nkits: [private]\n");
+        _sbx.InspectKitAsync(
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>()
+            )
             .Returns(call =>
             {
                 File.AppendAllText(
-                    Path.Combine(call.Arg<string>(), "workload.yaml"),
+                    Path.Combine(_store.DirectoryFor("ac", "latest"), "workload", "workload.yaml"),
                     "description: changed during verification\n"
                 );
                 return new SbxOutcome(0, "");
@@ -206,6 +219,68 @@ public sealed class BuildServiceTests
 
     private BuildRequest Request() =>
         new([_resolver.ResolveTeam(_root.Path, "sample")], _root.Path, "latest");
+
+    [Fact]
+    public async Task NoVerifyStillPrebuildsTheWorkloadAndRecordsItsContentIdentity()
+    {
+        await _service.BuildAsync(Request() with { Verify = false }, CancellationToken.None);
+
+        var manifest = _store.Load("ac", "latest")!;
+        manifest.LocalWorkload.Should().NotBeNull();
+        manifest.LocalWorkload!.ImageId.Should().Be(LocalWorkloadTest.ImageId);
+        manifest.LocalWorkload.RuntimeKitDirectory.Should().NotBe(manifest.WorkloadKitDirectory);
+        await _runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request => request.Arguments.Contains("--load")),
+                Arg.Any<CancellationToken>()
+            );
+        await _sbx.DidNotReceive()
+            .InspectKitAsync(
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>(),
+                Arg.Any<IReadOnlyDictionary<string, string>>()
+            );
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MetadataOnlyExplicitlyInvalidatesSelectionButKeepsPreviousLocalArtifacts(
+        bool changeInputs
+    )
+    {
+        await _service.BuildAsync(Request(), CancellationToken.None);
+        var image = _store.Load("ac", "latest")!.LocalWorkload!;
+        var recipePath = Path.Combine(image.RuntimeKitDirectory, "workload.dockerfile");
+        var previousRecipe = File.ReadAllText(recipePath);
+        if (changeInputs)
+        {
+            _root.File("teams/sample/sample.workload", "template: example.com/other:2\n");
+        }
+        _runner.ClearReceivedCalls();
+        _sbx.ClearReceivedCalls();
+
+        var exitCode = await _service.BuildAsync(
+            Request() with
+            {
+                MetadataOnly = true,
+            },
+            CancellationToken.None
+        );
+
+        exitCode.Should().Be(0);
+        _store.Load("ac", "latest")!.LocalWorkload.Should().BeNull();
+        _store
+            .Load("ac", "latest")!
+            .Template.Should()
+            .Be(changeInputs ? "example.com/other:2" : "example.com/base:1");
+        File.ReadAllText(recipePath).Should().Be(previousRecipe);
+        File.Exists(Path.Combine(image.RuntimeKitDirectory, "workload.yaml")).Should().BeTrue();
+        _console.AllText.Should().Contain("invalidated").And.Contain("not deleted");
+        _runner.ReceivedCalls().Should().BeEmpty();
+        _sbx.ReceivedCalls().Should().BeEmpty();
+    }
 
     private sealed class LinkUnavailableException(string message) : Exception(message);
 }

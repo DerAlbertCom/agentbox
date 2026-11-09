@@ -60,6 +60,7 @@ public sealed class PublishServiceTests
             new StateMixinGenerator(),
             new PersonalConfigurations(AboxPaths.For(configDirectory, _root.Path)),
             _store,
+            LocalWorkloadTest.Images(),
             Substitute.For<Abox.Sbx.ISbxClient>(),
             _console
         );
@@ -137,6 +138,7 @@ public sealed class PublishServiceTests
             .Should()
             .Be(build.Kits[1].Arguments["message"]);
         using var config = JsonDocument.Parse(_configurations.Single());
+        config.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(1);
         config
             .RootElement.GetProperty("Mcp")[0]
             .GetProperty("Name")
@@ -828,6 +830,42 @@ public sealed class PublishServiceTests
                 WorkloadKitDirectory = workload,
             }
         );
+    }
+
+    [Fact]
+    public async Task PublishingUsesTheOriginalVerifiedWorkloadNotTheLocalThinRecipe()
+    {
+        SaveBuild("ac");
+        var build = _store.Load("ac", "latest")!;
+        const string recipe = "FROM example.com/base:1\nRUN install-workload-tools\n";
+        File.WriteAllText(Path.Combine(build.WorkloadKitDirectory, "workload.dockerfile"), recipe);
+        build.LocalWorkload = LocalWorkloadTest.Artifact(_root);
+        SaveVerifiedBuild(build);
+        string? publishedRecipe = null;
+        _runner
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.Contains("--push")
+                    && request.Arguments.Any(argument => argument.Contains("/components/workload:"))
+                ),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+            {
+                var request = call.Arg<ProcessRequest>();
+                publishedRecipe = File.ReadAllText(
+                    Path.Combine(request.Arguments.Last(), "workload.dockerfile")
+                );
+                return PublishTestProcess.Run(request);
+            });
+
+        await _service.PublishAsync(Request("ac"), CancellationToken.None);
+
+        publishedRecipe.Should().Be(recipe);
+        _configurations.Should().NotBeEmpty();
+        _configurations
+            .Should()
+            .OnlyContain(configuration => !configuration.Contains(build.LocalWorkload.Reference));
     }
 
     private void SaveVerifiedBuild(BuildManifest build)

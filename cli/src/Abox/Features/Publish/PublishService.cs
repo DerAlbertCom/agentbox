@@ -245,6 +245,7 @@ public sealed class PublishService(
             JsonSerializer.Serialize(
                 new
                 {
+                    SchemaVersion = 1,
                     Team = team.Name,
                     build.Squad,
                     build.Tag,

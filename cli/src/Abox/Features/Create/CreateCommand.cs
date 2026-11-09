@@ -32,7 +32,7 @@ public sealed class CreateCommand : Command
         var squad = new Option<string>("--squad")
         {
             Description =
-                "The squad the sandbox is created from. Without it, the command asks which squad to use.",
+                "The squad the sandbox is created from. Required for remote create; --local can ask which squad to use.",
         };
 
         var location = new Option<string>("--location")
@@ -44,12 +44,13 @@ public sealed class CreateCommand : Command
         var tag = new Option<string>("--tag")
         {
             Description =
-                "The tag of the kit set and its local build metadata. Defaults to the tag of the user configuration.",
+                "The tag of the published set or local build. Defaults to the tag of the user configuration.",
         };
 
         var local = new Option<bool>("--local")
         {
-            Description = "Use the templates that are in sbx, and never pull from the registry.",
+            Description =
+                "Use the prebuilt local workload and v3 kits, without pulling a published squad set.",
         };
 
         var assumeYes = new Option<bool>("--yes")
@@ -76,20 +77,28 @@ public sealed class CreateCommand : Command
                                 "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
                             );
 
-                        var resolved = resolver.ResolveTeam(
-                            Directory.GetCurrentDirectory(),
-                            teamName
-                        );
+                        var useLocal = parseResult.GetValue(local);
+                        var selectedSquad = parseResult.GetValue(squad);
+                        if (!useLocal && string.IsNullOrWhiteSpace(selectedSquad))
+                        {
+                            throw new AboxException(
+                                "Remote create requires --squad <name>; published squad discovery is not supported. No local team files are used."
+                            );
+                        }
+
+                        var resolved = useLocal
+                            ? resolver.ResolveTeam(Directory.GetCurrentDirectory(), teamName)
+                            : new SquadResolver.ResolvedTeam(teamName, string.Empty, []);
 
                         var request = new CreateRequest(
                             resolved,
-                            parseResult.GetValue(squad),
+                            selectedSquad,
                             parseResult.GetValue(location)
                                 ?? config.DefaultLocation
                                 ?? Directory.GetCurrentDirectory(),
                             parseResult.GetValue(tag) ?? config.DefaultTag,
                             parseResult.GetValue(assumeYes),
-                            Local: parseResult.GetValue(local)
+                            Local: useLocal
                         );
 
                         if (!await preflight.EnsureReadyAsync(cancellationToken))

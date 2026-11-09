@@ -116,7 +116,7 @@ public sealed class RunService(
         }
 
         var manifest = store.Load(record.Squad, record.Tag);
-        if (manifest is null || manifest.CreatedAt <= record.BuildCreatedAt)
+        if (manifest?.LocalWorkload is null || manifest.CreatedAt <= record.BuildCreatedAt)
         {
             return true;
         }

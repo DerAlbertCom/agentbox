@@ -9,6 +9,7 @@ namespace Abox.Sbx;
 /// <param name="Mounts">The host directories mounted into the sandbox.</param>
 /// <param name="StaticMcpServers">The MCP servers the sandbox always carries.</param>
 /// <param name="PullPolicy">Whether to refresh registry kits or use only local templates.</param>
+/// <param name="HostDockerContext">The host Docker context holding a prebuilt local workload; forces sbx's host builder.</param>
 public sealed record SbxCreateRequest(
     string KitSource,
     string Location,
@@ -17,5 +18,6 @@ public sealed record SbxCreateRequest(
     IReadOnlyDictionary<string, string> KitArguments,
     IReadOnlyList<SbxMount> Mounts,
     IReadOnlyList<string> StaticMcpServers,
-    string PullPolicy = "never"
+    string PullPolicy = "never",
+    string? HostDockerContext = null
 );

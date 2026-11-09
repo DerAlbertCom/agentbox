@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Abox.Build;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Abox.Features.Build;
@@ -11,6 +12,7 @@ public static class BuildFeature
     public static IServiceCollection AddBuildFeature(this IServiceCollection services)
     {
         services.AddSingleton<BuildService>();
+        services.AddSingleton<LocalWorkloadImages>();
         services.AddSingleton<Command, BuildCommand>();
         return services;
     }
