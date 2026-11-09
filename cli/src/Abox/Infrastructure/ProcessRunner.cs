@@ -6,7 +6,7 @@ namespace Abox.Infrastructure;
 /// <summary>
 /// <see cref="IProcessRunner"/> on top of <see cref="Process"/>.
 /// </summary>
-public sealed class ProcessRunner : IProcessRunner
+public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
 {
     public async Task<ProcessResult> RunAsync(
         ProcessRequest request,
@@ -112,10 +112,12 @@ public sealed class ProcessRunner : IProcessRunner
             throw;
         }
 
-        return new ProcessResult(
+        var result = new ProcessResult(
             process.ExitCode,
             standardOutput.ToString(),
             standardError.ToString()
         );
+        output?.Write(request, result);
+        return result;
     }
 }

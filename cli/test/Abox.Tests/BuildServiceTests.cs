@@ -106,6 +106,28 @@ public sealed class BuildServiceTests
     }
 
     [Fact]
+    public async Task TheCertificateAssetsAreFingerprintedAndIncludedInPublicationSnapshots()
+    {
+        await _service.BuildAsync(
+            Request() with
+            {
+                IncludePersonalConfigurations = false,
+            },
+            CancellationToken.None
+        );
+        var manifest = _store.Load("ac", "latest")!;
+        var snapshot = BuildSources.Snapshot(manifest, _root.Directory_("snapshot"));
+        var asset = Path.Combine("certificates", "rwe_inspection_certificate_chain.pem");
+        File.ReadAllBytes(Path.Combine(snapshot[manifest.WorkloadKitDirectory], asset))
+            .Should()
+            .Equal(File.ReadAllBytes(Path.Combine(manifest.WorkloadKitDirectory, asset)));
+
+        File.AppendAllText(Path.Combine(manifest.WorkloadKitDirectory, asset), "\n# changed\n");
+        var check = () => BuildSources.EnsureUnchanged(manifest);
+        check.Should().Throw<AboxException>().WithMessage("*sources changed*");
+    }
+
+    [Fact]
     public async Task LocalBuildsStillIncludePersonalConfigurationByDefaultAndRecordIt()
     {
         await _service.BuildAsync(Request(), CancellationToken.None);

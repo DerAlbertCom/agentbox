@@ -65,6 +65,14 @@ public sealed class CreateService(
             throw new AboxException($"The folder '{location}' does not exist.");
         }
 
+        if (reference is not null)
+        {
+            await sbx.EnsureKitSourceAllowedAsync(
+                RegistryImageName.PullRepositoryPrefix(config.PullRepository),
+                cancellationToken
+            );
+        }
+
         var remote = reference is null
             ? null
             : await published.LoadAsync(

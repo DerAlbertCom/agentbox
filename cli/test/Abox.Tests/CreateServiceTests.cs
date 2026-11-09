@@ -61,6 +61,8 @@ public sealed class CreateServiceTests
 
         exitCode.Should().Be(0);
         _published.ReceivedCalls().Should().BeEmpty("--local must not pull registry metadata");
+        await _sbx.DidNotReceive()
+            .EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _sbx.Received(1)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
@@ -105,6 +107,11 @@ public sealed class CreateServiceTests
         );
 
         exitCode.Should().Be(0);
+        await _sbx.Received(1)
+            .EnsureKitSourceAllowedAsync(
+                $"rwest.jfrog.io/{repository}/",
+                Arg.Any<CancellationToken>()
+            );
         await _sbx.Received(1)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
@@ -176,6 +183,9 @@ public sealed class CreateServiceTests
         var action = () => service.CreateAsync(request, CancellationToken.None);
 
         (await action.Should().ThrowAsync<AboxException>()).WithMessage($"*{error}*");
+        await _sbx.DidNotReceive()
+            .EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        _published.ReceivedCalls().Should().BeEmpty();
         await _sbx.DidNotReceive()
             .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
@@ -651,10 +661,91 @@ public sealed class CreateServiceTests
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*republish*");
         _sbx.ReceivedCalls()
             .Should()
-            .BeEmpty(
-                "metadata must be validated before any sandbox lookup or deletion, with no local fallback"
+            .ContainSingle()
+            .Which.GetMethodInfo()
+            .Name.Should()
+            .Be(
+                nameof(ISbxClient.EnsureKitSourceAllowedAsync),
+                "only repository trust may be updated before published metadata is validated"
             );
         _records.Load(name).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task RemoteRepositoryTrustIsEnsuredBeforeRegistryWorkAndSandboxReplacement()
+    {
+        var calls = new List<string>();
+        _sbx.When(client =>
+                client.EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            )
+            .Do(_ => calls.Add("trust"));
+        _published
+            .When(source =>
+                source.LoadAsync(
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<string>(),
+                    Arg.Any<CancellationToken>()
+                )
+            )
+            .Do(_ => calls.Add("registry"));
+        _sbx.When(client =>
+                client.RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            )
+            .Do(_ => calls.Add("remove"));
+        _sbx.When(client =>
+                client.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
+            )
+            .Do(_ => calls.Add("create"));
+        _sbx.FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo("existing", "running", DateTimeOffset.UtcNow));
+
+        await _service.CreateAsync(
+            Request() with
+            {
+                Local = false,
+                AssumeYes = true,
+            },
+            CancellationToken.None
+        );
+
+        calls.Should().Equal("trust", "registry", "remove", "create");
+    }
+
+    [Fact]
+    public async Task DeniedRepositoryTrustCannotPullOrRemoveAnExistingSandboxEvenWithYes()
+    {
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+                throw new AboxException("Administrator policy denies kit.allowedSources update.")
+            );
+
+        var action = () =>
+            _service.CreateAsync(
+                Request() with
+                {
+                    Local = false,
+                    AssumeYes = true,
+                },
+                CancellationToken.None
+            );
+
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*Administrator policy*kit.allowedSources*"
+        );
+        _published.ReceivedCalls().Should().BeEmpty();
+        await _sbx.DidNotReceive()
+            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+        _records.Load(name).Should().BeNull();
+        Directory.Exists(Path.Combine(_paths.StateDirectory, name)).Should().BeFalse();
     }
 
     [Fact]

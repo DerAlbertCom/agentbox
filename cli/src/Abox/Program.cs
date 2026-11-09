@@ -13,7 +13,7 @@ builder.Services.AddAbox(console, new TrailingArguments { Values = trailing });
 try
 {
     using var host = builder.Build();
-    return await host.Services.GetRequiredService<AboxRootCommand>().Parse(arguments).InvokeAsync();
+    return await host.Services.GetRequiredService<AboxRootCommand>().InvokeAsync(arguments);
 }
 catch (AboxException exception)
 {

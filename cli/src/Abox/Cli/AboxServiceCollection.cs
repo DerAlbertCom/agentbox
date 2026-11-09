@@ -57,6 +57,7 @@ public static class AboxServiceCollection
         services.AddSingleton(provider =>
             AboxConfigLoader.Load(provider.GetRequiredService<AboxPaths>())
         );
+        services.AddSingleton<ProcessOutput>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<IHostPrograms, HostPrograms>();
         services.AddSingleton<ISbxClient, SbxClient>();

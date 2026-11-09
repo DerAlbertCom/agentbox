@@ -6,6 +6,15 @@ built yet. It is the file to read first when you pick this work up.
 
 ## The commands
 
+All commands accept the global `--verbose` option before or after the command name
+(and before the `--` that separates child arguments). The shared `ProcessRunner`
+reports complete captured stdout and stderr after each external tool exits,
+including successful calls, to abox's stderr. It labels the streams and exit code
+without changing captured results, JSON parsing, or exit status. It never prints
+raw arguments, environment settings or stdin, and redacts known credential values
+echoed in captured diagnostics. Attached-console processes keep their existing
+interactive output without duplicate diagnostics. See [the usage example](../README.md#seeing-tool-output).
+
 ### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal] [--metadata-only]`
 
 Normal builds run the following full image-building path. The explicit
@@ -26,7 +35,8 @@ does not skip the workload image build.
    configuration declares are errors. The error names the duplicate and the files that
    declare it.
 5. Writes the workload kit: `workload.yaml` (the descriptor) and `workload.dockerfile`
-   (the recipe) in the build directory, with the scripts of the workload copied into it.
+   (the recipe) in the build directory, with the scripts of the workload and the
+   bundled CA certificates copied into it.
 6. Writes the state mixin: one `host-mount@1` per state directory.
 7. Optionally checks additional local kit declarations with `sbx kit inspect`,
    passing their resolved arguments, unless `--no-verify` is given. Inspection
@@ -34,8 +44,8 @@ does not skip the workload image build.
    those require `--no-verify` and are processed by sbx at creation.
 8. Builds the generated workload through the v3 frontend with host
    `docker buildx build --file workload.yaml --load --provenance=false`, using the
-   current Docker context's docker-driver builder. Workload apt, mise and scripts
-   run here, not at every sandbox create. BuildKit reuses
+   current Docker context's docker-driver builder. Workload apt, mise, scripts
+   and certificate setup run here, not at every sandbox create. BuildKit reuses
    unchanged instruction/layer caches. No images are pushed. A unique local tag
    `docker.io/library/abox-workload:<id>` and its actual immutable Docker image
    content ID are reported; source changes during building fail the build.
@@ -181,7 +191,21 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
    and never resolves local team folders; it works from any directory without a
    config file, source tree, local manifest or build. Only `--local` resolves the
    team like `build` and asks for an omitted squad (or uses its only squad).
-2. Remote create resolves the published tag with Docker Buildx, selects the host's
+2. Before registry preparation, remote create reads
+   `sbx settings get kit.allowedSources --json` and automatically appends the
+   validated `rwest.jfrog.io/<pullRepository>/` prefix using `sbx settings set`
+   only when no existing prefix (or existing `*`) covers it. It preserves all
+   entries and never adds a wildcard or whole-host trust. The JSON array is one
+   process argument, with no shell quoting. abox serializes its own settings
+   updates and checks the evaluated value after writing; sbx provides no atomic
+   append, so independent manual/settings clients must not edit the list concurrently.
+   Invalid settings, administrator denials and excluding environment overrides
+   fail before registry work or sandbox replacement. This persistent trust addition
+   does not change signature requirements or other policies. `--local` never reads
+   or changes this setting. Copying defaults into an override freezes that list
+   across sbx upgrades; `sbx settings unset kit.allowedSources` restores current
+   defaults and discards the entire overridden list, including the added trust.
+   Remote create then resolves the published tag with Docker Buildx, selects the host's
    Linux platform manifest, validates its processed v3 workload descriptor, then
    pulls its digest-pinned configuration mixin from the retained `kits` list.
    Docker's host credentials need read access to both repositories. It reads
@@ -390,6 +414,31 @@ keeps them all, and every list is reversed, because mise activates the first ent
 its list: the last entry of the workload is the default of the image.
 The GitHub token is passed as a BuildKit secret, so it never lands in a layer. The
 generated image has `/home/agent/workspace` as its working directory.
+
+When tools or scripts are requested, the generator installs mise as `agent` if it
+is missing, then checks that it runs. The installer is downloaded before execution,
+so a failed download stops that build step instead of being hidden by a shell
+pipeline and causing `mise: not found` in the next step.
+
+Every generated workload (including one without tools) installs the approved
+`cli/src/Abox/Assets/rwe_inspection_certificate_chain.pem` bundle before any apt,
+mise or script downloads. This is the supplied RWE inspection CA bundle: public
+certificates and CA metadata comments, not private keys. It is embedded in the
+CLI assembly, so global tool installations do not need the repository or
+`C:/Localdata` at runtime. The generated `certificates/` build-context directory
+contains the exact bundle and one `.crt` per certificate; as root, the Dockerfile
+copies these into `/usr/local/share/ca-certificates/abox/` and runs the distro's
+`update-ca-certificates` before returning to `agent`. Templates must provide
+`update-ca-certificates` (the `ca-certificates` package) and `curl`; trust setup
+does not download anything to bootstrap itself.
+
+The system trust store and certificate files remain in the runtime image.
+`MISE_EXTRA_CA_CERTS` and `NODE_EXTRA_CA_CERTS` add this same bundle to mise's and
+Node's roots for subsequent tool/package downloads without replacing default
+roots or disabling TLS verification. The host certificate store is never imported.
+Generated assets are covered by the workload source fingerprint and publication
+snapshot like the Dockerfile and scripts; no manifest contract change is needed.
+After updating the approved repository bundle, rebuild the CLI/tool and workload.
 
 ## The code
 

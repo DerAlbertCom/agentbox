@@ -26,7 +26,8 @@ public static class RegistryImageName
         return name + "/" + leaf;
     }
 
-    public static string OfSquad(string repository, string team, string squad, string tag)
+    /// <summary>The exact JFrog repository scope used for pulling and source trust.</summary>
+    public static string PullRepositoryPrefix(string repository)
     {
         if (!IsValidRepository(repository))
         {
@@ -35,11 +36,18 @@ public static class RegistryImageName
             );
         }
 
+        return $"{Registry}/{repository}/";
+    }
+
+    public static string OfSquad(string repository, string team, string squad, string tag)
+    {
+        var prefix = PullRepositoryPrefix(repository);
+
         if (!Regex.IsMatch(tag, @"\A[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\z"))
         {
             throw new AboxException($"'{tag}' is not a valid registry tag.");
         }
 
-        return $"{Registry}/{repository}/{SquadRepository(team, squad)}:{tag}";
+        return $"{prefix}{SquadRepository(team, squad)}:{tag}";
     }
 }

@@ -24,6 +24,27 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
 
+### Seeing tool output
+
+Add the global `--verbose` flag to see the complete captured stdout and stderr of
+external tools such as sbx and Docker, on both success and failure:
+
+```powershell
+./run-abox.ps1 build --team mti-ca --verbose
+# Installed tool:
+abox --verbose build --team mti-ca
+```
+
+The flag works before or after a command (including `secrets` subcommands), but
+must precede `--` when passing arguments to a launcher or sandbox command. Output
+is shown after each tool exits, grouped by stdout and stderr with its exit code,
+and goes to **abox's stderr** so it does not contaminate stdout. There is no
+truncation; default output remains concise. Interactive tools already inherit the
+terminal and are not captured or printed twice. Diagnostics omit arguments,
+environment settings and stdin, and redact known credential values if a tool
+echoes them. Tool output can still contain other sensitive data; review it before
+sharing.
+
 ## The layout of a project
 
 ```
@@ -170,6 +191,20 @@ The small digest-pinned config mixin is read from a temporary Docker-save archiv
 no container is executed. Its image remains in Docker's normal cache. The processed
 set's layers and security declarations are passed unchanged to sbx. No local
 workload/mixin recipes are run or overlaid.
+
+Before registry preparation, remote create automatically adds the configured
+`rwest.jfrog.io/<pullRepository>/` prefix to sbx's `kit.allowedSources` when it is
+not already covered. This is a persistent, **repository-scoped trust addition**;
+existing entries (including an existing `*`) are preserved, and no setting is
+written when the repository is already allowed. It never adds a wildcard or trusts
+the whole JFrog host. `--local` does not read or change source trust. Invalid settings,
+administrator restrictions or an environment-controlled allowlist that excludes
+the repository stop creation before registry preparation or sandbox replacement.
+Signature requirements and other sbx security policies remain unchanged.
+Adding to the default list creates an override, freezing those copied defaults
+across future sbx upgrades. `sbx settings unset kit.allowedSources` restores the
+current defaults and discards the entire list override, including the added
+repository trust; a later remote create may add its configured repository again.
 
 Give `--squad` explicitly: remote squad discovery is not currently supported.
 Missing/invalid bundled metadata, identity/schema mismatches, unsafe state paths,

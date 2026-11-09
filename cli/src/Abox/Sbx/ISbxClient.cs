@@ -25,6 +25,9 @@ public interface ISbxClient
 
     Task<SbxOutcome> CreateAsync(SbxCreateRequest request, CancellationToken cancellationToken);
 
+    /// <summary>Adds a validated repository prefix to kit.allowedSources if it is not already covered.</summary>
+    Task EnsureKitSourceAllowedAsync(string repositoryPrefix, CancellationToken cancellationToken);
+
     Task<SbxOutcome> RemoveSandboxAsync(string name, CancellationToken cancellationToken);
 
     /// <summary>Stops one sandbox without removing it.</summary>
