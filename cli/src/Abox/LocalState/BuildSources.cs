@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 
-namespace Abox.Build;
+namespace Abox.LocalState;
 
 /// <summary>Fingerprints local build inputs and snapshots those exact inputs for publication.</summary>
 public static class BuildSources

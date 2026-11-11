@@ -1,9 +1,9 @@
-using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Create;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -251,16 +251,14 @@ public sealed class CreateCommandTests
             new Lazy<AboxConfig>(() => config),
             new Preflight(_console, _sbx, programs),
             new Lazy<SquadResolver>(() => new SquadResolver(config)),
-            new Lazy<CreateService>(() =>
-                new CreateService(
-                    store,
+            new Lazy<SandboxCreator>(() =>
+                new SandboxCreator(
                     new SandboxRecordStore(paths),
                     paths,
-                    config,
                     _sbx,
-                    LocalWorkloadTest.Images(),
                     _console,
-                    PublishedSquadTest.Source()
+                    new LocalSquadSource(store, LocalWorkloadTest.Images(), _console),
+                    new RemoteSquadSource(config, _sbx, PublishedSquadTest.Source())
                 )
             ),
             _console

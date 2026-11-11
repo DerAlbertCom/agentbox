@@ -13,9 +13,9 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 
 | Command | What it does |
 |---|---|
-| `abox build --team <name>` | Prebuilds reusable local workload images with Docker Buildx and prepares the v3 kits of every squad. No registry writes. |
+| `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal]` | Prebuilds reusable local workload images with Docker Buildx and prepares the v3 kits of every squad. No registry writes. |
 | `abox build --team <name> --metadata-only` | Maintainer-only source preparation without image builds. Clears local image selection for this tag; not required for remote create. |
-| `abox publish --team <name> [--tag <tag>] [--builder <name>]` | Builds and pushes the local kit sets to `rwest.jfrog.io/<publishRepository>`, configured in each workload. Requires Docker Buildx and host registry sign-in. |
+| `abox publish --team <name> [--root <dir>] [--tag <tag>] [--builder <name>]` | Builds and pushes the local kit sets to `rwest.jfrog.io/<publishRepository>`, configured in each workload. Requires Docker Buildx and host registry sign-in. |
 | `abox create --team <name> --squad <name> [--location <path>] [--local] [--root <dir>]` | Pulls a self-contained published squad set, or uses a local prebuild with `--local`. Only local create can ask for an omitted squad; `--root` locates its team sources separately from the sandbox location. |
 | `abox run [<launcher>] [--location <path>] [-- <argv>...]` | Starts a launcher for the sandbox of a folder. The default launcher is a shell. |
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
@@ -135,9 +135,16 @@ Override the repository in abox's user `config.yaml`, alongside the existing def
 
 ```yaml
 defaultTeam: sample
+# defaultLocation: /path/to/project
+teamsDirectory: teams
+kitsDirectory: kits
 defaultTag: latest
 pullRepository: mtiae-docker-release
 ```
+
+- `defaultLocation` is unset by default: `create` and `run` use the current folder unless `--location` is given.
+- `teamsDirectory` names the project's teams directory; the default is `teams`.
+- `kitsDirectory` names the kits directory relative to the project root; the default is `kits`.
 
 The file is at `$XDG_CONFIG_HOME/abox/config.yaml` when `XDG_CONFIG_HOME` is an
 absolute path; otherwise it is `~/.config/abox/config.yaml` on Linux/macOS or

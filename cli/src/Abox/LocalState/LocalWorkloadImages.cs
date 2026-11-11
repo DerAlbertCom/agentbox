@@ -1,14 +1,13 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Abox.Infrastructure;
 using Abox.Kits;
 
-namespace Abox.Build;
+namespace Abox.LocalState;
 
 /// <summary>Prebuilds workload content in host Docker; sbx only wraps it as a v3 kit at create.</summary>
 public sealed class LocalWorkloadImages(
     IHostPrograms programs,
-    IProcessRunner runner,
+    IOciRegistry registry,
     IConsole console
 )
 {
@@ -169,7 +168,7 @@ public sealed class LocalWorkloadImages(
                 cancellationToken
             )
         ).StandardOutput.Trim();
-        if (!Regex.IsMatch(id, @"\Asha256:[a-f0-9]{64}\z"))
+        if (!OciRegistry.IsDigest(id))
         {
             throw new AboxException(
                 $"Docker did not report a valid content ID for '{reference}'. Run 'abox build' again."
@@ -188,21 +187,8 @@ public sealed class LocalWorkloadImages(
         }
     }
 
-    private async Task<ProcessResult> RunAsync(
+    private Task<ProcessResult> RunAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await runner.RunAsync(
-            new ProcessRequest("docker", arguments),
-            cancellationToken
-        );
-        if (!result.Succeeded)
-        {
-            throw new AboxException(
-                $"Local workload image operation failed (Docker, exit {result.ExitCode}). Check the Docker context and run 'abox build' again. No source-build fallback is performed.{Environment.NewLine}{(result.StandardError + result.StandardOutput).Trim()}"
-            );
-        }
-        return result;
-    }
+    ) => registry.RunAsync(arguments, DockerOperation.LocalWorkload, cancellationToken);
 }

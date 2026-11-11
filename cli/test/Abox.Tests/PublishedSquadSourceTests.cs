@@ -5,8 +5,8 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Abox;
-using Abox.Features.Create;
 using Abox.Infrastructure;
+using Abox.Sbx;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -376,7 +376,7 @@ public sealed class PublishedSquadSourceTests
     }
 
     private Task<PublishedSquad> LoadAsync() =>
-        new PublishedSquadSource(_runner, _programs, _console).LoadAsync(
+        new PublishedSquadSource(new OciRegistry(_runner), _programs, _console).LoadAsync(
             Reference,
             "mti-ca",
             "ac",

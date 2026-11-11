@@ -64,76 +64,81 @@ public sealed class SecretsCommand : Command
         Func<SecretsRequest, CancellationToken, Task<int>> action
     )
     {
-        var team = new Option<string>("--team")
-        {
-            Description =
-                "The team the squad belongs to. Defaults to the team of the user configuration.",
-        };
-
-        var squad = new Option<string>("--squad")
-        {
-            Description = "The squad whose secrets are managed. The command needs it.",
-        };
-
-        var root = new Option<string>("--root")
-        {
-            Description =
-                "The directory of the project that holds the teams folder. Defaults to the current directory.",
-        };
-
-        var service = new Option<string[]>("--service")
-        {
-            Description = "The service to act on. Can be given more than once.",
-            AllowMultipleArgumentsPerToken = false,
-        };
-
+        var options = new SecretOptions(withService);
         var command = new Command(name, description);
-        command.Options.Add(team);
-        command.Options.Add(squad);
-        command.Options.Add(root);
-
-        if (withService)
-        {
-            command.Options.Add(service);
-        }
-
+        options.AddTo(command);
         command.SetAction(
             async (parseResult, cancellationToken) =>
                 await CommandHandling.RunAsync(
                     async () =>
                     {
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
-                        {
                             return 1;
-                        }
-
-                        var wanted = withService ? parseResult.GetValue(service) ?? [] : [];
-
-                        if (parseResult.GetValue(squad) is not { } squadName)
-                        {
-                            throw new AboxException("No squad is given. Give --squad <name>.");
-                        }
-
-                        var teamName =
-                            parseResult.GetValue(team)
-                            ?? config.Value.DefaultTeam
-                            ?? throw new AboxException(
-                                "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
-                            );
-
-                        var request = new SecretsRequest(
-                            teamName,
-                            squadName,
-                            parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
-                            wanted
+                        return await action(
+                            options.ReadRequest(parseResult, config),
+                            cancellationToken
                         );
-
-                        return await action(request, cancellationToken);
                     },
                     console
                 )
         );
-
         return command;
+    }
+
+    private sealed class SecretOptions(bool withService)
+    {
+        private readonly Option<string> team = new("--team")
+        {
+            Description =
+                "The team the squad belongs to. Defaults to the team of the user configuration.",
+        };
+
+        private readonly Option<string> squad = new("--squad")
+        {
+            Description = "The squad whose secrets are managed. The command needs it.",
+        };
+
+        private readonly Option<string> root = new("--root")
+        {
+            Description =
+                "The directory of the project that holds the teams folder. Defaults to the current directory.",
+        };
+
+        private readonly Option<string[]> service = new("--service")
+        {
+            Description = "The service to act on. Can be given more than once.",
+            AllowMultipleArgumentsPerToken = false,
+        };
+
+        public void AddTo(Command command)
+        {
+            command.Options.Add(team);
+            command.Options.Add(squad);
+            command.Options.Add(root);
+
+            if (withService)
+            {
+                command.Options.Add(service);
+            }
+        }
+
+        public SecretsRequest ReadRequest(ParseResult parseResult, Lazy<AboxConfig> config)
+        {
+            var wanted = withService ? parseResult.GetValue(service) ?? [] : [];
+            if (parseResult.GetValue(squad) is not { } squadName)
+                throw new AboxException("No squad is given. Give --squad <name>.");
+            var teamName =
+                parseResult.GetValue(team)
+                ?? config.Value.DefaultTeam
+                ?? throw new AboxException(
+                    "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
+                );
+            return new SecretsRequest(
+                teamName,
+                squadName,
+                parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
+                wanted
+            );
+        }
     }
 }

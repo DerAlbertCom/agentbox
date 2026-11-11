@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Abox.Configuration;
 
-namespace Abox.Build;
+namespace Abox.LocalState;
 
 /// <summary>
 /// Keeps what abox knows about the sandboxes it created: the squad they come from and

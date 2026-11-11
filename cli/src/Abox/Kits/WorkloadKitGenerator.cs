@@ -88,6 +88,20 @@ public sealed class WorkloadKitGenerator
             .AppendLine("USER agent")
             .AppendLine();
 
+        AppendAptPackages(dockerfile, workload);
+        AppendMiseBootstrap(dockerfile, workload);
+        AppendMiseTools(dockerfile, workload);
+        AppendScripts(dockerfile, workload);
+        dockerfile.AppendLine("WORKDIR /home/agent/workspace");
+
+        File.WriteAllText(
+            Path.Combine(targetDirectory, KitName + ".dockerfile"),
+            dockerfile.ToString().ReplaceLineEndings("\n")
+        );
+    }
+
+    private static void AppendAptPackages(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Apt.Count > 0)
         {
             var install = new StringBuilder()
@@ -114,7 +128,10 @@ public sealed class WorkloadKitGenerator
                 .AppendLine("USER agent")
                 .AppendLine();
         }
+    }
 
+    private static void AppendMiseBootstrap(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Mise.Count > 0 || workload.Scripts.Count > 0)
         {
             dockerfile
@@ -133,7 +150,10 @@ public sealed class WorkloadKitGenerator
                 .AppendLine("    mise --version")
                 .AppendLine();
         }
+    }
 
+    private static void AppendMiseTools(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Mise.Count > 0)
         {
             dockerfile
@@ -156,7 +176,10 @@ public sealed class WorkloadKitGenerator
 
             dockerfile.AppendLine();
         }
+    }
 
+    private static void AppendScripts(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Scripts.Count > 0)
         {
             dockerfile
@@ -172,13 +195,6 @@ public sealed class WorkloadKitGenerator
 
             dockerfile.AppendLine();
         }
-
-        dockerfile.AppendLine("WORKDIR /home/agent/workspace");
-
-        File.WriteAllText(
-            Path.Combine(targetDirectory, KitName + ".dockerfile"),
-            dockerfile.ToString().ReplaceLineEndings("\n")
-        );
     }
 
     /// <summary>

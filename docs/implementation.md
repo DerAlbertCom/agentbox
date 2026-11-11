@@ -218,7 +218,8 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
    missing/invalid metadata requires maintainer republication, never local fallback.
    Only `--local` reads the local build manifest for state and MCP metadata.
 3. Names the sandbox after the folder: `<folder>-abox-<hash>`, where the hash is the
-   first five characters of the SHA-256 of the absolute path.
+   first five hex characters, uppercase, of SHA-256 over the normalized absolute
+   path: forward slashes, lowercased on Windows.
 4. Validates MCP registrations read-only, then asks before replacing an existing
    sandbox and lists what is lost. After consent, registers missing MCP servers
    with URLs and prepares host state directories before deletion. A refusal
@@ -244,6 +245,14 @@ The user setting `pullRepository` defaults to **`mtiae-docker-release`**. It acc
 one lowercase JFrog repository path segment; an omitted or blank setting uses the
 default. It is independent of the workload's `publishRepository`. See
 [the settings file location and example](../README.md#user-settings).
+
+The same user configuration also accepts:
+
+- `defaultLocation`: the folder for `create` and `run` when `--location` is omitted;
+  unset by default, which means the current folder.
+- `teamsDirectory`: the project's teams directory, `teams` by default.
+- `kitsDirectory`: the kits directory relative to the project root, `kits` by default.
+
 `--tag` chooses the published set or local build tag, `latest` by default.
 `--local` opts into local kits and includes their local/personal customizations.
 Pull failures are reported without a silent local fallback.
@@ -320,7 +329,7 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
   sbx 0.51 requires destination hosts for credential substitution; environment-only
   legacy mappings remain removable, but need a `host` to supply credentials.
 
-### `abox prune`
+### `abox prune [--full] [--sbx]`
 
 Sbx stores every kit it builds as a template image: one image per build plus one per kit
 in it, and the sources of the kits under a own repository (sbx-kit-src). They pile up,
@@ -469,28 +478,42 @@ cli/src/Abox/
   Features/
     Build/          abox build: the command and the service that does its work
     Publish/        abox publish: v3 frontend builds, JFrog pushes and set assembly
-    Create/         abox create: the command and the service that does its work
+    Create/         abox create: the command and its slice registration
     Run/            abox run: the command and the service that does its work
     Secrets/        abox secrets: the command and the service that does its work
     Prune/          abox prune: the command and the service that does its work
     Sandbox/        the commands other programs call: abox exec and abox pipe
-    CommandHandling turns an abox error into a message and an exit code
+    CommandHandling.cs  turns an abox error into a message and an exit code
   Configuration/    the directories and the user configuration
   Kits/             the .abox and .workload files, the chain, the kit generators
-  Build/            the manifest of a local build and the store that keeps it
+  LocalState/       local on-disk state shared by the command slices
+    BuildManifest.cs
+    BuildSources.cs
+    BuildStore.cs
+    LocalWorkloadImages.cs
+    PersonalConfigurations.cs
+    SandboxRecord.cs
+    SandboxRecordStore.cs
   Launchers/        one class per launcher
-  Sbx/              every call to sbx
+  Sbx/              every call to sbx and shared sandbox creation
+    SandboxCreator.cs       the create operation shared by create and run
+    PublishedSquadSource.cs reads the published set's bundled squad metadata
+    SquadSources.cs         local and remote ISquadSource adapters
   Health/           the checks every command runs first
   Infrastructure/   the console, the processes, the YAML
-  Naming/           the name of a sandbox
+    OciRegistry.cs          every Docker call and OCI kit inspection
+    TemporaryDirectory.cs   temporary working directories and their cleanup
+  Naming/           sandbox and image names
+    ImageName.cs            the unqualified team reference of a local build
 ```
 
 - The code is arranged by use, not by kind: one folder per command holds the command
-  and the service that does its work, and shared, technical services keep one place
-  each (`Configuration`, `Kits`, `Build`, `Launchers`, `Sbx`, `Health`,
-  `Infrastructure`, `Naming`).
+  and its slice registration, with command-specific services alongside them. Shared,
+  technical services keep one place each (`Configuration`, `Kits`, `LocalState`,
+  `Launchers`, `Sbx`, `Health`, `Infrastructure`, `Naming`).
 - One wrapper class (`SbxClient`) makes every `sbx` call. The flags and the version
-  check live in that one place. The arguments are always a list, never a shell string.
+  check live in that one place. One wrapper class (`OciRegistry`) makes every `docker`
+  call. The arguments are always a list, never a shell string.
 - Each launcher is one class behind `ILauncher`.
 - Each command is a class that the container builds and that takes its dependencies
   in its constructor; nothing looks the commands up by hand. The root command holds

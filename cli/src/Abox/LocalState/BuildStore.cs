@@ -1,7 +1,7 @@
 using System.Text.Json;
 using Abox.Configuration;
 
-namespace Abox.Build;
+namespace Abox.LocalState;
 
 /// <summary>
 /// Keeps the local builds: one directory per squad and tag, each with the manifest that

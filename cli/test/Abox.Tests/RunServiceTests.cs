@@ -1,12 +1,11 @@
-using Abox.Build;
 using Abox.Configuration;
-using Abox.Features.Create;
 using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Launchers;
+using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
@@ -22,7 +21,7 @@ public sealed class RunServiceTests
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
     private readonly SandboxRecordStore _records;
-    private readonly CreateService _create;
+    private readonly SandboxCreator _create;
     private readonly AboxConfig _config = new() { DefaultTeam = "sample" };
 
     public RunServiceTests()
@@ -39,15 +38,13 @@ public sealed class RunServiceTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _create = new CreateService(
-            _store,
+        _create = new SandboxCreator(
             _records,
             _paths,
-            _config,
             _sbx,
-            LocalWorkloadTest.Images(),
             _console,
-            PublishedSquadTest.Source()
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new RemoteSquadSource(_config, _sbx, PublishedSquadTest.Source())
         );
         _service = new RunService(
             launchers,
@@ -197,7 +194,7 @@ public sealed class RunServiceTests
                 Squad = "ac",
                 Tag = "release",
                 RootDirectory = _root.Path,
-                Reference = Abox.Features.Build.ImageName.OfTeam("other-team", "release"),
+                Reference = ImageName.OfTeam("other-team", "release"),
             }
         );
 
@@ -319,7 +316,7 @@ public sealed class RunServiceTests
                 RootDirectory = sourceRoot.Path,
                 CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
                 WorkloadKitDirectory = "/kits/workload",
-                Reference = Abox.Features.Build.ImageName.OfTeam("sample", "latest"),
+                Reference = ImageName.OfTeam("sample", "latest"),
                 LocalWorkload = LocalWorkloadTest.Artifact(_root),
             }
         );
@@ -400,7 +397,7 @@ public sealed class RunServiceTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = Abox.Features.Build.ImageName.OfTeam("sample", "latest"),
+                Reference = ImageName.OfTeam("sample", "latest"),
                 CreatedAt = DateTimeOffset.Now,
                 LocalWorkload = null,
             }
@@ -443,7 +440,7 @@ public sealed class RunServiceTests
                 Tag = "latest",
                 CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
                 WorkloadKitDirectory = "/kits/workload",
-                Reference = Abox.Features.Build.ImageName.OfTeam("sample", "latest"),
+                Reference = ImageName.OfTeam("sample", "latest"),
                 LocalWorkload = LocalWorkloadTest.Artifact(_root),
             }
         );

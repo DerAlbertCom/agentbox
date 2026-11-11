@@ -27,7 +27,7 @@ Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit co
 
 - **`abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag> | --local]`**
   - Both `create` and `run` resolve `--location`, then the user config `defaultLocation`, then the current folder. The team name defaults to `defaultTeam`. Only `--local` resolves team sources from the `teams` folder at the location or its parents; `--root` selects a separate source project. Without `--squad`, local create asks which squad of the team to use, when there is more than one; remote create requires it.
-  - Creates the sandbox from the squad's kit set in JFrog, under `rwest.jfrog.io/<pullRepository>`. The user setting `pullRepository` defaults to `mtiae-docker-release` and is independent of the workload's publish repository. The default tag is `latest`, pulled with `--pull always`, because sbx's default for kit sets is `missing`, which never refreshes a tag. `--tag` selects another tag. `--local` uses the templates that are in sbx and never pulls. The goal is creation without the source repository; today, local team files and build metadata are still required for state and MCP settings. Personal `.abox` kit customizations currently require `--local`. *(proposed: consume the resolved squad config that travels with the set, see open question 2)*
+  - Creates the sandbox from the squad's kit set in JFrog, under `rwest.jfrog.io/<pullRepository>`. The user setting `pullRepository` defaults to `mtiae-docker-release` and is independent of the workload's publish repository. The default tag is `latest`, pulled with `--pull always`, because sbx's default for kit sets is `missing`, which never refreshes a tag. `--tag` selects another tag. `--local` uses a prebuilt local workload image and its runtime kits with `--pull never`. Remote create needs no source repository or local build metadata: state and MCP settings come from the published set's bundled `squad.json`. Personal `.abox` kit customizations currently require `--local`.
   - A sandbox that already exists for the location is replaced after confirmation. The confirmation lists what will be lost. State directories are kept: the sandbox name does not change, so their host paths do not change either.
   - An existing sandbox keeps the image it was created from. A newer `latest` reaches only sandboxes created after it (inferred; verify).
 - **`abox run [<launcher>] [--location <path>] [-- <argv>...]`** starts a launcher for the folder's sandbox. The default launcher is `shell`. See Launchers.
@@ -260,7 +260,7 @@ Never call `sbx prune` (it removes every stopped sandbox on the machine) or `sbx
 ## Open questions
 
 1. Do any team members use Intel Macs? sbx's prerequisites list Apple silicon only.
-2. Confirm that `state` stays unique across the chain; your latest list omitted it.
+2. **Resolved:** `state` stays unique across the chain; duplicate and overlapping state directories are rejected.
 3. Which gateway gives Claude Code access to Copilot?
 4. `abox secrets` runs `sbx secret` behind the scenes. Service secrets reach the sandbox through the proxy, and registry credentials (JFrog pulls and pushes) stay on the host. Confirm?
 5. Does the credentials proxy cover `api.github.com`? If not, `mise` inside a sandbox hits anonymous rate limits.

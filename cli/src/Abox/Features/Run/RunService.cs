@@ -1,9 +1,8 @@
-using Abox.Build;
 using Abox.Configuration;
-using Abox.Features.Create;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Launchers;
+using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sbx;
 
@@ -24,7 +23,7 @@ public sealed class RunService(
     SquadResolver resolver,
     BuildStore store,
     SandboxRecordStore records,
-    CreateService create,
+    SandboxCreator create,
     ISbxClient sbx,
     IHostPrograms hostPrograms,
     IConsole console
@@ -104,7 +103,7 @@ public sealed class RunService(
         if (team is null && record is not null)
         {
             var reference = manifest?.Reference;
-            var prefix = $"agentbox-{Abox.Features.Build.ImageName.Tenant}-";
+            var prefix = $"agentbox-{ImageName.Tenant}-";
             var suffix = ":" + tag;
             if (
                 reference is not null
@@ -188,7 +187,7 @@ public sealed class RunService(
         );
 
         return await create.CreateAsync(
-                new CreateRequest(
+                new SandboxCreationRequest(
                     team,
                     record.Squad,
                     location,

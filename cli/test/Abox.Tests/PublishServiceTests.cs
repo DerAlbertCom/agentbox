@@ -1,9 +1,9 @@
 using System.Text.Json;
-using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Publish;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -23,7 +23,7 @@ public sealed class PublishServiceTests
     public PublishServiceTests()
     {
         _store = new BuildStore(AboxPaths.For(_root.Path, Path.Combine(_root.Path, "state")));
-        _service = new PublishService(_store, _programs, _runner, _console);
+        _service = new PublishService(_store, _programs, new OciRegistry(_runner), _console);
         _programs.Exists("docker").Returns(true);
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())

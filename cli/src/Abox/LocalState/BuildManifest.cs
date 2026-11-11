@@ -1,4 +1,4 @@
-namespace Abox.Build;
+namespace Abox.LocalState;
 
 /// <summary>What a local build holds.</summary>
 public sealed class BuildManifest

@@ -13,6 +13,26 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
         CancellationToken cancellationToken
     )
     {
+        using var process = new Process { StartInfo = StartInfo(request) };
+        var standardOutput = new StringBuilder();
+        var standardError = new StringBuilder();
+        if (!request.AttachConsole)
+            CaptureOutput(process, standardOutput, standardError);
+
+        Start(process, request.FileName);
+        await CompleteAsync(process, request, cancellationToken);
+
+        var result = new ProcessResult(
+            process.ExitCode,
+            standardOutput.ToString(),
+            standardError.ToString()
+        );
+        output?.Write(request, result);
+        return result;
+    }
+
+    private static ProcessStartInfo StartInfo(ProcessRequest request)
+    {
         var startInfo = new ProcessStartInfo(request.FileName)
         {
             UseShellExecute = false,
@@ -43,41 +63,49 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
             startInfo.RedirectStandardInput = true;
         }
 
-        using var process = new Process { StartInfo = startInfo };
+        return startInfo;
+    }
 
-        var standardOutput = new StringBuilder();
-        var standardError = new StringBuilder();
-
-        if (!request.AttachConsole)
+    private static void CaptureOutput(
+        Process process,
+        StringBuilder standardOutput,
+        StringBuilder standardError
+    )
+    {
+        process.OutputDataReceived += (_, e) =>
         {
-            process.OutputDataReceived += (_, e) =>
+            if (e.Data is not null)
             {
-                if (e.Data is not null)
-                {
-                    standardOutput.AppendLine(e.Data);
-                }
-            };
-            process.ErrorDataReceived += (_, e) =>
+                standardOutput.AppendLine(e.Data);
+            }
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
             {
-                if (e.Data is not null)
-                {
-                    standardError.AppendLine(e.Data);
-                }
-            };
-        }
+                standardError.AppendLine(e.Data);
+            }
+        };
+    }
 
+    private static void Start(Process process, string fileName)
+    {
         try
         {
             process.Start();
         }
         catch (Exception exception)
         {
-            throw new AboxException(
-                $"Cannot start '{request.FileName}'. {exception.Message}",
-                exception
-            );
+            throw new AboxException($"Cannot start '{fileName}'. {exception.Message}", exception);
         }
+    }
 
+    private static async Task CompleteAsync(
+        Process process,
+        ProcessRequest request,
+        CancellationToken cancellationToken
+    )
+    {
         try
         {
             if (!request.AttachConsole)
@@ -113,13 +141,5 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
 
             throw;
         }
-
-        var result = new ProcessResult(
-            process.ExitCode,
-            standardOutput.ToString(),
-            standardError.ToString()
-        );
-        output?.Write(request, result);
-        return result;
     }
 }

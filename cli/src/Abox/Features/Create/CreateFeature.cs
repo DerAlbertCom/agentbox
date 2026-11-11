@@ -1,4 +1,5 @@
 using System.CommandLine;
+using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Abox.Features.Create;
@@ -10,8 +11,9 @@ public static class CreateFeature
 {
     public static IServiceCollection AddCreateFeature(this IServiceCollection services)
     {
-        services.AddSingleton<CreateService>();
-        services.AddSingleton<IPublishedSquadSource, PublishedSquadSource>();
+        services.AddSingleton(provider => new Lazy<SandboxCreator>(
+            provider.GetRequiredService<SandboxCreator>
+        ));
         services.AddSingleton<Command, CreateCommand>();
         return services;
     }

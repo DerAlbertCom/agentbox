@@ -1,4 +1,4 @@
-namespace Abox.Features.Build;
+namespace Abox.Naming;
 
 /// <summary>
 /// The unqualified team reference kept in local build manifests. Publishing adds

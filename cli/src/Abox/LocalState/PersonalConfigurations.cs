@@ -1,6 +1,6 @@
 using Abox.Configuration;
 
-namespace Abox.Build;
+namespace Abox.LocalState;
 
 /// <summary>
 /// The personal <c>.abox</c> files of the user. They add to a squad, they never replace it.

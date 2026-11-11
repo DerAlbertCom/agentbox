@@ -3,6 +3,7 @@ using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.Sbx;
 
 namespace Abox.Features.Create;
 
@@ -15,7 +16,7 @@ public sealed class CreateCommand : Command
         Lazy<AboxConfig> config,
         Preflight preflight,
         Lazy<SquadResolver> resolver,
-        Lazy<CreateService> create,
+        Lazy<SandboxCreator> create,
         IConsole console
     )
         : base(
@@ -104,7 +105,7 @@ public sealed class CreateCommand : Command
                             )
                             : new SquadResolver.ResolvedTeam(teamName, string.Empty, []);
 
-                        var request = new CreateRequest(
+                        var request = new SandboxCreationRequest(
                             resolved,
                             selectedSquad,
                             resolvedLocation,

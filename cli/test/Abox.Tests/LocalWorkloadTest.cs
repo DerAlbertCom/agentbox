@@ -1,5 +1,5 @@
-using Abox.Build;
 using Abox.Infrastructure;
+using Abox.LocalState;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -32,7 +32,11 @@ internal static class LocalWorkloadTest
     {
         var programs = Substitute.For<IHostPrograms>();
         programs.Exists("docker").Returns(true);
-        return new LocalWorkloadImages(programs, runner ?? Runner(), new TestConsole());
+        return new LocalWorkloadImages(
+            programs,
+            new OciRegistry(runner ?? Runner()),
+            new TestConsole()
+        );
     }
 
     public static LocalWorkloadImage Artifact(TempDirectory root)

@@ -1,4 +1,3 @@
-using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Build;
 using Abox.Features.Create;
@@ -10,7 +9,7 @@ using Abox.Features.Secrets;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
-using Abox.Launchers;
+using Abox.LocalState;
 using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -62,20 +61,9 @@ public static class AboxServiceCollection
         services.AddSingleton(provider => new Lazy<SquadResolver>(
             provider.GetRequiredService<SquadResolver>
         ));
-        services.AddSingleton(provider => new Lazy<BuildService>(
-            provider.GetRequiredService<BuildService>
-        ));
-        services.AddSingleton(provider => new Lazy<CreateService>(
-            provider.GetRequiredService<CreateService>
-        ));
-        services.AddSingleton(provider => new Lazy<RunService>(
-            provider.GetRequiredService<RunService>
-        ));
-        services.AddSingleton(provider => new Lazy<SecretsService>(
-            provider.GetRequiredService<SecretsService>
-        ));
         services.AddSingleton<ProcessOutput>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
+        services.AddSingleton<IOciRegistry, OciRegistry>();
         services.AddSingleton<IHostPrograms, HostPrograms>();
         services.AddSingleton<ISbxClient, SbxClient>();
         services.AddSingleton<Preflight>();
@@ -83,11 +71,11 @@ public static class AboxServiceCollection
         services.AddSingleton<BuildStore>();
         services.AddSingleton<SandboxRecordStore>();
         services.AddSingleton<PersonalConfigurations>();
-        services.AddSingleton<WorkloadKitGenerator>();
-        services.AddSingleton<StateMixinGenerator>();
-        services.AddSingleton<ILauncher, ShellLauncher>();
-        services.AddSingleton<ILauncher, HerdrAppLauncher>();
-        services.AddSingleton<LauncherRegistry>();
+        services.AddSingleton<LocalWorkloadImages>();
+        services.AddSingleton<SandboxCreator>();
+        services.AddSingleton<LocalSquadSource>();
+        services.AddSingleton<RemoteSquadSource>();
+        services.AddSingleton<IPublishedSquadSource, PublishedSquadSource>();
         return services;
     }
 }
