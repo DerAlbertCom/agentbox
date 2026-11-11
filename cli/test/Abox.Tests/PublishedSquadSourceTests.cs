@@ -6,7 +6,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Abox;
 using Abox.Infrastructure;
-using Abox.Sbx;
+using Abox.Sandboxes;
 using NSubstitute;
 
 namespace Abox.Tests;

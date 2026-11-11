@@ -146,10 +146,10 @@ public sealed class SecretsService(
             var outcome = await sbx.RemoveSecretAsync(
                 name,
                 declaration?.IsCustom == true ? declaration.Host : null,
-                cancellationToken,
                 declaration?.IsCustom == true && declaration.Host is null
                     ? declaration.EnvironmentVariable
-                    : null
+                    : null,
+                cancellationToken
             );
             if (!outcome.Succeeded)
             {

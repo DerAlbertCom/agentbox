@@ -438,6 +438,60 @@ public sealed class WorkloadKitGeneratorTests
         }
     }
 
+    [Fact]
+    public void ScriptCopyOnlyReplacesCrLfAndPreservesEveryOtherByte()
+    {
+        var source = _root.File("setup.sh", "");
+        byte[] content =
+        [
+            0x23,
+            0x20,
+            0xe9,
+            0x0d,
+            0x0a,
+            0x61,
+            0x0d,
+            0x62,
+            0x85,
+            0x0c,
+            0xe2,
+            0x80,
+            0xa8,
+            0xe2,
+            0x80,
+            0xa9,
+            0x0d,
+        ];
+        File.WriteAllBytes(source, content);
+
+        _generator.Generate(
+            WriteWorkload("scripts: [setup.sh]\n"),
+            Path.Combine(_root.Path, "kit")
+        );
+
+        File.ReadAllBytes(Path.Combine(_root.Path, "kit", "scripts", "setup.sh"))
+            .Should()
+            .Equal([
+                0x23,
+                0x20,
+                0xe9,
+                0x0a,
+                0x61,
+                0x0d,
+                0x62,
+                0x85,
+                0x0c,
+                0xe2,
+                0x80,
+                0xa8,
+                0xe2,
+                0x80,
+                0xa9,
+                0x0d,
+            ]);
+        File.ReadAllBytes(source).Should().Equal(content);
+    }
+
     [Theory]
     [InlineData("setup.sh")]
     [InlineData("SETUP.SH")]

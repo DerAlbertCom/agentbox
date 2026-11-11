@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Abox.Configuration;
 using Abox.Infrastructure;
 
 namespace Abox.Sbx;
@@ -8,7 +9,7 @@ namespace Abox.Sbx;
 /// Every call abox makes to <c>sbx</c>. Keeping them in one place keeps the flags and the
 /// version check in one place too.
 /// </summary>
-public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
+public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : ISbxClient
 {
     private const string ExecutableName = "sbx";
 
@@ -370,8 +371,8 @@ public sealed partial class SbxClient(IProcessRunner runner) : ISbxClient
     public Task<SbxOutcome> RemoveSecretAsync(
         string service,
         string? host,
-        CancellationToken cancellationToken,
-        string? environmentVariable = null
+        string? environmentVariable,
+        CancellationToken cancellationToken
     )
     {
         var arguments = new List<string> { "secret", "rm" };

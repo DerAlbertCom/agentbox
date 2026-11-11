@@ -450,12 +450,74 @@ public sealed class PublishService(
         return pinned;
     }
 
-    private Task<IReadOnlyList<JsonElement>> InspectAsync(
+    internal async Task<IReadOnlyList<JsonElement>> InspectAsync(
         string reference,
         string kind,
         CancellationToken cancellationToken,
-        string? builder = null
-    ) => registry.InspectDescriptorsAsync(reference, kind, cancellationToken, builder);
+        string? builder = null,
+        int depth = 0
+    )
+    {
+        if (depth > 4)
+            throw new AboxException(
+                $"Registry artifact '{reference}' has too many nested image indexes."
+            );
+
+        var result = CheckResult(
+            await registry.InspectAsync(reference, true, builder, cancellationToken)
+        );
+        try
+        {
+            using var document = JsonDocument.Parse(result.StandardOutput);
+            var root = document.RootElement;
+            if (root.GetProperty("schemaVersion").GetInt32() != 2)
+                throw new JsonException("Expected an OCI image manifest or index.");
+            if (!root.TryGetProperty("manifests", out var manifests))
+                return [OciRegistry.Descriptor(root, kind, $"Expected a v3 {kind} descriptor.")];
+
+            var leaves = new List<JsonElement>();
+            foreach (var manifest in manifests.EnumerateArray())
+            {
+                if (
+                    manifest.TryGetProperty("annotations", out var annotations)
+                    && annotations.TryGetProperty("vnd.docker.reference.type", out var type)
+                    && type.GetString() == "attestation-manifest"
+                    && manifest.TryGetProperty("platform", out var platform)
+                    && platform.GetProperty("os").GetString() == "unknown"
+                    && platform.GetProperty("architecture").GetString() == "unknown"
+                )
+                    continue;
+                var digest = manifest.GetProperty("digest").GetString() ?? "";
+                if (!OciRegistry.IsDigest(digest))
+                    throw new JsonException("Invalid platform manifest digest.");
+                leaves.AddRange(
+                    await InspectAsync(
+                        OciRegistry.Repository(reference) + "@" + digest,
+                        kind,
+                        cancellationToken,
+                        builder,
+                        depth + 1
+                    )
+                );
+            }
+            if (leaves.Count == 0)
+                throw new JsonException("No runnable platform manifests.");
+            return leaves;
+        }
+        catch (Exception exception)
+            when (exception
+                    is JsonException
+                        or KeyNotFoundException
+                        or InvalidOperationException
+                        or FormatException
+            )
+        {
+            throw new AboxException(
+                $"Registry artifact '{reference}' did not retain a valid v3 {kind} descriptor. Publication stopped: {exception.Message}",
+                exception
+            );
+        }
+    }
 
     private static void ValidateLocalArguments(
         string directory,
@@ -500,12 +562,20 @@ public sealed class PublishService(
         }
     }
 
-    private Task<ProcessResult> RunAsync(
+    private async Task<ProcessResult> RunAsync(
         IReadOnlyList<string> arguments,
         bool attachConsole,
         CancellationToken cancellationToken
-    ) =>
-        registry.RunAsync(arguments, DockerOperation.Publication, cancellationToken, attachConsole);
+    ) => CheckResult(await registry.RunAsync(arguments, attachConsole, cancellationToken));
+
+    private static ProcessResult CheckResult(ProcessResult result)
+    {
+        if (!result.Succeeded)
+            throw new AboxException(
+                $"Publishing failed (docker buildx, exit code {result.ExitCode}). Check the Buildx builder and run 'docker login {RegistryImageName.Registry}' with a JFrog identity allowed to push to the workload's publishRepository.{Environment.NewLine}{(result.StandardError + result.StandardOutput).Trim()}"
+            );
+        return result;
+    }
 
     private static void RejectCaseCollisions(PublishRequest request)
     {

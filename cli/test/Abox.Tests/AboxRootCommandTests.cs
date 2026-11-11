@@ -12,6 +12,27 @@ namespace Abox.Tests;
 
 public sealed class AboxRootCommandTests
 {
+    [Fact]
+    public void LazyServicesDeferResolutionAndRetainTheRegisteredSingleton()
+    {
+        var resolutions = 0;
+        var services = new ServiceCollection().AddAbox(new TestConsole(), new TrailingArguments());
+        services.AddSingleton(_ =>
+        {
+            resolutions++;
+            return new object();
+        });
+        using var provider = services.BuildServiceProvider();
+
+        var lazy = provider.GetRequiredService<Lazy<object>>();
+
+        resolutions.Should().Be(0);
+        lazy.IsValueCreated.Should().BeFalse();
+        lazy.Value.Should().BeSameAs(provider.GetRequiredService<object>());
+        provider.GetRequiredService<Lazy<object>>().Should().BeSameAs(lazy);
+        resolutions.Should().Be(1);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

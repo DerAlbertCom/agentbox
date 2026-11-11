@@ -10,6 +10,7 @@ using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Sandboxes;
 using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -53,14 +54,11 @@ public static class AboxServiceCollection
         services.AddSingleton(console);
         services.AddSingleton(trailing);
         services.AddSingleton(AboxPaths.Create());
-        services.AddSingleton(provider => new Lazy<AboxConfig>(() =>
-            AboxConfigLoader.Load(provider.GetRequiredService<AboxPaths>())
-        ));
-        services.AddSingleton(provider => provider.GetRequiredService<Lazy<AboxConfig>>().Value);
         // Commands describe their syntax eagerly, but resolve configuration-dependent work only in actions.
-        services.AddSingleton(provider => new Lazy<SquadResolver>(
-            provider.GetRequiredService<SquadResolver>
-        ));
+        services.AddSingleton(typeof(Lazy<>), typeof(LazyService<>));
+        services.AddSingleton(provider =>
+            AboxConfigLoader.Load(provider.GetRequiredService<AboxPaths>())
+        );
         services.AddSingleton<ProcessOutput>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<IOciRegistry, OciRegistry>();
@@ -79,3 +77,7 @@ public static class AboxServiceCollection
         return services;
     }
 }
+
+internal sealed class LazyService<T>(IServiceProvider provider)
+    : Lazy<T>(provider.GetRequiredService<T>)
+    where T : notnull;

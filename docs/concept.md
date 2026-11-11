@@ -23,7 +23,7 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 
 Maintainers (team members who build base images) use `build` and `publish`. Everyone else uses `create`, `run`, `prune`, and `secrets`. `sbx` runs behind these commands; users never call it.
 
-Exit codes: 0 on success, 1 on an `abox` error. `run` passes through the exit code of the shell or command it starts.
+Exit codes: 0 on success, 1 on an `abox` error, 130 on cancellation. `run` passes through the exit code of the shell or command it starts.
 
 - **`abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag> | --local]`**
   - Both `create` and `run` resolve `--location`, then the user config `defaultLocation`, then the current folder. The team name defaults to `defaultTeam`. Only `--local` resolves team sources from the `teams` folder at the location or its parents; `--root` selects a separate source project. Without `--squad`, local create asks which squad of the team to use, when there is more than one; remote create requires it.

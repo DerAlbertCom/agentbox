@@ -187,8 +187,16 @@ public sealed class LocalWorkloadImages(
         }
     }
 
-    private Task<ProcessResult> RunAsync(
+    private async Task<ProcessResult> RunAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken
-    ) => registry.RunAsync(arguments, DockerOperation.LocalWorkload, cancellationToken);
+    )
+    {
+        var result = await registry.RunAsync(arguments, false, cancellationToken);
+        if (!result.Succeeded)
+            throw new AboxException(
+                $"Local workload image operation failed (Docker, exit {result.ExitCode}). Check the Docker context and run 'abox build' again. No source-build fallback is performed.{Environment.NewLine}{(result.StandardError + result.StandardOutput).Trim()}"
+            );
+        return result;
+    }
 }

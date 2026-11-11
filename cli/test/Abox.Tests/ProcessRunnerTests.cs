@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using Abox.Infrastructure;
 
@@ -5,6 +6,78 @@ namespace Abox.Tests;
 
 public sealed class ProcessRunnerTests
 {
+    [Theory]
+    [InlineData("win32")]
+    [InlineData("aggregate")]
+    [InlineData("exited")]
+    public async Task AKillFailureDoesNotReplaceCancellation(string failure)
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        var killAttempted = false;
+        var runner = new ProcessRunner(
+            null,
+            process =>
+            {
+                process.Kill(entireProcessTree: true);
+                killAttempted = true;
+                throw failure switch
+                {
+                    "win32" => new Win32Exception("A child cannot be killed."),
+                    "aggregate" => new AggregateException("A child exited during the tree walk."),
+                    _ => new InvalidOperationException("The process exited."),
+                };
+            }
+        );
+        var request = LongRunningRequest();
+
+        var action = () => runner.RunAsync(request, cancellation.Token);
+
+        await action.Should().ThrowAsync<OperationCanceledException>();
+        killAttempted.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CancellationDoesNotWaitForeverWhenTheChildSurvivesTheKill()
+    {
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        Process? child = null;
+        var runner = new ProcessRunner(null, process => child = Process.GetProcessById(process.Id));
+        try
+        {
+            var action = () =>
+                runner
+                    .RunAsync(LongRunningRequest(), cancellation.Token)
+                    .WaitAsync(TimeSpan.FromSeconds(10));
+
+            var exception = await action.Should().ThrowAsync<OperationCanceledException>();
+
+            exception.Which.CancellationToken.Should().Be(cancellation.Token);
+            child.Should().NotBeNull();
+            child!.HasExited.Should().BeFalse();
+        }
+        finally
+        {
+            if (child is not null)
+            {
+                using (child)
+                {
+                    child.Kill(entireProcessTree: true);
+                    child.WaitForExit(5000);
+                }
+            }
+        }
+    }
+
+    private static ProcessRequest LongRunningRequest() =>
+        new(
+            OperatingSystem.IsWindows() ? "powershell" : "sh",
+            OperatingSystem.IsWindows()
+                ? ["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 60"]
+                : ["-c", "sleep 60"]
+        );
+
     [Theory]
     [InlineData(false, 0)]
     [InlineData(false, 23)]

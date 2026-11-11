@@ -41,7 +41,12 @@ public sealed class SecretsServiceTests
                 Arg.Any<CancellationToken>()
             )
             .Returns(new SbxOutcome(0, string.Empty));
-        _sbx.RemoveSecretAsync(Arg.Any<string>(), Arg.Any<string?>(), Arg.Any<CancellationToken>())
+        _sbx.RemoveSecretAsync(
+                Arg.Any<string>(),
+                Arg.Any<string?>(),
+                Arg.Any<string?>(),
+                Arg.Any<CancellationToken>()
+            )
             .Returns(new SbxOutcome(0, string.Empty));
 
         _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
@@ -308,7 +313,8 @@ public sealed class SecretsServiceTests
         var exitCode = await _service.RemoveAsync(Request(), CancellationToken.None);
 
         exitCode.Should().Be(0);
-        await _sbx.Received(1).RemoveSecretAsync("github", null, Arg.Any<CancellationToken>());
+        await _sbx.Received(1)
+            .RemoveSecretAsync("github", null, null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -331,7 +337,7 @@ public sealed class SecretsServiceTests
         await _service.RemoveAsync(Request(), CancellationToken.None);
 
         await _sbx.Received(1)
-            .RemoveSecretAsync("elastic", "api.elastic.co", Arg.Any<CancellationToken>());
+            .RemoveSecretAsync("elastic", "api.elastic.co", null, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -351,7 +357,7 @@ public sealed class SecretsServiceTests
             new PersonalConfigurations(
                 AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path)
             ),
-            new SbxClient(runner),
+            new SbxClient(runner, AboxPaths.For(_root.Path, _root.Path)),
             _console
         );
 

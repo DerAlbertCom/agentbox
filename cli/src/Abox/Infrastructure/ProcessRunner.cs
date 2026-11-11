@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -8,6 +9,11 @@ namespace Abox.Infrastructure;
 /// </summary>
 public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
 {
+    private readonly Action<Process> kill = process => process.Kill(entireProcessTree: true);
+
+    internal ProcessRunner(ProcessOutput? output, Action<Process> kill)
+        : this(output) => this.kill = kill;
+
     public async Task<ProcessResult> RunAsync(
         ProcessRequest request,
         CancellationToken cancellationToken
@@ -100,7 +106,7 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
         }
     }
 
-    private static async Task CompleteAsync(
+    private async Task CompleteAsync(
         Process process,
         ProcessRequest request,
         CancellationToken cancellationToken
@@ -131,12 +137,19 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
             // Cancellation during input or exit must not leave children or their workers running.
             try
             {
-                process.Kill(entireProcessTree: true);
-                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+                kill(process);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
             }
-            catch (InvalidOperationException)
+            catch (Exception exception)
+                when (exception
+                        is InvalidOperationException
+                            or Win32Exception
+                            or AggregateException
+                            or OperationCanceledException
+                )
             {
-                // The process already exited.
+                // Cleanup is best effort; preserve cancellation even if children survive.
             }
 
             throw;

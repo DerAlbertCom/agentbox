@@ -1,6 +1,10 @@
 using System.Text.Json;
 using Abox;
+using Abox.Configuration;
+using Abox.Features.Publish;
 using Abox.Infrastructure;
+using Abox.LocalState;
+using Abox.Sandboxes;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -24,6 +28,7 @@ public sealed class OciRegistryTests
     [Fact]
     public async Task PublicationInspectsEachChildBeforeReadingTheNextSibling()
     {
+        using var root = new TempDirectory();
         var calls = new List<string>();
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
@@ -47,10 +52,9 @@ public sealed class OciRegistryTests
                         : Leaf("mixin")
                 );
             });
-        var registry = new OciRegistry(_runner);
+        var publisher = Publisher(root.Path);
 
-        var act = () =>
-            registry.InspectDescriptorsAsync(Reference, "mixin", CancellationToken.None);
+        var act = () => publisher.InspectAsync(Reference, "mixin", CancellationToken.None);
 
         await act.Should()
             .ThrowAsync<AboxException>()
@@ -85,19 +89,20 @@ public sealed class OciRegistryTests
                     )
                 )
             );
-        var registry = new OciRegistry(_runner);
+        using var root = new TempDirectory();
 
         if (publication)
         {
             var act = () =>
-                registry.InspectDescriptorsAsync(Pinned, "mixin", CancellationToken.None);
+                Publisher(root.Path).InspectAsync(Pinned, "mixin", CancellationToken.None);
             await act.Should()
                 .ThrowAsync<AboxException>()
                 .WithMessage($"Registry artifact '{Pinned}' has too many nested image indexes.");
         }
         else
         {
-            var act = () => registry.ResolveManifestAsync(Pinned, "amd64", CancellationToken.None);
+            var act = () =>
+                MetadataSource().ResolveManifestAsync(Pinned, "amd64", CancellationToken.None);
             await act.Should()
                 .ThrowAsync<JsonException>()
                 .WithMessage("Too many nested image indexes.");
@@ -122,9 +127,9 @@ public sealed class OciRegistryTests
                     )
                 )
             );
-        var registry = new OciRegistry(_runner);
 
-        var act = () => registry.ResolveManifestAsync(Pinned, "amd64", CancellationToken.None);
+        var act = () =>
+            MetadataSource().ResolveManifestAsync(Pinned, "amd64", CancellationToken.None);
 
         await act.Should()
             .ThrowAsync<JsonException>()
@@ -133,6 +138,74 @@ public sealed class OciRegistryTests
     }
 
     private static ProcessResult Success(string output) => new(0, output, "");
+
+    private PublishService Publisher(string root) =>
+        new(
+            new BuildStore(AboxPaths.For(root, root)),
+            Substitute.For<IHostPrograms>(),
+            new OciRegistry(_runner),
+            new TestConsole()
+        );
+
+    private PublishedSquadSource MetadataSource() =>
+        new(new OciRegistry(_runner), Substitute.For<IHostPrograms>(), new TestConsole());
+
+    [Fact]
+    public async Task FailedDockerInvocationsReturnTheUnmodifiedResult()
+    {
+        var failure = new ProcessResult(17, "output", "error");
+        _runner.RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>()).Returns(failure);
+
+        var result = await new OciRegistry(_runner).RunAsync(
+            ["buildx", "version"],
+            true,
+            CancellationToken.None
+        );
+
+        result.Should().BeSameAs(failure);
+        await _runner
+            .Received()
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.FileName == "docker" && request.AttachConsole
+                ),
+                CancellationToken.None
+            );
+    }
+
+    [Theory]
+    [InlineData(true, null)]
+    [InlineData(false, "publisher")]
+    public async Task InspectionOnlySelectsDockerArguments(bool raw, string? builder)
+    {
+        var expected = new List<string> { "buildx", "imagetools" };
+        if (builder is not null)
+            expected.AddRange(["--builder", builder]);
+        expected.AddRange(
+            raw
+                ? ["inspect", "--raw", Reference]
+                : ["inspect", "--format", "{{json .Manifest}}", Reference]
+        );
+        var response = Success("not parsed by infrastructure");
+        _runner.RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>()).Returns(response);
+
+        var result = await new OciRegistry(_runner).InspectAsync(
+            Reference,
+            raw,
+            builder,
+            CancellationToken.None
+        );
+
+        result.Should().BeSameAs(response);
+        await _runner
+            .Received()
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.SequenceEqual(expected) && !request.AttachConsole
+                ),
+                CancellationToken.None
+            );
+    }
 
     private static string Leaf(string kind) =>
         JsonSerializer.Serialize(

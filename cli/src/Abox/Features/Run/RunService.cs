@@ -4,6 +4,7 @@ using Abox.Kits;
 using Abox.Launchers;
 using Abox.LocalState;
 using Abox.Naming;
+using Abox.Sandboxes;
 using Abox.Sbx;
 
 namespace Abox.Features.Run;
@@ -99,23 +100,9 @@ public sealed class RunService(
         var tag = string.IsNullOrWhiteSpace(record?.Tag) ? config.DefaultTag : record.Tag;
         var manifest =
             record is { KitReference: null } && squad is not null ? store.Load(squad, tag) : null;
+        ImageName.TryParseTeam(manifest?.Reference, tag, out var buildTeam);
         var team = string.IsNullOrWhiteSpace(record?.Team) ? null : record.Team;
-        if (team is null && record is not null)
-        {
-            var reference = manifest?.Reference;
-            var prefix = $"agentbox-{ImageName.Tenant}-";
-            var suffix = ":" + tag;
-            if (
-                reference is not null
-                && reference.StartsWith(prefix, StringComparison.Ordinal)
-                && reference.EndsWith(suffix, StringComparison.Ordinal)
-                && reference.Length > prefix.Length + suffix.Length
-            )
-            {
-                team = reference[prefix.Length..^suffix.Length];
-            }
-        }
-
+        team ??= buildTeam;
         team ??= config.DefaultTeam;
         if (squad is null && team is not null)
         {
@@ -136,10 +123,11 @@ public sealed class RunService(
 
         var placeholders =
             team is null || squad is null ? " (replace <name> placeholders)" : string.Empty;
-        var local = record is { KitReference: null } ? " --local" : string.Empty;
-        var root = !string.IsNullOrWhiteSpace(manifest?.RootDirectory)
-            ? $" --root \"{manifest.RootDirectory}\""
-            : string.Empty;
+        var local = buildTeam is not null && buildTeam == team ? " --local" : string.Empty;
+        var root =
+            local.Length > 0 && !string.IsNullOrWhiteSpace(manifest?.RootDirectory)
+                ? $" --root \"{manifest.RootDirectory}\""
+                : string.Empty;
         return $"abox create --team {team ?? "<name>"} --squad {squad ?? "<name>"} --tag {tag}{local}{root} --location \"{location}\"{placeholders}";
     }
 

@@ -7,6 +7,7 @@ using Abox.Kits;
 using Abox.Launchers;
 using Abox.LocalState;
 using Abox.Naming;
+using Abox.Sandboxes;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -149,6 +150,14 @@ public sealed class RunServiceTests
     [Fact]
     public async Task TheCreateHintUsesTheSandboxRecord()
     {
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "release",
+                Reference = ImageName.OfTeam("sample", "release"),
+            }
+        );
         _records.Save(
             SandboxName.For(_root.Path),
             new SandboxRecord
@@ -164,6 +173,38 @@ public sealed class RunServiceTests
             .Be(1);
 
         _console.AllText.Should().Contain("--team sample --squad ac --tag release --local");
+    }
+
+    [Fact]
+    public async Task ARecordWithoutAKitReferenceDoesNotProveTheSandboxWasLocal()
+    {
+        _records.Save(
+            SandboxName.For(_root.Path),
+            new SandboxRecord { Squad = "ac", Tag = "release" }
+        );
+        var config = new AboxConfig();
+        var service = new RunService(
+            new LauncherRegistry([new ShellLauncher()]),
+            config,
+            new SquadResolver(config),
+            _store,
+            _records,
+            _create,
+            _sbx,
+            Substitute.For<IHostPrograms>(),
+            _console
+        );
+
+        (await service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
+            .Should()
+            .Be(1);
+
+        _console
+            .AllText.Should()
+            .Contain("--team <name> --squad ac --tag release")
+            .And.Contain("replace <name> placeholders")
+            .And.NotContain("--local")
+            .And.NotContain("--root");
     }
 
     [Fact]

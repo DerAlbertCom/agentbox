@@ -12,9 +12,6 @@ public static class RunFeature
     public static IServiceCollection AddRunFeature(this IServiceCollection services)
     {
         services.AddSingleton<RunService>();
-        services.AddSingleton(provider => new Lazy<RunService>(
-            provider.GetRequiredService<RunService>
-        ));
         services.AddSingleton<ILauncher, ShellLauncher>();
         services.AddSingleton<ILauncher, HerdrAppLauncher>();
         services.AddSingleton<LauncherRegistry>();

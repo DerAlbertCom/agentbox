@@ -1,5 +1,5 @@
 using Abox.LocalState;
-using Abox.Sbx;
+using Abox.Sandboxes;
 using NSubstitute;
 
 namespace Abox.Tests;

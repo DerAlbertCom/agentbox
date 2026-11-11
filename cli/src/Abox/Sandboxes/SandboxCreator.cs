@@ -3,8 +3,9 @@ using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
 using Abox.Naming;
+using Abox.Sbx;
 
-namespace Abox.Sbx;
+namespace Abox.Sandboxes;
 
 /// <summary>What to create.</summary>
 /// <param name="Team">The team whose squads the sandbox is created from.</param>

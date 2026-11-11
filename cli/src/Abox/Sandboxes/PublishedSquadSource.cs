@@ -8,10 +8,13 @@ using Abox.Kits;
 using Abox.LocalState;
 using Abox.Naming;
 
-namespace Abox.Sbx;
+namespace Abox.Sandboxes;
 
 /// <summary>A pinned squad set and its authoritative runtime metadata.</summary>
 public sealed record PublishedSquad(string Reference, BuildManifest Metadata);
+
+/// <summary>A resolved platform manifest and its content identity.</summary>
+internal sealed record OciManifest(string Digest, JsonElement Manifest);
 
 /// <summary>Reads authoritative runtime metadata from a processed, digest-pinned squad set.</summary>
 public interface IPublishedSquadSource
@@ -60,7 +63,7 @@ public sealed class PublishedSquadSource(
         var directory = temporary.Path;
         try
         {
-            var (digest, manifest) = await registry.ResolveManifestAsync(
+            var (digest, manifest) = await ResolveManifestAsync(
                 reference,
                 architecture,
                 cancellationToken
@@ -69,9 +72,7 @@ public sealed class PublishedSquadSource(
             var descriptor = Descriptor(manifest, "workload");
             var config = ConfigurationReference(descriptor, team, squad);
             Descriptor(
-                (
-                    await registry.ResolveManifestAsync(config, architecture, cancellationToken)
-                ).Manifest,
+                (await ResolveManifestAsync(config, architecture, cancellationToken)).Manifest,
                 "mixin"
             );
             await RunAsync(["pull", "--platform", platform, config], cancellationToken);
@@ -122,6 +123,63 @@ public sealed class PublishedSquadSource(
             config[(config.IndexOf(suffix, StringComparison.Ordinal) + suffix.Length)..]
         );
         return config;
+    }
+
+    internal async Task<OciManifest> ResolveManifestAsync(
+        string reference,
+        string architecture,
+        CancellationToken cancellationToken,
+        int depth = 0
+    )
+    {
+        if (depth > 4)
+            throw new JsonException("Too many nested image indexes.");
+
+        string digest;
+        if (reference.Contains('@'))
+            digest = OciRegistry.Digest(reference[(reference.LastIndexOf('@') + 1)..]);
+        else
+        {
+            var resolved = CheckResult(
+                await registry.InspectAsync(reference, false, null, cancellationToken),
+                "buildx"
+            );
+            using var identity = JsonDocument.Parse(resolved.StandardOutput);
+            digest = OciRegistry.Digest(identity.RootElement.GetProperty("digest").GetString());
+        }
+        var result = CheckResult(
+            await registry.InspectAsync(
+                OciRegistry.Repository(reference) + "@" + digest,
+                true,
+                null,
+                cancellationToken
+            ),
+            "buildx"
+        );
+        using var document = JsonDocument.Parse(result.StandardOutput);
+        var root = document.RootElement;
+        if (root.GetProperty("schemaVersion").GetInt32() != 2)
+            throw new JsonException("Expected an OCI image manifest or index.");
+        if (!root.TryGetProperty("manifests", out var manifests))
+            return new OciManifest(digest, root.Clone());
+
+        var selected = manifests
+            .EnumerateArray()
+            .Where(manifest =>
+                manifest.TryGetProperty("platform", out var platform)
+                && platform.GetProperty("os").GetString() == "linux"
+                && platform.GetProperty("architecture").GetString() == architecture
+            )
+            .ToList();
+        if (selected.Count != 1)
+            throw new JsonException("No unambiguous runnable platform manifest.");
+        var childDigest = OciRegistry.Digest(selected[0].GetProperty("digest").GetString());
+        return await ResolveManifestAsync(
+            OciRegistry.Repository(reference) + "@" + childDigest,
+            architecture,
+            cancellationToken,
+            depth + 1
+        );
     }
 
     private static JsonElement Descriptor(JsonElement manifest, string kind) =>
@@ -322,8 +380,18 @@ public sealed class PublishedSquadSource(
         return result.ToArray();
     }
 
-    private Task<ProcessResult> RunAsync(
+    private async Task<ProcessResult> RunAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken
-    ) => registry.RunAsync(arguments, DockerOperation.MetadataRead, cancellationToken);
+    ) => CheckResult(await registry.RunAsync(arguments, false, cancellationToken), arguments[0]);
+
+    private static ProcessResult CheckResult(ProcessResult result, string command)
+    {
+        // Docker handles credentials; metadata reads must never echo their output.
+        if (!result.Succeeded)
+            throw new AboxException(
+                $"Cannot read the published squad metadata (docker {command}, exit code {result.ExitCode}). Check the published tag and Docker/Buildx, and run 'docker login {RegistryImageName.Registry}' with read access to the set and its bundled components. For an older artifact, ask a maintainer to republish it with current abox. The existing sandbox was not replaced."
+            );
+        return result;
+    }
 }

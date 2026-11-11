@@ -3,8 +3,9 @@ using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
 using Abox.Naming;
+using Abox.Sbx;
 
-namespace Abox.Sbx;
+namespace Abox.Sandboxes;
 
 /// <summary>A squad identity resolved before validating the sandbox location.</summary>
 public sealed record SquadSelection(

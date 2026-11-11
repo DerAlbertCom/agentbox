@@ -1,18 +1,22 @@
+using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Sbx;
 using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class SbxClientTests
+public sealed class SbxClientTests : IDisposable
 {
+    private readonly TempDirectory _root = new();
     private readonly IProcessRunner _runner = Substitute.For<IProcessRunner>();
     private readonly SbxClient _client;
 
     public SbxClientTests()
     {
-        _client = new SbxClient(_runner);
+        _client = new SbxClient(_runner, AboxPaths.For(_root.Path, _root.Path));
     }
+
+    public void Dispose() => _root.Dispose();
 
     [Theory]
     [InlineData("hc", 0, true)]
@@ -89,7 +93,12 @@ public sealed class SbxClientTests
                     "value",
                     cancellationToken
                 ),
-                "remove-secret" => _client.RemoveSecretAsync("service", null, cancellationToken),
+                "remove-secret" => _client.RemoveSecretAsync(
+                    "service",
+                    null,
+                    null,
+                    cancellationToken
+                ),
                 "add-mcp" => _client.AddMcpServerAsync(
                     "server",
                     "https://example.com",

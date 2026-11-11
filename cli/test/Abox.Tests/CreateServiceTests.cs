@@ -7,6 +7,7 @@ using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
 using Abox.Naming;
+using Abox.Sandboxes;
 using Abox.Sbx;
 using NSubstitute;
 

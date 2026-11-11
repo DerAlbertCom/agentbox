@@ -3,7 +3,7 @@ using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
-using Abox.Sbx;
+using Abox.Sandboxes;
 
 namespace Abox.Features.Create;
 
@@ -78,6 +78,15 @@ public sealed class CreateCommand : Command
                 await CommandHandling.RunAsync(
                     async () =>
                     {
+                        var useLocal = parseResult.GetValue(local);
+                        var sourceRoot = parseResult.GetValue(root);
+                        if (!useLocal && sourceRoot is not null)
+                        {
+                            throw new AboxException(
+                                "--root requires --local; remote create does not use local team sources."
+                            );
+                        }
+
                         var settings = config.Value;
                         var teamName =
                             parseResult.GetValue(team)
@@ -86,7 +95,6 @@ public sealed class CreateCommand : Command
                                 "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
                             );
 
-                        var useLocal = parseResult.GetValue(local);
                         var selectedSquad = parseResult.GetValue(squad);
                         if (!useLocal && string.IsNullOrWhiteSpace(selectedSquad))
                         {
@@ -100,7 +108,7 @@ public sealed class CreateCommand : Command
                         );
                         var resolved = useLocal
                             ? resolver.Value.ResolveTeam(
-                                Path.GetFullPath(parseResult.GetValue(root) ?? resolvedLocation),
+                                Path.GetFullPath(sourceRoot ?? resolvedLocation),
                                 teamName
                             )
                             : new SquadResolver.ResolvedTeam(teamName, string.Empty, []);

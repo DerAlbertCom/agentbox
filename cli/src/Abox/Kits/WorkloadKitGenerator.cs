@@ -270,9 +270,17 @@ public sealed class WorkloadKitGenerator
                 );
             }
 
-            File.WriteAllText(
+            var bytes = File.ReadAllBytes(source);
+            var length = 0;
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                if (bytes[index] == '\r' && index + 1 < bytes.Length && bytes[index + 1] == '\n')
+                    continue;
+                bytes[length++] = bytes[index];
+            }
+            File.WriteAllBytes(
                 Path.Combine(scriptsDirectory, Path.GetFileName(script)),
-                File.ReadAllText(source).ReplaceLineEndings("\n")
+                bytes.AsSpan(0, length)
             );
         }
     }

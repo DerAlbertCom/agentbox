@@ -4,6 +4,7 @@ using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Sandboxes;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -48,6 +49,20 @@ public sealed class CreateCommandTests
         _console.AllText.Should().Contain("requires --squad").And.NotContain("There is no team");
         await _sbx.DidNotReceive()
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoteCreateRejectsRootBeforeAnySbxCalls()
+    {
+        var command = Command("");
+        _sbx.ClearReceivedCalls();
+
+        (await InvokeAsync(command, ["--team", "sample", "--squad", "ac", "--root", _root.Path]))
+            .Should()
+            .Be(1);
+
+        _console.AllText.Should().Contain("--root requires --local");
+        _sbx.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]

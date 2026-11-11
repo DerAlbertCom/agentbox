@@ -193,7 +193,8 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
    team like `build` and asks for an omitted squad (or uses its only squad).
    The sandbox location is `--location`, then `defaultLocation`, then the current
    folder. Local team discovery starts there and searches parent folders; `--root`
-   overrides that starting directory when the sources live in another project.
+    overrides that starting directory when the sources live in another project.
+    `--root` requires `--local`; remote create rejects it rather than ignoring it.
 2. Before registry preparation, remote create reads
    `sbx settings get kit.allowedSources --json` and automatically appends the
    validated `rwest.jfrog.io/<pullRepository>/` prefix using `sbx settings set`
@@ -495,22 +496,25 @@ cli/src/Abox/
     SandboxRecord.cs
     SandboxRecordStore.cs
   Launchers/        one class per launcher
-  Sbx/              every call to sbx and shared sandbox creation
+  Sandboxes/        application-level sandbox orchestration shared by create and run
     SandboxCreator.cs       the create operation shared by create and run
     PublishedSquadSource.cs reads the published set's bundled squad metadata
     SquadSources.cs         local and remote ISquadSource adapters
+  Sbx/              every call to sbx: CLI arguments, settings and response models
   Health/           the checks every command runs first
   Infrastructure/   the console, the processes, the YAML
-    OciRegistry.cs          every Docker call and OCI kit inspection
+    OciRegistry.cs          raw Docker calls and OCI inspection primitives
     TemporaryDirectory.cs   temporary working directories and their cleanup
   Naming/           sandbox and image names
     ImageName.cs            the unqualified team reference of a local build
 ```
 
 - The code is arranged by use, not by kind: one folder per command holds the command
-  and its slice registration, with command-specific services alongside them. Shared,
-  technical services keep one place each (`Configuration`, `Kits`, `LocalState`,
-  `Launchers`, `Sbx`, `Health`, `Infrastructure`, `Naming`).
+  and its slice registration, with command-specific services alongside them. Shared
+  application orchestration lives in `Sandboxes`, above the technical sbx wrapper.
+  Technical services keep one place each (`Configuration`, `Kits`, `LocalState`,
+  `Launchers`, `Sbx`, `Health`, `Infrastructure`, `Naming`). None of these shared
+  folders imports a command slice from `Abox.Features`.
 - One wrapper class (`SbxClient`) makes every `sbx` call. The flags and the version
   check live in that one place. One wrapper class (`OciRegistry`) makes every `docker`
   call. The arguments are always a list, never a shell string.
@@ -519,7 +523,8 @@ cli/src/Abox/
   in its constructor; nothing looks the commands up by hand. The root command holds
   every command the container has, one per slice.
 - A slice registers itself: `AddAbox` calls one method per slice and that method adds
-  the command and the service of the slice.
+  its command and any slice-specific services. Create uses the shared `Sandboxes`
+  orchestration registered by the composition root instead of its own service.
 - The entry point builds a plain service provider, not a host: it does not load
   `appsettings.json` from the working directory. Commands defer configuration-dependent
   dependencies until their actions run, so help, `exec` and `pipe` need no user configuration.

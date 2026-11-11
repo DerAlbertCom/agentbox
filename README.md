@@ -27,6 +27,8 @@ and `abox exec <sandbox> -- <command>`.
 Both `create` and `run` use `--location`, then the user setting `defaultLocation`,
 then the current folder. For `create --local`, team discovery starts at that location
 and searches its parents, unless `--root <dir>` selects a separate source project.
+For `create`, `--root` requires `--local`; remote create rejects it because no local
+team sources are used.
 
 ### Seeing tool output
 

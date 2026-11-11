@@ -147,23 +147,13 @@ public sealed partial class SbxClient
             )
         );
 
-    private static async Task<FileStream> AcquireAllowedSourcesLockAsync(
+    private async Task<FileStream> AcquireAllowedSourcesLockAsync(
         CancellationToken cancellationToken
     )
     {
         try
         {
-            // LocalApplicationData is shared by this user's sessions, unlike session-scoped temp directories.
-            var localApplicationData = Environment.GetFolderPath(
-                Environment.SpecialFolder.LocalApplicationData,
-                Environment.SpecialFolderOption.DoNotVerify
-            );
-            if (!Path.IsPathFullyQualified(localApplicationData))
-            {
-                throw new IOException("Cannot locate the user's local application data directory.");
-            }
-
-            var directory = Path.Combine(localApplicationData, "abox", "locks");
+            var directory = Path.Combine(paths.StateDirectory, "locks");
             if (OperatingSystem.IsWindows())
             {
                 Directory.CreateDirectory(directory);

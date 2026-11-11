@@ -11,9 +11,6 @@ public static class SecretsFeature
     public static IServiceCollection AddSecretsFeature(this IServiceCollection services)
     {
         services.AddSingleton<SecretsService>();
-        services.AddSingleton(provider => new Lazy<SecretsService>(
-            provider.GetRequiredService<SecretsService>
-        ));
         services.AddSingleton<Command, SecretsCommand>();
         return services;
     }
