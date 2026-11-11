@@ -1,19 +1,47 @@
 using System.CommandLine;
 using Abox.Cli;
+using Abox.Configuration;
+using Abox.Features;
 using Abox.Infrastructure;
+using Abox.Launchers;
+using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
+using NSubstitute;
 
 namespace Abox.Tests;
 
 public sealed class AboxRootCommandTests
 {
+    [Fact]
+    public void LazyServicesDeferResolutionAndRetainTheRegisteredSingleton()
+    {
+        var resolutions = 0;
+        var services = new ServiceCollection().AddAbox(new TestConsole(), new TrailingArguments());
+        services.AddSingleton(_ =>
+        {
+            resolutions++;
+            return new object();
+        });
+        using var provider = services.BuildServiceProvider();
+
+        var lazy = provider.GetRequiredService<Lazy<object>>();
+
+        resolutions.Should().Be(0);
+        lazy.IsValueCreated.Should().BeFalse();
+        lazy.Value.Should().BeSameAs(provider.GetRequiredService<object>());
+        provider.GetRequiredService<Lazy<object>>().Should().BeSameAs(lazy);
+        resolutions.Should().Be(1);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task TheCompositionRootWiresVerbosityThroughToExternalTools(bool verbose)
     {
+        using var root = new TempDirectory();
         var console = new TestConsole();
         var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
+        services.AddSingleton(AboxPaths.For(root.Path, root.Path));
         services.AddSingleton<Command>(provider =>
         {
             var command = new Command("test-tool");
@@ -52,6 +80,139 @@ public sealed class AboxRootCommandTests
         {
             console.AllText.Should().BeEmpty();
         }
+    }
+
+    [Theory]
+    [InlineData("--help")]
+    [InlineData("build", "--help")]
+    [InlineData("secrets", "list", "--help")]
+    [InlineData("exec", "sample")]
+    [InlineData("pipe", "sample")]
+    public async Task CommandsThatDoNotUseConfigurationWorkEvenWhenTheFileIsInvalid(
+        params string[] arguments
+    )
+    {
+        using var root = new TempDirectory();
+        root.File("config.yaml", "unknown-key: invalid\n");
+        var console = new TestConsole();
+        var sbx = Substitute.For<ISbxClient>();
+        sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(0);
+        var services = new ServiceCollection().AddAbox(
+            console,
+            new TrailingArguments { Values = ["echo", "hello"] }
+        );
+        services.AddSingleton(AboxPaths.For(root.Path, Path.Combine(root.Path, "state")));
+        services.AddSingleton(sbx);
+        using var provider = services.BuildServiceProvider();
+
+        var exitCode = await provider.GetRequiredService<AboxRootCommand>().InvokeAsync(arguments);
+
+        exitCode.Should().Be(0);
+        console.Errors.Should().BeEmpty();
+        Directory.Exists(Path.Combine(root.Path, "state")).Should().BeFalse();
+        if (arguments[0] is "exec" or "pipe")
+        {
+            await sbx.Received(1)
+                .ExecAsync(
+                    Arg.Is<SbxExecRequest>(request =>
+                        request.Sandbox == "sample"
+                        && request.Command.SequenceEqual(new[] { "echo", "hello" })
+                        && request.KeepStandardInputOpen == (arguments[0] == "pipe")
+                    ),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+    }
+
+    [Fact]
+    public async Task TheExecutableIgnoresAppsettingsInTheWorkingDirectory()
+    {
+        using var root = new TempDirectory();
+        root.File("appsettings.json", "not json");
+        root.File("abox/config.yaml", "unknown-key: invalid\n");
+        var result = await new ProcessRunner().RunAsync(
+            new ProcessRequest(
+                "dotnet",
+                [typeof(AboxRootCommand).Assembly.Location, "--help"],
+                WorkingDirectory: root.Path,
+                Environment: new Dictionary<string, string>
+                {
+                    ["XDG_CONFIG_HOME"] = root.Path,
+                    ["XDG_STATE_HOME"] = root.Path,
+                }
+            ),
+            CancellationToken.None
+        );
+
+        result.ExitCode.Should().Be(0);
+        result.StandardOutput.Should().Contain("abox: AI agent sandboxes");
+        result.StandardError.Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("build")]
+    [InlineData("create")]
+    [InlineData("publish")]
+    public async Task ConfigurationErrorsAreReportedOnceWhenACommandUsesIt(string command)
+    {
+        using var root = new TempDirectory();
+        root.File("config.yaml", "unknown-key: invalid\n");
+        var console = new TestConsole();
+        var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
+        services.AddSingleton(AboxPaths.For(root.Path, root.Path));
+        using var provider = services.BuildServiceProvider();
+
+        var exitCode = await provider.GetRequiredService<AboxRootCommand>().InvokeAsync([command]);
+
+        exitCode.Should().Be(1);
+        console
+            .Errors.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("error: ")
+            .And.Contain("unknown-key");
+    }
+
+    [Fact]
+    public async Task CancellationUsesTheConventionalExitCode()
+    {
+        var console = new TestConsole();
+
+        var exitCode = await CommandHandling.RunAsync(
+            () => throw new OperationCanceledException(),
+            console
+        );
+
+        exitCode.Should().Be(130);
+        console.Errors.Should().Equal("error: the command was cancelled.");
+    }
+
+    [Fact]
+    public async Task DuplicateLauncherIdsAreReportedAsAnAboxErrorDuringComposition()
+    {
+        using var root = new TempDirectory();
+        var console = new TestConsole();
+        var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
+        services.AddSingleton(AboxPaths.For(root.Path, root.Path));
+        services.AddSingleton<ILauncher, ShellLauncher>();
+
+        var exitCode = await CommandHandling.RunAsync(
+            async () =>
+            {
+                using var provider = services.BuildServiceProvider();
+                return await provider.GetRequiredService<AboxRootCommand>().InvokeAsync(["--help"]);
+            },
+            console
+        );
+
+        exitCode.Should().Be(1);
+        console
+            .Errors.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("error: ")
+            .And.Contain("shell")
+            .And.Contain("duplicate");
     }
 
     [Theory]

@@ -424,6 +424,89 @@ public sealed class WorkloadKitGeneratorTests
     }
 
     [Fact]
+    public void GeneratedFilesUseLinuxLineEndings()
+    {
+        _root.File("setup.sh", "#!/bin/bash\r\necho setup\r\n");
+        _generator.Generate(
+            WriteWorkload("apt: [git]\nmise: [nodejs@24.4.3]\nscripts: [setup.sh]\n"),
+            Path.Combine(_root.Path, "kit")
+        );
+
+        foreach (var file in new[] { "workload.dockerfile", "workload.yaml", "scripts/setup.sh" })
+        {
+            File.ReadAllText(Path.Combine(_root.Path, "kit", file)).Should().NotContain("\r");
+        }
+    }
+
+    [Fact]
+    public void ScriptCopyOnlyReplacesCrLfAndPreservesEveryOtherByte()
+    {
+        var source = _root.File("setup.sh", "");
+        byte[] content =
+        [
+            0x23,
+            0x20,
+            0xe9,
+            0x0d,
+            0x0a,
+            0x61,
+            0x0d,
+            0x62,
+            0x85,
+            0x0c,
+            0xe2,
+            0x80,
+            0xa8,
+            0xe2,
+            0x80,
+            0xa9,
+            0x0d,
+        ];
+        File.WriteAllBytes(source, content);
+
+        _generator.Generate(
+            WriteWorkload("scripts: [setup.sh]\n"),
+            Path.Combine(_root.Path, "kit")
+        );
+
+        File.ReadAllBytes(Path.Combine(_root.Path, "kit", "scripts", "setup.sh"))
+            .Should()
+            .Equal([
+                0x23,
+                0x20,
+                0xe9,
+                0x0a,
+                0x61,
+                0x0d,
+                0x62,
+                0x85,
+                0x0c,
+                0xe2,
+                0x80,
+                0xa8,
+                0xe2,
+                0x80,
+                0xa9,
+                0x0d,
+            ]);
+        File.ReadAllBytes(source).Should().Equal(content);
+    }
+
+    [Theory]
+    [InlineData("setup.sh")]
+    [InlineData("SETUP.SH")]
+    public void ScriptsWithTheSameFileNameCannotOverwriteEachOther(string secondName)
+    {
+        _root.File("first/setup.sh", "echo first\n");
+        _root.File($"second/{secondName}", "echo second\n");
+        var workload = WriteWorkload($"scripts: [first/setup.sh, second/{secondName}]\n");
+
+        var action = () => _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
+
+        action.Should().Throw<AboxException>().WithMessage($"*first/setup.sh*second/{secondName}*");
+    }
+
+    [Fact]
     public void TheWorkspaceIsTheWorkingDirectoryOfTheImage()
     {
         var workload = WriteWorkload("");

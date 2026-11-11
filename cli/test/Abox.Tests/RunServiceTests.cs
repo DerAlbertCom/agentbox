@@ -1,13 +1,13 @@
-using Abox.Build;
 using Abox.Configuration;
-using Abox.Features.Create;
 using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Launchers;
+using Abox.LocalState;
 using Abox.Naming;
+using Abox.Sandboxes;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -22,11 +22,15 @@ public sealed class RunServiceTests
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
     private readonly SandboxRecordStore _records;
-    private readonly CreateService _create;
+    private readonly SandboxCreator _create;
+    private readonly AboxConfig _config = new() { DefaultTeam = "sample" };
 
     public RunServiceTests()
     {
-        var launchers = new LauncherRegistry([new ShellLauncher()]);
+        var launchers = new LauncherRegistry([
+            new ShellLauncher(),
+            new HerdrAppLauncher(Substitute.For<IProcessRunner>()),
+        ]);
         var hostPrograms = Substitute.For<IHostPrograms>();
         hostPrograms.Exists(Arg.Any<string>()).Returns(true);
         _paths = AboxPaths.For(
@@ -35,19 +39,18 @@ public sealed class RunServiceTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _create = new CreateService(
-            _store,
+        _create = new SandboxCreator(
             _records,
             _paths,
-            new AboxConfig(),
             _sbx,
-            LocalWorkloadTest.Images(),
             _console,
-            PublishedSquadTest.Source()
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new RemoteSquadSource(_config, _sbx, PublishedSquadTest.Source())
         );
         _service = new RunService(
             launchers,
-            new SquadResolver(new AboxConfig()),
+            _config,
+            new SquadResolver(_config),
             _store,
             _records,
             _create,
@@ -134,9 +137,179 @@ public sealed class RunServiceTests
         );
 
         exitCode.Should().Be(1);
-        _console.AllText.Should().Contain("abox create");
+        _console
+            .AllText.Should()
+            .Contain("abox create")
+            .And.Contain("--squad <name>")
+            .And.Contain("--team sample")
+            .And.Contain("replace <name> placeholders");
         await _sbx.DidNotReceive()
             .ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task TheCreateHintUsesTheSandboxRecord()
+    {
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "release",
+                Reference = ImageName.OfTeam("sample", "release"),
+            }
+        );
+        _records.Save(
+            SandboxName.For(_root.Path),
+            new SandboxRecord
+            {
+                Team = "sample",
+                Squad = "ac",
+                Tag = "release",
+            }
+        );
+
+        (await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
+            .Should()
+            .Be(1);
+
+        _console.AllText.Should().Contain("--team sample --squad ac --tag release --local");
+    }
+
+    [Fact]
+    public async Task ARecordWithoutAKitReferenceDoesNotProveTheSandboxWasLocal()
+    {
+        _records.Save(
+            SandboxName.For(_root.Path),
+            new SandboxRecord { Squad = "ac", Tag = "release" }
+        );
+        var config = new AboxConfig();
+        var service = new RunService(
+            new LauncherRegistry([new ShellLauncher()]),
+            config,
+            new SquadResolver(config),
+            _store,
+            _records,
+            _create,
+            _sbx,
+            Substitute.For<IHostPrograms>(),
+            _console
+        );
+
+        (await service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
+            .Should()
+            .Be(1);
+
+        _console
+            .AllText.Should()
+            .Contain("--team <name> --squad ac --tag release")
+            .And.Contain("replace <name> placeholders")
+            .And.NotContain("--local")
+            .And.NotContain("--root");
+    }
+
+    [Fact]
+    public async Task TheCreateHintCanUseTheDefaultTeamsOnlySquad()
+    {
+        _root.File("teams/sample/ac.abox", "workload: sample\n");
+
+        (await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
+            .Should()
+            .Be(1);
+
+        _console
+            .AllText.Should()
+            .Contain("--team sample --squad ac --tag latest")
+            .And.NotContain("<name>");
+    }
+
+    [Fact]
+    public async Task AnOldRecordCanRecoverTheTeamFromItsBuildMetadata()
+    {
+        _records.Save(
+            SandboxName.For(_root.Path),
+            new SandboxRecord { Squad = "ac", Tag = "release" }
+        );
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "release",
+                RootDirectory = _root.Path,
+                Reference = ImageName.OfTeam("other-team", "release"),
+            }
+        );
+
+        (await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
+            .Should()
+            .Be(1);
+
+        _console.AllText.Should().Contain("--team other-team --squad ac --tag release --local");
+        _console.AllText.Should().Contain($"--root \"{_root.Path}\"");
+    }
+
+    [Fact]
+    public async Task MissingLauncherProgramsPrintThePublishedSquadInTheCreateHint()
+    {
+        var name = SandboxName.For(_root.Path);
+        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.HasProgramAsync(name, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
+        _records.Save(
+            name,
+            new SandboxRecord
+            {
+                Team = "other-team",
+                Squad = "ac",
+                Tag = "release",
+                KitReference = "published-set",
+            }
+        );
+
+        (
+            await _service.RunAsync(
+                new RunRequest("herdr-app", _root.Path, []),
+                CancellationToken.None
+            )
+        )
+            .Should()
+            .Be(1);
+
+        _console
+            .AllText.Should()
+            .Contain("--team other-team --squad ac --tag release")
+            .And.NotContain("--local");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnknownTeamAndSquadNamesAreClearlyMarkedInTheCreateHint(bool emptyRecord)
+    {
+        if (emptyRecord)
+        {
+            _records.Save(SandboxName.For(_root.Path), new SandboxRecord());
+        }
+
+        var service = new RunService(
+            new LauncherRegistry([new ShellLauncher()]),
+            new AboxConfig(),
+            new SquadResolver(new AboxConfig()),
+            _store,
+            _records,
+            _create,
+            _sbx,
+            Substitute.For<IHostPrograms>(),
+            _console
+        );
+
+        (await service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
+            .Should()
+            .Be(1);
+
+        _console
+            .AllText.Should()
+            .Contain("--team <name> --squad <name>")
+            .And.Contain("replace <name> placeholders");
     }
 
     [Fact]
@@ -150,9 +323,13 @@ public sealed class RunServiceTests
         exception.Which.Message.Should().Contain("no launcher 'nope'");
     }
 
-    [Fact]
-    public async Task ANewerBuildIsOfferedAndReplacesTheSandbox()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ANewerBuildIsOfferedAndReplacesTheSandbox(bool separateSources)
     {
+        using var sources = new TempDirectory();
+        var sourceRoot = separateSources ? sources : _root;
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
@@ -161,7 +338,7 @@ public sealed class RunServiceTests
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
         _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>()).Returns((IReadOnlyList<string>)[]);
-        _root.File("teams/sample/ac.abox", "workload: sample\n");
+        sourceRoot.File("teams/sample/ac.abox", "workload: sample\n");
         _records.Save(
             name,
             new SandboxRecord
@@ -177,9 +354,10 @@ public sealed class RunServiceTests
             {
                 Squad = "ac",
                 Tag = "latest",
+                RootDirectory = sourceRoot.Path,
                 CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
                 WorkloadKitDirectory = "/kits/workload",
-                Reference = Abox.Features.Build.ImageName.OfTeam("sample", "latest"),
+                Reference = ImageName.OfTeam("sample", "latest"),
                 LocalWorkload = LocalWorkloadTest.Artifact(_root),
             }
         );
@@ -260,7 +438,7 @@ public sealed class RunServiceTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = Abox.Features.Build.ImageName.OfTeam("sample", "latest"),
+                Reference = ImageName.OfTeam("sample", "latest"),
                 CreatedAt = DateTimeOffset.Now,
                 LocalWorkload = null,
             }
@@ -303,7 +481,7 @@ public sealed class RunServiceTests
                 Tag = "latest",
                 CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
                 WorkloadKitDirectory = "/kits/workload",
-                Reference = Abox.Features.Build.ImageName.OfTeam("sample", "latest"),
+                Reference = ImageName.OfTeam("sample", "latest"),
                 LocalWorkload = LocalWorkloadTest.Artifact(_root),
             }
         );

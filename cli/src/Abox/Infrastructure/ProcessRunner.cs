@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text;
 
@@ -8,10 +9,35 @@ namespace Abox.Infrastructure;
 /// </summary>
 public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
 {
+    private readonly Action<Process> kill = process => process.Kill(entireProcessTree: true);
+
+    internal ProcessRunner(ProcessOutput? output, Action<Process> kill)
+        : this(output) => this.kill = kill;
+
     public async Task<ProcessResult> RunAsync(
         ProcessRequest request,
         CancellationToken cancellationToken
     )
+    {
+        using var process = new Process { StartInfo = StartInfo(request) };
+        var standardOutput = new StringBuilder();
+        var standardError = new StringBuilder();
+        if (!request.AttachConsole)
+            CaptureOutput(process, standardOutput, standardError);
+
+        Start(process, request.FileName);
+        await CompleteAsync(process, request, cancellationToken);
+
+        var result = new ProcessResult(
+            process.ExitCode,
+            standardOutput.ToString(),
+            standardError.ToString()
+        );
+        output?.Write(request, result);
+        return result;
+    }
+
+    private static ProcessStartInfo StartInfo(ProcessRequest request)
     {
         var startInfo = new ProcessStartInfo(request.FileName)
         {
@@ -43,81 +69,90 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
             startInfo.RedirectStandardInput = true;
         }
 
-        using var process = new Process { StartInfo = startInfo };
+        return startInfo;
+    }
 
-        var standardOutput = new StringBuilder();
-        var standardError = new StringBuilder();
-
-        if (!request.AttachConsole)
+    private static void CaptureOutput(
+        Process process,
+        StringBuilder standardOutput,
+        StringBuilder standardError
+    )
+    {
+        process.OutputDataReceived += (_, e) =>
         {
-            process.OutputDataReceived += (_, e) =>
+            if (e.Data is not null)
             {
-                if (e.Data is not null)
-                {
-                    standardOutput.AppendLine(e.Data);
-                }
-            };
-            process.ErrorDataReceived += (_, e) =>
+                standardOutput.AppendLine(e.Data);
+            }
+        };
+        process.ErrorDataReceived += (_, e) =>
+        {
+            if (e.Data is not null)
             {
-                if (e.Data is not null)
-                {
-                    standardError.AppendLine(e.Data);
-                }
-            };
-        }
+                standardError.AppendLine(e.Data);
+            }
+        };
+    }
 
+    private static void Start(Process process, string fileName)
+    {
         try
         {
             process.Start();
         }
         catch (Exception exception)
         {
-            throw new AboxException(
-                $"Cannot start '{request.FileName}'. {exception.Message}",
-                exception
-            );
+            throw new AboxException($"Cannot start '{fileName}'. {exception.Message}", exception);
         }
+    }
 
-        if (request.StandardInput is not null)
-        {
-            await process.StandardInput.WriteAsync(
-                request.StandardInput.AsMemory(),
-                cancellationToken
-            );
-            process.StandardInput.Close();
-        }
-
-        if (!request.AttachConsole)
-        {
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-        }
-
+    private async Task CompleteAsync(
+        Process process,
+        ProcessRequest request,
+        CancellationToken cancellationToken
+    )
+    {
         try
         {
+            if (!request.AttachConsole)
+            {
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+            }
+
+            if (request.StandardInput is not null)
+            {
+                await process.StandardInput.WriteAsync(
+                    request.StandardInput.AsMemory(),
+                    cancellationToken
+                );
+                await process.StandardInput.FlushAsync(cancellationToken);
+                process.StandardInput.Close();
+            }
+
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            // A cancelled command must not leave the child running behind its back.
+            // Cancellation during input or exit must not leave children or their workers running.
             try
             {
-                process.Kill();
+                kill(process);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
             }
-            catch (InvalidOperationException)
+            catch (Exception exception)
+                when (exception
+                        is InvalidOperationException
+                            or Win32Exception
+                            or AggregateException
+                            or OperationCanceledException
+                )
             {
-                // The process already exited.
+                // Cleanup is best effort; preserve cancellation even if children survive.
             }
 
             throw;
         }
-
-        var result = new ProcessResult(
-            process.ExitCode,
-            standardOutput.ToString(),
-            standardError.ToString()
-        );
-        output?.Write(request, result);
-        return result;
     }
 }

@@ -1,17 +1,115 @@
+using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Sbx;
 using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class SbxClientTests
+public sealed class SbxClientTests : IDisposable
 {
+    private readonly TempDirectory _root = new();
     private readonly IProcessRunner _runner = Substitute.For<IProcessRunner>();
     private readonly SbxClient _client;
 
     public SbxClientTests()
     {
-        _client = new SbxClient(_runner);
+        _client = new SbxClient(_runner, AboxPaths.For(_root.Path, _root.Path));
+    }
+
+    public void Dispose() => _root.Dispose();
+
+    [Theory]
+    [InlineData("hc", 0, true)]
+    [InlineData("missing", 1, false)]
+    [InlineData("missing; echo injected", 1, false)]
+    [InlineData("$(echo injected)", 1, false)]
+    public async Task ProgramProbesPassTheNameAsDataNotShellCode(
+        string program,
+        int exitCode,
+        bool expected
+    )
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(exitCode, "", ""));
+
+        var found = await _client.HasProgramAsync("sample", program, CancellationToken.None);
+
+        found.Should().Be(expected);
+        await _runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.FileName == "sbx"
+                    && request.Arguments.SequenceEqual(
+                        new[] { "exec", "sample", "sh", "-c", "command -v \"$1\"", "_", program }
+                    )
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
+    [InlineData("remove-template")]
+    [InlineData("create")]
+    [InlineData("remove-sandbox")]
+    [InlineData("stop")]
+    [InlineData("inspect")]
+    [InlineData("set-secret")]
+    [InlineData("set-custom-secret")]
+    [InlineData("remove-secret")]
+    [InlineData("add-mcp")]
+    public async Task OutcomesPreserveTheExitCodeAndBothStreamsWithoutThrowing(string command)
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(17, "stdout", "stderr"));
+        var cancellationToken = CancellationToken.None;
+
+        var outcome = await (
+            command switch
+            {
+                "remove-template" => _client.RemoveTemplateAsync("image", cancellationToken),
+                "create" => _client.CreateAsync(
+                    new SbxCreateRequest(
+                        "kit",
+                        "location",
+                        "sample",
+                        [],
+                        new Dictionary<string, string>(),
+                        [],
+                        []
+                    ),
+                    cancellationToken
+                ),
+                "remove-sandbox" => _client.RemoveSandboxAsync("sample", cancellationToken),
+                "stop" => _client.StopSandboxAsync("sample", cancellationToken),
+                "inspect" => _client.InspectKitAsync("kit", cancellationToken),
+                "set-secret" => _client.SetSecretAsync("service", "value", cancellationToken),
+                "set-custom-secret" => _client.SetCustomSecretAsync(
+                    "service",
+                    "host",
+                    "ENV",
+                    "value",
+                    cancellationToken
+                ),
+                "remove-secret" => _client.RemoveSecretAsync(
+                    "service",
+                    null,
+                    null,
+                    cancellationToken
+                ),
+                "add-mcp" => _client.AddMcpServerAsync(
+                    "server",
+                    "https://example.com",
+                    cancellationToken
+                ),
+                _ => throw new ArgumentOutOfRangeException(nameof(command)),
+            }
+        );
+
+        outcome.ExitCode.Should().Be(17);
+        outcome.Output.Should().Be("stdoutstderr");
     }
 
     [Theory]

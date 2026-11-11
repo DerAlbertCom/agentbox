@@ -1,9 +1,10 @@
-using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Create;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
+using Abox.Sandboxes;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -48,6 +49,20 @@ public sealed class CreateCommandTests
         _console.AllText.Should().Contain("requires --squad").And.NotContain("There is no team");
         await _sbx.DidNotReceive()
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task RemoteCreateRejectsRootBeforeAnySbxCalls()
+    {
+        var command = Command("");
+        _sbx.ClearReceivedCalls();
+
+        (await InvokeAsync(command, ["--team", "sample", "--squad", "ac", "--root", _root.Path]))
+            .Should()
+            .Be(1);
+
+        _console.AllText.Should().Contain("--root requires --local");
+        _sbx.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]
@@ -106,6 +121,61 @@ public sealed class CreateCommandTests
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Fact]
+    public async Task LocalCreateAcceptsSquadNamesInAnotherCase()
+    {
+        var command = Command("");
+
+        (await InvokeAsync(command, ["--local", "--squad", "AC", "--tag", "release"]))
+            .Should()
+            .Be(0);
+    }
+
+    [Fact]
+    public async Task LocalCreateFindsTeamsNextToItsLocation()
+    {
+        var command = Command("");
+        using var project = new TempDirectory();
+        project.File("teams/sample/ac.abox", "workload: sample\n");
+        Directory.Delete(Path.Combine(_root.Path, "teams"), recursive: true);
+
+        (await InvokeAsync(command, ["--local", "--location", project.Path, "--tag", "release"]))
+            .Should()
+            .Be(0);
+
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request => request.Location == project.Path),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task LocalCreateCanResolveTeamsFromAnExplicitRootOutsideTheLocation()
+    {
+        var command = Command("");
+        using var workspace = new TempDirectory();
+
+        (
+            await InvokeAsync(
+                command,
+                [
+                    "--local",
+                    "--squad",
+                    "ac",
+                    "--tag",
+                    "release",
+                    "--location",
+                    workspace.Path,
+                    "--root",
+                    _root.Path,
+                ]
+            )
+        )
+            .Should()
+            .Be(0);
     }
 
     [Fact]
@@ -193,18 +263,18 @@ public sealed class CreateCommandTests
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
         return new CreateCommand(
-            config,
+            new Lazy<AboxConfig>(() => config),
             new Preflight(_console, _sbx, programs),
-            new SquadResolver(config),
-            new CreateService(
-                store,
-                new SandboxRecordStore(paths),
-                paths,
-                config,
-                _sbx,
-                LocalWorkloadTest.Images(),
-                _console,
-                PublishedSquadTest.Source()
+            new Lazy<SquadResolver>(() => new SquadResolver(config)),
+            new Lazy<SandboxCreator>(() =>
+                new SandboxCreator(
+                    new SandboxRecordStore(paths),
+                    paths,
+                    _sbx,
+                    _console,
+                    new LocalSquadSource(store, LocalWorkloadTest.Images(), _console),
+                    new RemoteSquadSource(config, _sbx, PublishedSquadTest.Source())
+                )
             ),
             _console
         );

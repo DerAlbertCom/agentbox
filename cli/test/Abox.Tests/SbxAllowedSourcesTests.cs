@@ -1,12 +1,15 @@
 using System.Text.Json;
+using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Sbx;
 using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class SbxAllowedSourcesTests
+public sealed class SbxAllowedSourcesTests : IDisposable
 {
+    private readonly TempDirectory _root = new();
+    private readonly AboxPaths _paths;
     private const string Prefix = "rwest.jfrog.io/mtiae-docker-release/";
     private readonly IProcessRunner _runner = Substitute.For<IProcessRunner>();
     private readonly SbxClient _client;
@@ -15,7 +18,8 @@ public sealed class SbxAllowedSourcesTests
 
     public SbxAllowedSourcesTests()
     {
-        _client = new SbxClient(_runner);
+        _paths = AboxPaths.For(_root.Path, Path.Combine(_root.Path, "state"));
+        _client = new SbxClient(_runner, _paths);
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -42,6 +46,18 @@ public sealed class SbxAllowedSourcesTests
                     ""
                 );
             });
+    }
+
+    public void Dispose() => _root.Dispose();
+
+    [Fact]
+    public async Task SettingsLockUsesTheInjectedStateDirectory()
+    {
+        await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
+
+        File.Exists(Path.Combine(_paths.StateDirectory, "locks", "sbx-kit-allowedSources.lock"))
+            .Should()
+            .BeTrue();
     }
 
     [Fact]
@@ -430,7 +446,7 @@ public sealed class SbxAllowedSourcesTests
                 await Task.Delay(100);
                 return new ProcessResult(0, snapshot, "");
             });
-        var other = new SbxClient(_runner);
+        var other = new SbxClient(_runner, _paths);
 
         await Task.WhenAll(
             _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None),
@@ -477,7 +493,7 @@ public sealed class SbxAllowedSourcesTests
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
-            var other = new SbxClient(_runner);
+            var other = new SbxClient(_runner, _paths);
             var waiting = () => other.EnsureKitSourceAllowedAsync(Prefix, cancellation.Token);
 
             await waiting.Should().ThrowAsync<OperationCanceledException>();
@@ -488,6 +504,55 @@ public sealed class SbxAllowedSourcesTests
             release.TrySetResult();
             await first.WaitAsync(TimeSpan.FromSeconds(5));
         }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedOrCancelledUpdatesReleaseTheLockForTheNextClient(bool cancelled)
+    {
+        using var cancellation = new CancellationTokenSource();
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (cancelled)
+                {
+                    cancellation.Cancel();
+                    call.Arg<CancellationToken>().ThrowIfCancellationRequested();
+                }
+
+                return new ProcessResult(1, "", "settings unavailable");
+            });
+        var first = () => _client.EnsureKitSourceAllowedAsync(Prefix, cancellation.Token);
+        if (cancelled)
+        {
+            await first.Should().ThrowAsync<OperationCanceledException>();
+        }
+        else
+        {
+            await first.Should().ThrowAsync<AboxException>();
+        }
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProcessResult(
+                    0,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            key = "kit.allowedSources",
+                            type = "json",
+                            source = "override",
+                            value = new[] { Prefix },
+                        }
+                    ),
+                    ""
+                )
+            );
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await new SbxClient(_runner, _paths).EnsureKitSourceAllowedAsync(Prefix, timeout.Token);
     }
 
     [Theory]

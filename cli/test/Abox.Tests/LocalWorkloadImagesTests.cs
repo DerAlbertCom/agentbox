@@ -1,6 +1,6 @@
 using Abox;
-using Abox.Build;
 using Abox.Infrastructure;
+using Abox.LocalState;
 using NSubstitute;
 
 namespace Abox.Tests;

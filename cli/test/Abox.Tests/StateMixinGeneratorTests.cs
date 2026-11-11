@@ -21,6 +21,7 @@ public sealed class StateMixinGeneratorTests
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "state", "state.yaml"));
         descriptor.Should().Contain("# syntax=docker/sandbox-kit:3");
         descriptor.Should().Contain("kind: mixin");
+        descriptor.Should().NotContain("\r");
         CountOccurrences(descriptor, "com.docker.sandbox/host-mount@1").Should().Be(2);
         descriptor.Should().Contain("path: /home/agent/.config/opencode/state");
         descriptor.Should().Contain("path: /home/agent/.local/state/shell");

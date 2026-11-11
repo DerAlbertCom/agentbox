@@ -26,6 +26,18 @@ public sealed class WorkloadKitGenerator
     /// </summary>
     public void Generate(WorkloadFile workload, string targetDirectory)
     {
+        var scripts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var script in workload.Scripts)
+        {
+            var fileName = Path.GetFileName(script);
+            if (!scripts.TryAdd(fileName, script))
+            {
+                throw new AboxException(
+                    $"The scripts '{scripts[fileName]}' and '{script}' have the same output file name '{fileName}'."
+                );
+            }
+        }
+
         Directory.CreateDirectory(targetDirectory);
 
         WriteDescriptor(workload, targetDirectory);
@@ -48,7 +60,10 @@ public sealed class WorkloadKitGenerator
             .AppendLine("  - type: com.docker.sandbox/sbx@1")
             .ToString();
 
-        File.WriteAllText(Path.Combine(targetDirectory, KitName + ".yaml"), descriptor);
+        File.WriteAllText(
+            Path.Combine(targetDirectory, KitName + ".yaml"),
+            descriptor.ReplaceLineEndings("\n")
+        );
     }
 
     private static void WriteDockerfile(WorkloadFile workload, string targetDirectory)
@@ -73,6 +88,20 @@ public sealed class WorkloadKitGenerator
             .AppendLine("USER agent")
             .AppendLine();
 
+        AppendAptPackages(dockerfile, workload);
+        AppendMiseBootstrap(dockerfile, workload);
+        AppendMiseTools(dockerfile, workload);
+        AppendScripts(dockerfile, workload);
+        dockerfile.AppendLine("WORKDIR /home/agent/workspace");
+
+        File.WriteAllText(
+            Path.Combine(targetDirectory, KitName + ".dockerfile"),
+            dockerfile.ToString().ReplaceLineEndings("\n")
+        );
+    }
+
+    private static void AppendAptPackages(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Apt.Count > 0)
         {
             var install = new StringBuilder()
@@ -99,7 +128,10 @@ public sealed class WorkloadKitGenerator
                 .AppendLine("USER agent")
                 .AppendLine();
         }
+    }
 
+    private static void AppendMiseBootstrap(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Mise.Count > 0 || workload.Scripts.Count > 0)
         {
             dockerfile
@@ -118,7 +150,10 @@ public sealed class WorkloadKitGenerator
                 .AppendLine("    mise --version")
                 .AppendLine();
         }
+    }
 
+    private static void AppendMiseTools(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Mise.Count > 0)
         {
             dockerfile
@@ -141,7 +176,10 @@ public sealed class WorkloadKitGenerator
 
             dockerfile.AppendLine();
         }
+    }
 
+    private static void AppendScripts(StringBuilder dockerfile, WorkloadFile workload)
+    {
         if (workload.Scripts.Count > 0)
         {
             dockerfile
@@ -157,13 +195,6 @@ public sealed class WorkloadKitGenerator
 
             dockerfile.AppendLine();
         }
-
-        dockerfile.AppendLine("WORKDIR /home/agent/workspace");
-
-        File.WriteAllText(
-            Path.Combine(targetDirectory, KitName + ".dockerfile"),
-            dockerfile.ToString()
-        );
     }
 
     /// <summary>
@@ -239,10 +270,17 @@ public sealed class WorkloadKitGenerator
                 );
             }
 
-            File.Copy(
-                source,
+            var bytes = File.ReadAllBytes(source);
+            var length = 0;
+            for (var index = 0; index < bytes.Length; index++)
+            {
+                if (bytes[index] == '\r' && index + 1 < bytes.Length && bytes[index + 1] == '\n')
+                    continue;
+                bytes[length++] = bytes[index];
+            }
+            File.WriteAllBytes(
                 Path.Combine(scriptsDirectory, Path.GetFileName(script)),
-                overwrite: true
+                bytes.AsSpan(0, length)
             );
         }
     }

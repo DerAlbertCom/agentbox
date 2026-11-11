@@ -1,9 +1,8 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Abox.Build;
-using Abox.Features.Build;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
 using Abox.Naming;
 
 namespace Abox.Features.Publish;
@@ -19,12 +18,11 @@ public sealed record PublishRequest(
 public sealed class PublishService(
     BuildStore store,
     IHostPrograms programs,
-    IProcessRunner runner,
+    IOciRegistry registry,
     IConsole console
 )
 {
     public const string Registry = RegistryImageName.Registry;
-    private const string DescriptorAnnotation = "vnd.docker.sandbox.kit.descriptor";
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
     public async Task<int> PublishAsync(PublishRequest request, CancellationToken cancellationToken)
@@ -54,47 +52,22 @@ public sealed class PublishService(
             );
         }
 
-        var directory = Path.Combine(
-            Path.GetTempPath(),
-            "abox-publish-" + Guid.NewGuid().ToString("N")
-        );
-        Directory.CreateDirectory(directory);
+        using var temporary = new TemporaryDirectory("abox-publish-", "publication", console);
+        var directory = temporary.Path;
         try
         {
-            // Snapshot every team's validated inputs before the first registry write.
-            var snapshots = builds
-                .Select(
-                    (item, index) =>
-                        BuildSources.Snapshot(
-                            item.Build,
-                            Path.Combine(directory, "sources", index.ToString())
-                        )
-                )
-                .ToList();
-            for (var index = 0; index < builds.Count; index++)
-            {
-                foreach (var kit in builds[index].Build.Kits.Where(kit => kit.IsLocal))
-                {
-                    ValidateLocalArguments(snapshots[index][kit.Reference], kit.Arguments);
-                }
-            }
+            var snapshots = SnapshotBuilds(builds.Select(item => item.Build).ToList(), directory);
 
-            await RunAsync(["buildx", "version"], false, cancellationToken);
-            foreach (
-                var kit in builds.SelectMany(item => item.Build.Kits).Where(kit => !kit.IsLocal)
-            )
-            {
-                var descriptors = await InspectAsync(
-                    kit.Reference,
-                    "mixin",
-                    cancellationToken,
-                    request.Builder
-                );
-                foreach (var descriptor in descriptors)
-                {
-                    ValidateRegistryArguments(descriptor, kit.Arguments);
-                }
-            }
+            await RunAsync(
+                ["buildx", "version"],
+                attachConsole: false,
+                cancellationToken: cancellationToken
+            );
+            await ValidateRegistryKitsAsync(
+                builds.SelectMany(item => item.Build.Kits),
+                request.Builder,
+                cancellationToken
+            );
 
             for (var index = 0; index < builds.Count; index++)
             {
@@ -117,19 +90,47 @@ public sealed class PublishService(
                 exception
             );
         }
-        finally
+    }
+
+    private static IReadOnlyList<IReadOnlyDictionary<string, string>> SnapshotBuilds(
+        IReadOnlyList<BuildManifest> builds,
+        string directory
+    )
+    {
+        // Snapshot every team's validated inputs before the first registry write.
+        var snapshots = builds
+            .Select(
+                (build, index) =>
+                    BuildSources.Snapshot(
+                        build,
+                        Path.Combine(directory, "sources", index.ToString())
+                    )
+            )
+            .ToList();
+        for (var index = 0; index < builds.Count; index++)
         {
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-            catch (Exception exception)
-                when (exception is IOException or UnauthorizedAccessException)
-            {
-                console.WriteError(
-                    $"warning: could not remove publication directory '{directory}': {exception.Message}"
-                );
-            }
+            foreach (var kit in builds[index].Kits.Where(kit => kit.IsLocal))
+                ValidateLocalArguments(snapshots[index][kit.Reference], kit.Arguments);
+        }
+        return snapshots;
+    }
+
+    private async Task ValidateRegistryKitsAsync(
+        IEnumerable<ManifestKit> kits,
+        string? builder,
+        CancellationToken cancellationToken
+    )
+    {
+        foreach (var kit in kits.Where(kit => !kit.IsLocal))
+        {
+            var descriptors = await InspectAsync(
+                kit.Reference,
+                "mixin",
+                cancellationToken,
+                builder
+            );
+            foreach (var descriptor in descriptors)
+                ValidateRegistryArguments(descriptor, kit.Arguments);
         }
     }
 
@@ -194,16 +195,69 @@ public sealed class PublishService(
         var repository =
             $"{Registry}/{build.PublishRepository}/{RepositoryName(team.Name, build.Squad)}";
         var reference = $"{repository}:{request.Tag}";
-        var publication = "publish-" + Guid.NewGuid().ToString("N");
+        var publication = new Publication(
+            directory,
+            repository,
+            "publish-" + Guid.NewGuid().ToString("N"),
+            request.Builder
+        );
+        var kits = await PublishComponentsAsync(publication, build, snapshots, cancellationToken);
+        var configDirectory = WriteConfiguration(directory, team.Name, build);
+        var config = await PushAsync(
+            new PushRequest(
+                Directory: configDirectory,
+                Reference: $"{repository}/components/config:{publication.Id}",
+                Kind: KitKind.Mixin,
+                PublicationDirectory: directory
+            ),
+            builder: request.Builder,
+            cancellationToken: cancellationToken
+        );
+        kits.Add(new { @ref = config });
+        var candidate = await PublishCandidateAsync(
+            publication,
+            team.Name,
+            build.Squad,
+            kits,
+            cancellationToken
+        );
+        // The requested (possibly moving) tag is untouched until the candidate passes inspection.
+        await RunAsync(
+            ImageToolsArguments(
+                request.Builder,
+                ["create", "--prefer-index=false", "--tag", reference, candidate]
+            ),
+            attachConsole: true,
+            cancellationToken: cancellationToken
+        );
+        await InspectAsync(reference, "workload", cancellationToken, request.Builder);
+        console.WriteLine($"Published squad '{build.Squad}' as '{reference}'.");
+    }
+
+    private sealed record Publication(
+        string Directory,
+        string Repository,
+        string Id,
+        string? Builder
+    );
+
+    private async Task<List<object>> PublishComponentsAsync(
+        Publication publication,
+        BuildManifest build,
+        IReadOnlyDictionary<string, string> snapshots,
+        CancellationToken cancellationToken
+    )
+    {
         var kits = new List<object>();
         var workload = await PushAsync(
-            snapshots[build.WorkloadKitDirectory],
-            $"{repository}/components/workload:{publication}",
-            "workload",
-            request,
-            directory,
-            true,
-            cancellationToken
+            new PushRequest(
+                Directory: snapshots[build.WorkloadKitDirectory],
+                Reference: $"{publication.Repository}/components/workload:{publication.Id}",
+                Kind: KitKind.Workload,
+                PublicationDirectory: publication.Directory
+            ),
+            builder: publication.Builder,
+            cancellationToken: cancellationToken
         );
         kits.Add(new { @ref = workload });
 
@@ -212,13 +266,14 @@ public sealed class PublishService(
             var kit = build.Kits[index];
             var source = kit.IsLocal
                 ? await PushAsync(
-                    snapshots[kit.Reference],
-                    $"{repository}/components/kit-{index}:{publication}",
-                    "mixin",
-                    request,
-                    directory,
-                    false,
-                    cancellationToken
+                    new PushRequest(
+                        Directory: snapshots[kit.Reference],
+                        Reference: $"{publication.Repository}/components/kit-{index}:{publication.Id}",
+                        Kind: KitKind.Mixin,
+                        PublicationDirectory: publication.Directory
+                    ),
+                    builder: publication.Builder,
+                    cancellationToken: cancellationToken
                 )
                 : kit.Reference;
             kits.Add(new { @ref = source, args = kit.Arguments });
@@ -227,17 +282,23 @@ public sealed class PublishService(
         if (build.StateMixinDirectory is { } state)
         {
             var source = await PushAsync(
-                snapshots[state],
-                $"{repository}/components/state:{publication}",
-                "mixin",
-                request,
-                directory,
-                false,
-                cancellationToken
+                new PushRequest(
+                    Directory: snapshots[state],
+                    Reference: $"{publication.Repository}/components/state:{publication.Id}",
+                    Kind: KitKind.Mixin,
+                    PublicationDirectory: publication.Directory
+                ),
+                builder: publication.Builder,
+                cancellationToken: cancellationToken
             );
             kits.Add(new { @ref = source });
         }
 
+        return kits;
+    }
+
+    private static string WriteConfiguration(string directory, string team, BuildManifest build)
+    {
         var configDirectory = Path.Combine(directory, "config");
         Directory.CreateDirectory(configDirectory);
         File.WriteAllText(
@@ -246,7 +307,7 @@ public sealed class PublishService(
                 new
                 {
                     SchemaVersion = 1,
-                    Team = team.Name,
+                    Team = team,
                     build.Squad,
                     build.Tag,
                     build.CreatedAt,
@@ -266,18 +327,18 @@ public sealed class PublishService(
                 build = "FROM scratch\nCOPY squad.json /usr/share/abox/squad.json\n",
             }
         );
-        var config = await PushAsync(
-            configDirectory,
-            $"{repository}/components/config:{publication}",
-            "mixin",
-            request,
-            directory,
-            false,
-            cancellationToken
-        );
-        kits.Add(new { @ref = config });
+        return configDirectory;
+    }
 
-        var setDirectory = Path.Combine(directory, "set");
+    private async Task<string> PublishCandidateAsync(
+        Publication publication,
+        string team,
+        string squad,
+        IReadOnlyList<object> kits,
+        CancellationToken cancellationToken
+    )
+    {
+        var setDirectory = Path.Combine(publication.Directory, "set");
         Directory.CreateDirectory(setDirectory);
         WriteDescriptor(
             Path.Combine(setDirectory, "set.yaml"),
@@ -285,61 +346,67 @@ public sealed class PublishService(
             {
                 schemaVersion = "3",
                 kind = "set",
-                displayName = $"{team.Name} / {build.Squad}",
+                displayName = $"{team} / {squad}",
                 kits,
             }
         );
-        var candidate = await PushAsync(
-            setDirectory,
-            $"{repository}:{publication}",
-            "workload",
-            request,
-            directory,
-            false,
-            cancellationToken
-        );
-        // The requested (possibly moving) tag is untouched until the candidate passes inspection.
-        await RunAsync(
-            ImageToolsArguments(
-                request.Builder,
-                ["create", "--prefer-index=false", "--tag", reference, candidate]
+        return await PushAsync(
+            new PushRequest(
+                Directory: setDirectory,
+                Reference: $"{publication.Repository}:{publication.Id}",
+                Kind: KitKind.Set,
+                PublicationDirectory: publication.Directory
             ),
-            true,
-            cancellationToken
+            builder: publication.Builder,
+            cancellationToken: cancellationToken
         );
-        await InspectAsync(reference, "workload", cancellationToken, request.Builder);
-        console.WriteLine($"Published squad '{build.Squad}' as '{reference}'.");
     }
 
+    private enum KitKind
+    {
+        Workload,
+        Mixin,
+        Set,
+    }
+
+    private sealed record PushRequest(
+        string Directory,
+        string Reference,
+        KitKind Kind,
+        string PublicationDirectory
+    );
+
     private async Task<string> PushAsync(
-        string directory,
-        string reference,
-        string kind,
-        PublishRequest request,
-        string publicationDirectory,
-        bool workload,
+        PushRequest request,
+        string? builder,
         CancellationToken cancellationToken
     )
     {
-        console.WriteLine($"Publishing '{reference}'...");
-        var metadata = Path.Combine(publicationDirectory, Guid.NewGuid().ToString("N") + ".json");
+        console.WriteLine($"Publishing '{request.Reference}'...");
+        var metadata = Path.Combine(
+            request.PublicationDirectory,
+            Guid.NewGuid().ToString("N") + ".json"
+        );
         var arguments = new List<string> { "buildx", "build" };
-        if (request.Builder is { } builder)
+        if (builder is not null)
         {
             arguments.AddRange(["--builder", builder]);
         }
 
         arguments.AddRange([
             "--file",
-            Descriptor(directory),
+            Descriptor(request.Directory),
             "--tag",
-            reference,
+            request.Reference,
             "--metadata-file",
             metadata,
             "--provenance=mode=min",
             "--push",
         ]);
-        if (workload && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN")))
+        if (
+            request.Kind == KitKind.Workload
+            && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN"))
+        )
         {
             arguments.AddRange([
                 "--secret",
@@ -347,14 +414,14 @@ public sealed class PublishService(
             ]);
         }
 
-        arguments.Add(directory);
-        await RunAsync(arguments, true, cancellationToken);
+        arguments.Add(request.Directory);
+        await RunAsync(arguments, attachConsole: true, cancellationToken: cancellationToken);
         string digest;
         try
         {
             using var document = JsonDocument.Parse(File.ReadAllText(metadata));
             digest = document.RootElement.GetProperty("containerimage.digest").GetString() ?? "";
-            if (!Regex.IsMatch(digest, @"\Asha256:[a-f0-9]{64}\z"))
+            if (!OciRegistry.IsDigest(digest))
             {
                 throw new JsonException("Missing or invalid image digest.");
             }
@@ -368,17 +435,22 @@ public sealed class PublishService(
             )
         {
             throw new AboxException(
-                $"Cannot read the pushed digest for '{reference}'; the requested set tag was not promoted.",
+                $"Cannot read the pushed digest for '{request.Reference}'; the requested set tag was not promoted.",
                 exception
             );
         }
 
-        var pinned = reference[..reference.LastIndexOf(':')] + "@" + digest;
-        await InspectAsync(pinned, kind, cancellationToken, request.Builder);
+        var pinned = OciRegistry.Pin(request.Reference, digest);
+        await InspectAsync(
+            pinned,
+            request.Kind == KitKind.Mixin ? "mixin" : "workload",
+            cancellationToken,
+            builder
+        );
         return pinned;
     }
 
-    private async Task<IReadOnlyList<JsonElement>> InspectAsync(
+    internal async Task<IReadOnlyList<JsonElement>> InspectAsync(
         string reference,
         string kind,
         CancellationToken cancellationToken,
@@ -387,86 +459,50 @@ public sealed class PublishService(
     )
     {
         if (depth > 4)
-        {
             throw new AboxException(
                 $"Registry artifact '{reference}' has too many nested image indexes."
             );
-        }
 
-        var result = await RunAsync(
-            ImageToolsArguments(builder, ["inspect", "--raw", reference]),
-            false,
-            cancellationToken
+        var result = CheckResult(
+            await registry.InspectAsync(reference, true, builder, cancellationToken)
         );
         try
         {
             using var document = JsonDocument.Parse(result.StandardOutput);
             var root = document.RootElement;
             if (root.GetProperty("schemaVersion").GetInt32() != 2)
-            {
                 throw new JsonException("Expected an OCI image manifest or index.");
-            }
-            if (root.TryGetProperty("manifests", out var manifests))
+            if (!root.TryGetProperty("manifests", out var manifests))
+                return [OciRegistry.Descriptor(root, kind, $"Expected a v3 {kind} descriptor.")];
+
+            var leaves = new List<JsonElement>();
+            foreach (var manifest in manifests.EnumerateArray())
             {
-                var descriptors = new List<JsonElement>();
-                foreach (var manifest in manifests.EnumerateArray())
-                {
-                    if (
-                        manifest.TryGetProperty("annotations", out var annotations)
-                        && annotations.TryGetProperty("vnd.docker.reference.type", out var type)
-                        && type.GetString() == "attestation-manifest"
-                        && manifest.TryGetProperty("platform", out var platform)
-                        && platform.GetProperty("os").GetString() == "unknown"
-                        && platform.GetProperty("architecture").GetString() == "unknown"
+                if (
+                    manifest.TryGetProperty("annotations", out var annotations)
+                    && annotations.TryGetProperty("vnd.docker.reference.type", out var type)
+                    && type.GetString() == "attestation-manifest"
+                    && manifest.TryGetProperty("platform", out var platform)
+                    && platform.GetProperty("os").GetString() == "unknown"
+                    && platform.GetProperty("architecture").GetString() == "unknown"
+                )
+                    continue;
+                var digest = manifest.GetProperty("digest").GetString() ?? "";
+                if (!OciRegistry.IsDigest(digest))
+                    throw new JsonException("Invalid platform manifest digest.");
+                leaves.AddRange(
+                    await InspectAsync(
+                        OciRegistry.Repository(reference) + "@" + digest,
+                        kind,
+                        cancellationToken,
+                        builder,
+                        depth + 1
                     )
-                    {
-                        continue;
-                    }
-
-                    var digest = manifest.GetProperty("digest").GetString() ?? "";
-                    if (!Regex.IsMatch(digest, @"\Asha256:[a-f0-9]{64}\z"))
-                    {
-                        throw new JsonException("Invalid platform manifest digest.");
-                    }
-
-                    var repository = reference.Split('@')[0];
-                    var colon = repository.LastIndexOf(':');
-                    if (colon > repository.LastIndexOf('/'))
-                    {
-                        repository = repository[..colon];
-                    }
-
-                    descriptors.AddRange(
-                        await InspectAsync(
-                            repository + "@" + digest,
-                            kind,
-                            cancellationToken,
-                            builder,
-                            depth + 1
-                        )
-                    );
-                }
-
-                if (descriptors.Count == 0)
-                {
-                    throw new JsonException("No runnable platform manifests.");
-                }
-
-                return descriptors;
+                );
             }
-
-            using var descriptor = JsonDocument.Parse(
-                root.GetProperty("annotations").GetProperty(DescriptorAnnotation).GetString() ?? ""
-            );
-            if (
-                descriptor.RootElement.GetProperty("schemaVersion").GetString() != "3"
-                || descriptor.RootElement.GetProperty("kind").GetString() != kind
-            )
-            {
-                throw new JsonException($"Expected a v3 {kind} descriptor.");
-            }
-
-            return [descriptor.RootElement.Clone()];
+            if (leaves.Count == 0)
+                throw new JsonException("No runnable platform manifests.");
+            return leaves;
         }
         catch (Exception exception)
             when (exception
@@ -530,19 +566,14 @@ public sealed class PublishService(
         IReadOnlyList<string> arguments,
         bool attachConsole,
         CancellationToken cancellationToken
-    )
-    {
-        var result = await runner.RunAsync(
-            new ProcessRequest("docker", arguments, AttachConsole: attachConsole),
-            cancellationToken
-        );
-        if (!result.Succeeded)
-        {
-            throw new AboxException(
-                $"Publishing failed (docker buildx, exit code {result.ExitCode}). Check the Buildx builder and run 'docker login {Registry}' with a JFrog identity allowed to push to the workload's publishRepository.{Environment.NewLine}{(result.StandardError + result.StandardOutput).Trim()}"
-            );
-        }
+    ) => CheckResult(await registry.RunAsync(arguments, attachConsole, cancellationToken));
 
+    private static ProcessResult CheckResult(ProcessResult result)
+    {
+        if (!result.Succeeded)
+            throw new AboxException(
+                $"Publishing failed (docker buildx, exit code {result.ExitCode}). Check the Buildx builder and run 'docker login {RegistryImageName.Registry}' with a JFrog identity allowed to push to the workload's publishRepository.{Environment.NewLine}{(result.StandardError + result.StandardOutput).Trim()}"
+            );
         return result;
     }
 
@@ -602,17 +633,7 @@ public sealed class PublishService(
     private static IReadOnlyList<string> ImageToolsArguments(
         string? builder,
         IReadOnlyList<string> arguments
-    )
-    {
-        var result = new List<string> { "buildx", "imagetools" };
-        if (builder is not null)
-        {
-            result.AddRange(["--builder", builder]);
-        }
-
-        result.AddRange(arguments);
-        return result;
-    }
+    ) => OciRegistry.ImageToolsArguments(builder, arguments);
 
     private static void WriteDescriptor(string path, object descriptor) =>
         File.WriteAllText(

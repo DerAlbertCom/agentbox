@@ -1,4 +1,4 @@
-namespace Abox.Build;
+namespace Abox.LocalState;
 
 /// <summary>
 /// What abox knows about a sandbox it created.

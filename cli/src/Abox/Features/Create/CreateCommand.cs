@@ -3,6 +3,7 @@ using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.Sandboxes;
 
 namespace Abox.Features.Create;
 
@@ -12,10 +13,10 @@ namespace Abox.Features.Create;
 public sealed class CreateCommand : Command
 {
     public CreateCommand(
-        AboxConfig config,
+        Lazy<AboxConfig> config,
         Preflight preflight,
-        SquadResolver resolver,
-        CreateService create,
+        Lazy<SquadResolver> resolver,
+        Lazy<SandboxCreator> create,
         IConsole console
     )
         : base(
@@ -47,6 +48,12 @@ public sealed class CreateCommand : Command
                 "The tag of the published set or local build. Defaults to the tag of the user configuration.",
         };
 
+        var root = new Option<string>("--root")
+        {
+            Description =
+                "The directory of the project that holds the teams folder for --local. Defaults to the resolved location.",
+        };
+
         var local = new Option<bool>("--local")
         {
             Description =
@@ -62,6 +69,7 @@ public sealed class CreateCommand : Command
         Options.Add(squad);
         Options.Add(location);
         Options.Add(tag);
+        Options.Add(root);
         Options.Add(local);
         Options.Add(assumeYes);
 
@@ -70,14 +78,23 @@ public sealed class CreateCommand : Command
                 await CommandHandling.RunAsync(
                     async () =>
                     {
+                        var useLocal = parseResult.GetValue(local);
+                        var sourceRoot = parseResult.GetValue(root);
+                        if (!useLocal && sourceRoot is not null)
+                        {
+                            throw new AboxException(
+                                "--root requires --local; remote create does not use local team sources."
+                            );
+                        }
+
+                        var settings = config.Value;
                         var teamName =
                             parseResult.GetValue(team)
-                            ?? config.DefaultTeam
+                            ?? settings.DefaultTeam
                             ?? throw new AboxException(
                                 "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
                             );
 
-                        var useLocal = parseResult.GetValue(local);
                         var selectedSquad = parseResult.GetValue(squad);
                         if (!useLocal && string.IsNullOrWhiteSpace(selectedSquad))
                         {
@@ -86,17 +103,21 @@ public sealed class CreateCommand : Command
                             );
                         }
 
+                        var resolvedLocation = settings.ResolveLocation(
+                            parseResult.GetValue(location)
+                        );
                         var resolved = useLocal
-                            ? resolver.ResolveTeam(Directory.GetCurrentDirectory(), teamName)
+                            ? resolver.Value.ResolveTeam(
+                                Path.GetFullPath(sourceRoot ?? resolvedLocation),
+                                teamName
+                            )
                             : new SquadResolver.ResolvedTeam(teamName, string.Empty, []);
 
-                        var request = new CreateRequest(
+                        var request = new SandboxCreationRequest(
                             resolved,
                             selectedSquad,
-                            parseResult.GetValue(location)
-                                ?? config.DefaultLocation
-                                ?? Directory.GetCurrentDirectory(),
-                            parseResult.GetValue(tag) ?? config.DefaultTag,
+                            resolvedLocation,
+                            parseResult.GetValue(tag) ?? settings.DefaultTag,
                             parseResult.GetValue(assumeYes),
                             Local: useLocal
                         );
@@ -106,7 +127,7 @@ public sealed class CreateCommand : Command
                             return 1;
                         }
 
-                        return await create.CreateAsync(request, cancellationToken);
+                        return await create.Value.CreateAsync(request, cancellationToken);
                     },
                     console
                 )

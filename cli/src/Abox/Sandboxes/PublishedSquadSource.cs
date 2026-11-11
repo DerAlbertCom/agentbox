@@ -3,14 +3,18 @@ using System.IO.Compression;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.RegularExpressions;
-using Abox.Build;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
 using Abox.Naming;
 
-namespace Abox.Features.Create;
+namespace Abox.Sandboxes;
 
+/// <summary>A pinned squad set and its authoritative runtime metadata.</summary>
 public sealed record PublishedSquad(string Reference, BuildManifest Metadata);
+
+/// <summary>A resolved platform manifest and its content identity.</summary>
+internal sealed record OciManifest(string Digest, JsonElement Manifest);
 
 /// <summary>Reads authoritative runtime metadata from a processed, digest-pinned squad set.</summary>
 public interface IPublishedSquadSource
@@ -26,12 +30,11 @@ public interface IPublishedSquadSource
 
 /// <summary>Only registry reads: inspect the set, pull its small config mixin, and read its saved layers without executing or extracting them.</summary>
 public sealed class PublishedSquadSource(
-    IProcessRunner runner,
+    IOciRegistry registry,
     IHostPrograms programs,
     IConsole console
 ) : IPublishedSquadSource
 {
-    private const string DescriptorAnnotation = "vnd.docker.sandbox.kit.descriptor";
     private const int MaximumFileSize = 16 * 1024 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -49,51 +52,27 @@ public sealed class PublishedSquadSource(
         if (!programs.Exists("docker"))
         {
             throw new AboxException(
-                "Remote create needs Docker with Buildx to read the published squad metadata. Install Docker and run 'docker login rwest.jfrog.io' with read access; no local build or team sources are needed."
+                $"Remote create needs Docker with Buildx to read the published squad metadata. Install Docker and run 'docker login {RegistryImageName.Registry}' with read access; no local build or team sources are needed."
             );
         }
 
         var architecture =
             RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "amd64";
         var platform = "linux/" + architecture;
-        var directory = Path.Combine(
-            Path.GetTempPath(),
-            "abox-pull-" + Guid.NewGuid().ToString("N")
-        );
-        Directory.CreateDirectory(directory);
+        using var temporary = new TemporaryDirectory("abox-pull-", "download", console);
+        var directory = temporary.Path;
         try
         {
-            var (digest, manifest) = await InspectAsync(reference, architecture, cancellationToken);
-            var pinned = reference[..reference.LastIndexOf(':')] + "@" + digest;
+            var (digest, manifest) = await ResolveManifestAsync(
+                reference,
+                architecture,
+                cancellationToken
+            );
+            var pinned = OciRegistry.Pin(reference, digest);
             var descriptor = Descriptor(manifest, "workload");
-            var suffix =
-                "/" + RegistryImageName.SquadRepository(team, squad) + "/components/config@";
-            var configs = descriptor
-                .GetProperty("kits")
-                .EnumerateArray()
-                .Select(kit => kit.GetProperty("ref").GetString() ?? "")
-                .Where(value =>
-                    value.StartsWith(RegistryImageName.Registry + "/", StringComparison.Ordinal)
-                    && value.Contains(suffix, StringComparison.Ordinal)
-                )
-                .ToList();
-            if (configs.Count != 1)
-            {
-                throw new JsonException("Expected exactly one bundled squad configuration mixin.");
-            }
-            var config = configs[0];
-            var prefix = config[..config.IndexOf(suffix, StringComparison.Ordinal)];
-            if (
-                !RegistryImageName.IsValidRepository(
-                    prefix[(RegistryImageName.Registry.Length + 1)..]
-                )
-            )
-            {
-                throw new JsonException("Invalid configuration repository.");
-            }
-            Digest(config[(config.IndexOf(suffix, StringComparison.Ordinal) + suffix.Length)..]);
+            var config = ConfigurationReference(descriptor, team, squad);
             Descriptor(
-                (await InspectAsync(config, architecture, cancellationToken)).Manifest,
+                (await ResolveManifestAsync(config, architecture, cancellationToken)).Manifest,
                 "mixin"
             );
             await RunAsync(["pull", "--platform", platform, config], cancellationToken);
@@ -120,23 +99,33 @@ public sealed class PublishedSquadSource(
                 exception
             );
         }
-        finally
-        {
-            try
-            {
-                Directory.Delete(directory, recursive: true);
-            }
-            catch (Exception exception)
-                when (exception is IOException or UnauthorizedAccessException)
-            {
-                console.WriteError(
-                    $"warning: could not remove download directory '{directory}': {exception.Message}"
-                );
-            }
-        }
     }
 
-    private async Task<(string Digest, JsonElement Manifest)> InspectAsync(
+    private static string ConfigurationReference(JsonElement descriptor, string team, string squad)
+    {
+        var suffix = "/" + RegistryImageName.SquadRepository(team, squad) + "/components/config@";
+        var configs = descriptor
+            .GetProperty("kits")
+            .EnumerateArray()
+            .Select(kit => kit.GetProperty("ref").GetString() ?? "")
+            .Where(value =>
+                value.StartsWith(RegistryImageName.Registry + "/", StringComparison.Ordinal)
+                && value.Contains(suffix, StringComparison.Ordinal)
+            )
+            .ToList();
+        if (configs.Count != 1)
+            throw new JsonException("Expected exactly one bundled squad configuration mixin.");
+        var config = configs[0];
+        var prefix = config[..config.IndexOf(suffix, StringComparison.Ordinal)];
+        if (!RegistryImageName.IsValidRepository(prefix[(RegistryImageName.Registry.Length + 1)..]))
+            throw new JsonException("Invalid configuration repository.");
+        OciRegistry.Digest(
+            config[(config.IndexOf(suffix, StringComparison.Ordinal) + suffix.Length)..]
+        );
+        return config;
+    }
+
+    internal async Task<OciManifest> ResolveManifestAsync(
         string reference,
         string architecture,
         CancellationToken cancellationToken,
@@ -144,82 +133,57 @@ public sealed class PublishedSquadSource(
     )
     {
         if (depth > 4)
-        {
             throw new JsonException("Too many nested image indexes.");
-        }
+
         string digest;
-        var repository = reference.Split('@')[0];
         if (reference.Contains('@'))
-        {
-            digest = Digest(reference[(reference.LastIndexOf('@') + 1)..]);
-        }
+            digest = OciRegistry.Digest(reference[(reference.LastIndexOf('@') + 1)..]);
         else
         {
-            var resolved = await RunAsync(
-                ["buildx", "imagetools", "inspect", "--format", "{{json .Manifest}}", reference],
-                cancellationToken
+            var resolved = CheckResult(
+                await registry.InspectAsync(reference, false, null, cancellationToken),
+                "buildx"
             );
             using var identity = JsonDocument.Parse(resolved.StandardOutput);
-            digest = Digest(identity.RootElement.GetProperty("digest").GetString());
+            digest = OciRegistry.Digest(identity.RootElement.GetProperty("digest").GetString());
         }
-        if (repository.LastIndexOf(':') > repository.LastIndexOf('/'))
-        {
-            repository = repository[..repository.LastIndexOf(':')];
-        }
-        var result = await RunAsync(
-            ["buildx", "imagetools", "inspect", "--raw", repository + "@" + digest],
-            cancellationToken
+        var result = CheckResult(
+            await registry.InspectAsync(
+                OciRegistry.Repository(reference) + "@" + digest,
+                true,
+                null,
+                cancellationToken
+            ),
+            "buildx"
         );
         using var document = JsonDocument.Parse(result.StandardOutput);
         var root = document.RootElement;
         if (root.GetProperty("schemaVersion").GetInt32() != 2)
-        {
             throw new JsonException("Expected an OCI image manifest or index.");
-        }
         if (!root.TryGetProperty("manifests", out var manifests))
-        {
-            return (digest, root.Clone());
-        }
+            return new OciManifest(digest, root.Clone());
+
         var selected = manifests
             .EnumerateArray()
-            .Where(item =>
-                item.TryGetProperty("platform", out var platform)
+            .Where(manifest =>
+                manifest.TryGetProperty("platform", out var platform)
                 && platform.GetProperty("os").GetString() == "linux"
                 && platform.GetProperty("architecture").GetString() == architecture
             )
             .ToList();
         if (selected.Count != 1)
-        {
             throw new JsonException("No unambiguous runnable platform manifest.");
-        }
-        return await InspectAsync(
-            repository + "@" + Digest(selected[0].GetProperty("digest").GetString()),
+        var childDigest = OciRegistry.Digest(selected[0].GetProperty("digest").GetString());
+        return await ResolveManifestAsync(
+            OciRegistry.Repository(reference) + "@" + childDigest,
             architecture,
             cancellationToken,
             depth + 1
         );
     }
 
-    private static JsonElement Descriptor(JsonElement manifest, string kind)
-    {
-        using var document = JsonDocument.Parse(
-            manifest.GetProperty("annotations").GetProperty(DescriptorAnnotation).GetString() ?? ""
-        );
-        var descriptor = document.RootElement;
-        if (
-            descriptor.GetProperty("schemaVersion").GetString() != "3"
-            || descriptor.GetProperty("kind").GetString() != kind
-        )
-        {
-            throw new JsonException("Expected a processed v3 kit descriptor.");
-        }
-        return descriptor.Clone();
-    }
-
-    private static string Digest(string? value) =>
-        value is not null && Regex.IsMatch(value, @"\Asha256:[a-f0-9]{64}\z")
-            ? value
-            : throw new JsonException("Invalid published digest.");
+    private static JsonElement Descriptor(JsonElement manifest, string kind) =>
+        OciRegistry.Descriptor(manifest, kind, "Expected a processed v3 kit descriptor.");
 
     private static BuildManifest ReadMetadata(
         string json,
@@ -231,6 +195,36 @@ public sealed class PublishedSquadSource(
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
+        ValidateIdentity(root, team, squad, tag);
+        var state =
+            root.GetProperty("State").Deserialize<List<ManifestState>>(JsonOptions)
+            ?? throw new JsonException("Missing State.");
+        var mcp =
+            root.GetProperty("Mcp").Deserialize<List<ManifestMcp>>(JsonOptions)
+            ?? throw new JsonException("Missing Mcp.");
+        var createdAt = root.GetProperty("CreatedAt").GetDateTimeOffset();
+        if (
+            createdAt == default
+            || state.Any(item => item is null)
+            || mcp.Any(item => item is null)
+            || state.DistinctBy(item => item.SandboxPath).Count() != state.Count
+            || mcp.DistinctBy(item => item.Name).Count() != mcp.Count
+        )
+            throw new JsonException("Incomplete or duplicate runtime metadata.");
+        ValidateState(state, descriptor);
+        ValidateMcp(mcp);
+        return new BuildManifest
+        {
+            Squad = squad,
+            Tag = tag,
+            CreatedAt = createdAt,
+            State = state,
+            Mcp = mcp,
+        };
+    }
+
+    private static void ValidateIdentity(JsonElement root, string team, string squad, string tag)
+    {
         // The original publisher omitted SchemaVersion; its otherwise identical format is version 1.
         if (
             (root.TryGetProperty("SchemaVersion", out var version) && version.GetInt32() != 1)
@@ -249,23 +243,10 @@ public sealed class PublishedSquadSource(
         {
             throw new JsonException("Squad metadata schema or identity mismatch.");
         }
-        var state =
-            root.GetProperty("State").Deserialize<List<ManifestState>>(JsonOptions)
-            ?? throw new JsonException("Missing State.");
-        var mcp =
-            root.GetProperty("Mcp").Deserialize<List<ManifestMcp>>(JsonOptions)
-            ?? throw new JsonException("Missing Mcp.");
-        var createdAt = root.GetProperty("CreatedAt").GetDateTimeOffset();
-        if (
-            createdAt == default
-            || state.Any(item => item is null)
-            || mcp.Any(item => item is null)
-            || state.DistinctBy(item => item.SandboxPath).Count() != state.Count
-            || mcp.DistinctBy(item => item.Name).Count() != mcp.Count
-        )
-        {
-            throw new JsonException("Incomplete or duplicate runtime metadata.");
-        }
+    }
+
+    private static void ValidateState(IReadOnlyList<ManifestState> state, JsonElement descriptor)
+    {
         foreach (var entry in state)
         {
             if (
@@ -294,6 +275,10 @@ public sealed class PublishedSquadSource(
                 throw new JsonException("Unsafe state path or missing host-mount declaration.");
             }
         }
+    }
+
+    private static void ValidateMcp(IReadOnlyList<ManifestMcp> mcp)
+    {
         foreach (var server in mcp)
         {
             if (
@@ -311,14 +296,6 @@ public sealed class PublishedSquadSource(
                 throw new JsonException("Invalid MCP declaration.");
             }
         }
-        return new BuildManifest
-        {
-            Squad = squad,
-            Tag = tag,
-            CreatedAt = createdAt,
-            State = state,
-            Mcp = mcp,
-        };
     }
 
     private static bool SafeRelative(string value) =>
@@ -406,19 +383,15 @@ public sealed class PublishedSquadSource(
     private async Task<ProcessResult> RunAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken
-    )
+    ) => CheckResult(await registry.RunAsync(arguments, false, cancellationToken), arguments[0]);
+
+    private static ProcessResult CheckResult(ProcessResult result, string command)
     {
-        var result = await runner.RunAsync(
-            new ProcessRequest("docker", arguments),
-            cancellationToken
-        );
+        // Docker handles credentials; metadata reads must never echo their output.
         if (!result.Succeeded)
-        {
-            // Docker handles credentials; never echo credential helpers, tokens or their output in errors.
             throw new AboxException(
-                $"Cannot read the published squad metadata (docker {arguments[0]}, exit code {result.ExitCode}). Check the published tag and Docker/Buildx, and run 'docker login rwest.jfrog.io' with read access to the set and its bundled components. For an older artifact, ask a maintainer to republish it with current abox. The existing sandbox was not replaced."
+                $"Cannot read the published squad metadata (docker {command}, exit code {result.ExitCode}). Check the published tag and Docker/Buildx, and run 'docker login {RegistryImageName.Registry}' with read access to the set and its bundled components. For an older artifact, ask a maintainer to republish it with current abox. The existing sandbox was not replaced."
             );
-        }
         return result;
     }
 }

@@ -73,6 +73,7 @@ public interface ISbxClient
     Task<SbxOutcome> RemoveSecretAsync(
         string service,
         string? host,
+        string? environmentVariable,
         CancellationToken cancellationToken
     );
 

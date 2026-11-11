@@ -1,13 +1,13 @@
-using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Build;
-using Abox.Features.Create;
 using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
 using Abox.Naming;
+using Abox.Sandboxes;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -22,7 +22,7 @@ public sealed class CreateServiceTests
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
     private readonly SandboxRecordStore _records;
-    private readonly CreateService _service;
+    private readonly SandboxCreator _service;
 
     public CreateServiceTests()
     {
@@ -32,15 +32,13 @@ public sealed class CreateServiceTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _service = new CreateService(
-            _store,
+        _service = new SandboxCreator(
             _records,
             _paths,
-            new AboxConfig(),
             _sbx,
-            LocalWorkloadTest.Images(),
             _console,
-            _published
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new RemoteSquadSource(new AboxConfig(), _sbx, _published)
         );
 
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
@@ -79,23 +77,83 @@ public sealed class CreateServiceTests
             );
     }
 
+    [Fact]
+    public async Task LocalSquadNamesUseTheCanonicalCaseForBuildsAndRecords()
+    {
+        SaveBuild();
+
+        var exitCode = await _service.CreateAsync(
+            Request() with
+            {
+                Squad = "AC",
+            },
+            CancellationToken.None
+        );
+
+        exitCode.Should().Be(0);
+        _records.Load(SandboxName.For(_root.Path))!.Squad.Should().Be("ac");
+    }
+
+    [Theory]
+    [InlineData("team")]
+    [InlineData("different")]
+    public async Task SharedKitArgumentsMustHaveTheSameValue(string value)
+    {
+        SaveBuild();
+        var manifest = _store.Load("ac", "latest")!;
+        manifest.Kits.Add(
+            new ManifestKit
+            {
+                Name = "other-kit",
+                Reference = "/kits/other",
+                Arguments = new Dictionary<string, string> { ["mode"] = value },
+            }
+        );
+        _store.Save(manifest);
+
+        if (value == "team")
+        {
+            (await _service.CreateAsync(Request(), CancellationToken.None)).Should().Be(0);
+            await _sbx.Received(1)
+                .CreateAsync(
+                    Arg.Is<SbxCreateRequest>(request =>
+                        request.KitArguments.Count == 1 && request.KitArguments["mode"] == "team"
+                    ),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+        else
+        {
+            var action = () => _service.CreateAsync(Request(), CancellationToken.None);
+            (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+                "*mode*pi-config*other-kit*"
+            );
+            await _sbx.DidNotReceive()
+                .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await _sbx.DidNotReceive()
+                .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+        }
+    }
+
     [Theory]
     [InlineData("mtiae-docker-release")]
     [InlineData("team-docker-release")]
     public async Task PublishedSetsArePulledFromTheConfiguredRepository(string repository)
     {
         SaveBuild(mcp: [new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
-        var service = new CreateService(
-            _store,
+        var service = new SandboxCreator(
             _records,
             _paths,
-            new AboxConfig { PullRepository = repository },
             _sbx,
-            LocalWorkloadTest.Images(),
             _console,
-            PublishedSquadTest.Source([
-                new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
-            ])
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new RemoteSquadSource(
+                new AboxConfig { PullRepository = repository },
+                _sbx,
+                PublishedSquadTest.Source([
+                    new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
+                ])
+            )
         );
 
         var exitCode = await service.CreateAsync(
@@ -163,17 +221,15 @@ public sealed class CreateServiceTests
         string error
     )
     {
-        var service = new CreateService(
-            _store,
+        var service = new SandboxCreator(
             _records,
             _paths,
-            new AboxConfig { PullRepository = repository },
             _sbx,
-            LocalWorkloadTest.Images(),
             _console,
-            _published
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new RemoteSquadSource(new AboxConfig { PullRepository = repository }, _sbx, _published)
         );
-        var request = new CreateRequest(
+        var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam(team, "teams/sample", [squad]),
             squad,
             _root.Path,
@@ -213,7 +269,7 @@ public sealed class CreateServiceTests
     public async Task TheOnlySquadOfTheTeamIsUsedWithoutAsking()
     {
         SaveBuild();
-        var request = new CreateRequest(
+        var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
             null,
             _root.Path,
@@ -233,7 +289,7 @@ public sealed class CreateServiceTests
     {
         SaveBuild();
         _console.Picks.Add(0);
-        var request = new CreateRequest(
+        var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac", "bd"]),
             null,
             _root.Path,
@@ -303,15 +359,13 @@ public sealed class CreateServiceTests
             new() { Name = "elastic", Url = "https://example.com/mcp" },
         };
         SaveBuild(mcp);
-        var service = new CreateService(
-            _store,
+        var service = new SandboxCreator(
             _records,
             _paths,
-            new AboxConfig(),
             _sbx,
-            LocalWorkloadTest.Images(),
             _console,
-            PublishedSquadTest.Source(mcp)
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new RemoteSquadSource(new AboxConfig(), _sbx, PublishedSquadTest.Source(mcp))
         );
         _console.Answer = false;
         var name = SandboxName.For(_root.Path);
@@ -440,7 +494,7 @@ public sealed class CreateServiceTests
         record.Tag.Should().Be("latest");
     }
 
-    private CreateRequest Request() =>
+    private SandboxCreationRequest Request() =>
         new(
             new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
             "ac",
@@ -497,15 +551,13 @@ public sealed class CreateServiceTests
         build.LocalWorkload = null;
         _store.Save(build);
         var runner = LocalWorkloadTest.Runner();
-        var service = new CreateService(
-            _store,
+        var service = new SandboxCreator(
             _records,
             _paths,
-            new AboxConfig(),
             _sbx,
-            LocalWorkloadTest.Images(runner),
             _console,
-            _published
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(runner), _console),
+            new RemoteSquadSource(new AboxConfig(), _sbx, _published)
         );
 
         var exitCode = await service.CreateAsync(
@@ -549,7 +601,7 @@ public sealed class CreateServiceTests
         var team = resolver.ResolveTeam(_root.Path, "sample");
         var runner = Substitute.For<IProcessRunner>();
         var programs = Substitute.For<IHostPrograms>();
-        var images = new LocalWorkloadImages(programs, runner, _console);
+        var images = new LocalWorkloadImages(programs, new OciRegistry(runner), _console);
         var build = new BuildService(
             resolver,
             new WorkloadKitGenerator(),
@@ -567,15 +619,17 @@ public sealed class CreateServiceTests
         _store.Load("ac", "latest")!.LocalWorkload.Should().BeNull();
         _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<string>)["elastic"]);
-        var service = new CreateService(
-            _store,
+        var service = new SandboxCreator(
             _records,
             _paths,
-            new AboxConfig(),
             _sbx,
-            images,
             _console,
-            PublishedSquadTest.Source([new ManifestMcp { Name = "elastic" }])
+            new LocalSquadSource(_store, images, _console),
+            new RemoteSquadSource(
+                new AboxConfig(),
+                _sbx,
+                PublishedSquadTest.Source([new ManifestMcp { Name = "elastic" }])
+            )
         );
 
         var exitCode = await service.CreateAsync(

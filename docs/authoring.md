@@ -38,16 +38,23 @@ abox run --location <folder>                 # open the sandbox of the folder
 - `build` makes the kits of the team: the workload and every squad of it that no other
   squad of the team names as its `base`. A squad that others build on comes with the
   squad that inherits from it. The kits go into the build directory
-  (`<state dir>/builds/`) and every local kit is checked with sbx; with `--no-verify`
-  they are written without checking, and `--tag` stores the build under another name
-  than `latest`.
+  (`<state dir>/builds/`). A normal build checks additional local kit declarations
+  with `sbx kit inspect`, passing their resolved arguments, unless `--no-verify` is
+  given. Inspection does not build images; sbx 0.51.0 cannot inspect recipe-based
+  local kits, which require `--no-verify` and are processed by sbx at creation.
+  A normal build always builds the workload image, even with `--no-verify`.
+  `--tag` stores the build under another name than `latest`.
 - `create` names the sandbox after the folder it works on and asks before it replaces
-  an existing one. It creates the sandbox of `--squad`; without it, the command asks
-  which squad of the team to use, and uses the only one without asking. `--tag` uses
-   another tag than `latest`. By default it pulls the published set from the user's
-   `pullRepository` (`mtiae-docker-release` by default); `--local` uses the local kits
-   and never pulls. Both still need local build metadata for state and MCP settings.
-   `abox create --team sample --local --location <folder>` again replaces the sandbox.
+  an existing one. Remote create requires `--squad`; only `--local` asks which squad
+  of the team to use when it is omitted, and uses the only one without asking.
+  `--tag` uses another tag than `latest`. By default it pulls the published set from
+  the user's `pullRepository` (`mtiae-docker-release` by default), with state and MCP
+  settings from its bundled `squad.json`; no local sources or build metadata are
+  needed. `--local` uses the prebuilt local workload and its runtime kits with
+  `--pull never`, and reads state and MCP settings from the local build manifest.
+  Local team discovery starts at the sandbox location and searches its parents;
+  `--root <dir>` selects a separate source project.
+  `abox create --team sample --local --location <folder>` again replaces the sandbox.
 - `run` starts a launcher (a shell, unless said otherwise) in the sandbox. When the
   squad has a newer build than the sandbox was made of, it offers to replace first.
 

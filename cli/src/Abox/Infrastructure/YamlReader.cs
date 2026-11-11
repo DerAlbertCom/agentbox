@@ -9,12 +9,12 @@ namespace Abox.Infrastructure;
 /// </summary>
 public sealed class YamlReader
 {
-    private readonly YamlMappingNode _root;
+    private readonly YamlEntry _root;
     private readonly string _source;
 
     private YamlReader(YamlMappingNode root, string source)
     {
-        _root = root;
+        _root = new YamlEntry(root, source, null);
         _source = source;
     }
 
@@ -67,124 +67,36 @@ public sealed class YamlReader
     public string Source => _source;
 
     /// <summary>Whether the document has this key.</summary>
-    public bool Has(string key) => _root.Children.ContainsKey(ScalarKey(key));
+    public bool Has(string key) => _root.Has(key);
 
     /// <summary>The nested value of a key, or null when it is absent.</summary>
-    public YamlEntry? GetEntry(string key) =>
-        _root.Children.TryGetValue(ScalarKey(key), out var node)
-            ? new YamlEntry(node, _source, key)
-            : null;
+    public YamlEntry? GetEntry(string key) => _root.GetEntry(key);
 
     /// <summary>The value of a key, when it is a scalar.</summary>
-    public string? GetString(string key)
-    {
-        if (!_root.Children.TryGetValue(ScalarKey(key), out var node))
-        {
-            return null;
-        }
-
-        if (node is not YamlScalarNode scalar)
-        {
-            throw new AboxException($"'{_source}': '{key}' must be a value.");
-        }
-
-        return scalar.Value;
-    }
+    public string? GetString(string key) => _root.GetString(key);
 
     /// <summary>The value of a key, when it is a list of scalars.</summary>
-    public IReadOnlyList<string> GetStringList(string key)
-    {
-        if (!_root.Children.TryGetValue(ScalarKey(key), out var node))
-        {
-            return [];
-        }
-
-        if (node is not YamlSequenceNode sequence)
-        {
-            throw new AboxException($"'{_source}': '{key}' must be a list.");
-        }
-
-        return sequence.Children.Select(child => Scalar(child, key)).ToList();
-    }
+    public IReadOnlyList<string> GetStringList(string key) => _root.GetStringList(key);
 
     /// <summary>The value of a key, when it is a mapping of scalars.</summary>
-    public IReadOnlyDictionary<string, string> GetStringMap(string key)
-    {
-        if (!_root.Children.TryGetValue(ScalarKey(key), out var node))
-        {
-            return new Dictionary<string, string>();
-        }
-
-        if (node is not YamlMappingNode mapping)
-        {
-            throw new AboxException($"'{_source}': '{key}' must be a mapping.");
-        }
-
-        var values = new Dictionary<string, string>();
-        foreach (var (childKey, childValue) in mapping.Children)
-        {
-            values[KeyName(childKey)] = Scalar(childValue, $"{key}.{KeyName(childKey)}");
-        }
-
-        return values;
-    }
+    public IReadOnlyDictionary<string, string> GetStringMap(string key) => _root.GetStringMap(key);
 
     /// <summary>The value of a key, when it is a list of scalars or mappings.</summary>
-    public IReadOnlyList<YamlEntry> GetEntries(string key)
-    {
-        if (!_root.Children.TryGetValue(ScalarKey(key), out var node))
-        {
-            return [];
-        }
-
-        if (node is not YamlSequenceNode sequence)
-        {
-            throw new AboxException($"'{_source}': '{key}' must be a list.");
-        }
-
-        return sequence.Children.Select(child => new YamlEntry(child, _source, key)).ToList();
-    }
+    public IReadOnlyList<YamlEntry> GetEntries(string key) => _root.GetEntries(key);
 
     /// <summary>Fails when the document has keys abox does not know.</summary>
-    public void RejectUnknownKeys(params string[] known)
-    {
-        foreach (var (childKey, _) in _root.Children)
-        {
-            var name = KeyName(childKey);
-            if (!known.Contains(name))
-            {
-                throw new AboxException(
-                    $"'{_source}': '{name}' is not a known key. Known keys: {string.Join(", ", known)}."
-                );
-            }
-        }
-    }
-
-    private string Scalar(YamlNode node, string key)
-    {
-        if (node is not YamlScalarNode scalar)
-        {
-            throw new AboxException($"'{_source}': '{key}' must be a value.");
-        }
-
-        return scalar.Value ?? string.Empty;
-    }
-
-    private static YamlScalarNode ScalarKey(string key) => new(key);
-
-    private static string KeyName(YamlNode node) =>
-        node is YamlScalarNode scalar ? scalar.Value ?? string.Empty : node.ToString();
+    public void RejectUnknownKeys(params string[] known) => _root.RejectUnknownKeys(known);
 }
 
 /// <summary>
-/// One element of a list, which is either a value or a mapping.
+/// A YAML value or mapping, including the root of a document.
 /// </summary>
 public sealed class YamlEntry
 {
     private readonly string _source;
-    private readonly string _key;
+    private readonly string? _key;
 
-    internal YamlEntry(YamlNode node, string source, string key)
+    internal YamlEntry(YamlNode node, string source, string? key)
     {
         Node = node;
         _source = source;
@@ -192,6 +104,14 @@ public sealed class YamlEntry
     }
 
     private YamlNode Node { get; }
+
+    private string KeyPath(string key) => _key is null ? key : $"{_key}.{key}";
+
+    private static string KeyName(YamlNode node) =>
+        node is YamlScalarNode scalar ? scalar.Value ?? string.Empty : node.ToString();
+
+    /// <summary>Whether this mapping has a key.</summary>
+    public bool Has(string key) => Mapping().Children.ContainsKey(new YamlScalarNode(key));
 
     /// <summary>Whether the element is a plain value.</summary>
     public bool IsScalar => Node is YamlScalarNode;
@@ -211,7 +131,7 @@ public sealed class YamlEntry
 
         if (node is not YamlScalarNode scalar)
         {
-            throw new AboxException($"'{_source}': '{_key}.{key}' must be a value.");
+            throw new AboxException($"'{_source}': '{KeyPath(key)}' must be a value.");
         }
 
         return scalar.Value;
@@ -228,21 +148,14 @@ public sealed class YamlEntry
 
         if (node is not YamlMappingNode values)
         {
-            throw new AboxException($"'{_source}': '{_key}.{key}' must be a mapping.");
+            throw new AboxException($"'{_source}': '{KeyPath(key)}' must be a mapping.");
         }
 
         var result = new Dictionary<string, string>();
         foreach (var (childKey, childValue) in values.Children)
         {
-            var name = childKey is YamlScalarNode childScalar
-                ? childScalar.Value ?? string.Empty
-                : childKey.ToString();
-            if (childValue is not YamlScalarNode value)
-            {
-                throw new AboxException($"'{_source}': '{_key}.{key}.{name}' must be a value.");
-            }
-
-            result[name] = value.Value ?? string.Empty;
+            var name = KeyName(childKey);
+            result[name] = Scalar(childValue, $"{KeyPath(key)}.{name}");
         }
 
         return result;
@@ -259,10 +172,10 @@ public sealed class YamlEntry
 
         if (node is not YamlSequenceNode sequence)
         {
-            throw new AboxException($"'{_source}': '{_key}.{key}' must be a list.");
+            throw new AboxException($"'{_source}': '{KeyPath(key)}' must be a list.");
         }
 
-        return sequence.Children.Select(child => Scalar(child, $"{_key}.{key}")).ToList();
+        return sequence.Children.Select(child => Scalar(child, KeyPath(key))).ToList();
     }
 
     /// <summary>
@@ -279,16 +192,16 @@ public sealed class YamlEntry
 
         if (node is YamlScalarNode)
         {
-            var value = Scalar(node, $"{_key}.{key}");
+            var value = Scalar(node, KeyPath(key));
             return value.Length == 0 ? [] : [value];
         }
 
         if (node is not YamlSequenceNode sequence)
         {
-            throw new AboxException($"'{_source}': '{_key}.{key}' must be a value or a list.");
+            throw new AboxException($"'{_source}': '{KeyPath(key)}' must be a value or a list.");
         }
 
-        return sequence.Children.Select(child => Scalar(child, $"{_key}.{key}")).ToList();
+        return sequence.Children.Select(child => Scalar(child, KeyPath(key))).ToList();
     }
 
     private string Scalar(YamlNode node, string key)
@@ -310,12 +223,12 @@ public sealed class YamlEntry
             return null;
         }
 
-        if (node is not YamlMappingNode)
+        if (_key is not null && node is not YamlMappingNode)
         {
-            throw new AboxException($"'{_source}': '{_key}.{key}' must be a mapping.");
+            throw new AboxException($"'{_source}': '{KeyPath(key)}' must be a mapping.");
         }
 
-        return new YamlEntry(node, _source, $"{_key}.{key}");
+        return new YamlEntry(node, _source, KeyPath(key));
     }
 
     /// <summary>The value of a key of the element, when it is a list of mappings or values.</summary>
@@ -329,11 +242,11 @@ public sealed class YamlEntry
 
         if (node is not YamlSequenceNode sequence)
         {
-            throw new AboxException($"'{_source}': '{_key}.{key}' must be a list.");
+            throw new AboxException($"'{_source}': '{KeyPath(key)}' must be a list.");
         }
 
         return sequence
-            .Children.Select(child => new YamlEntry(child, _source, $"{_key}.{key}"))
+            .Children.Select(child => new YamlEntry(child, _source, KeyPath(key)))
             .ToList();
     }
 
@@ -342,13 +255,11 @@ public sealed class YamlEntry
     {
         foreach (var (childKey, _) in Mapping().Children)
         {
-            var name = childKey is YamlScalarNode scalar
-                ? scalar.Value ?? string.Empty
-                : childKey.ToString();
+            var name = KeyName(childKey);
             if (!known.Contains(name))
             {
                 throw new AboxException(
-                    $"'{_source}': '{_key}.{name}' is not a known key. Known keys: {string.Join(", ", known)}."
+                    $"'{_source}': '{KeyPath(name)}' is not a known key. Known keys: {string.Join(", ", known)}."
                 );
             }
         }

@@ -1,9 +1,10 @@
-using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Build;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
+using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -39,15 +40,15 @@ public sealed class BuildCommandTests
             new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             store,
-            new LocalWorkloadImages(programs, runner, console),
+            new LocalWorkloadImages(programs, new OciRegistry(runner), console),
             sbx,
             console
         );
         var command = new BuildCommand(
-            config,
+            new Lazy<AboxConfig>(() => config),
             new Preflight(console, sbx, programs),
-            resolver,
-            service,
+            new Lazy<SquadResolver>(() => resolver),
+            new Lazy<BuildService>(() => service),
             console
         );
         var arguments = new List<string>

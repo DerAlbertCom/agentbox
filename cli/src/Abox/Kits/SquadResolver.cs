@@ -22,21 +22,12 @@ public sealed class SquadResolver(AboxConfig config)
     /// <summary>The folder of a team, in the teams folders of the directory or a parent one.</summary>
     private string TeamDirectory(string rootDirectory, string teamName)
     {
-        var current = rootDirectory;
-        while (true)
+        foreach (var current in WalkUp(rootDirectory))
         {
             if (TeamFolder(current, teamName) is { } folder)
             {
                 return folder;
             }
-
-            var parent = Path.GetDirectoryName(current);
-            if (parent is null || parent == current)
-            {
-                break;
-            }
-
-            current = parent;
         }
 
         throw new AboxException(
@@ -214,22 +205,12 @@ public sealed class SquadResolver(AboxConfig config)
             return own;
         }
 
-        var current = directory;
-
-        while (true)
+        foreach (var current in WalkUp(directory))
         {
             if (FindBaseHere(current, name) is { } found)
             {
                 return found;
             }
-
-            var parent = Path.GetDirectoryName(current);
-            if (parent is null || parent == current)
-            {
-                break;
-            }
-
-            current = parent;
         }
 
         throw new AboxException(
@@ -243,19 +224,33 @@ public sealed class SquadResolver(AboxConfig config)
     /// </summary>
     private static string? FindConfigurationFileDirectly(string directory, string name)
     {
-        var expected = Path.Combine(directory, name + ".abox");
-        if (File.Exists(expected))
-        {
-            return expected;
-        }
+        return FindNamedFiles(directory, name, "*.abox").FirstOrDefault();
+    }
 
-        return Directory
-            .EnumerateFiles(directory, "*.abox")
-            .FirstOrDefault(file =>
+    private static IEnumerable<string> WalkUp(string directory)
+    {
+        var current = directory;
+        while (true)
+        {
+            yield return current;
+            var parent = Path.GetDirectoryName(current);
+            if (parent is null || parent == current)
+                yield break;
+            current = parent;
+        }
+    }
+
+    private static IEnumerable<string> FindNamedFiles(
+        string directory,
+        string name,
+        string pattern
+    ) =>
+        Directory
+            .EnumerateFiles(directory, pattern)
+            .Where(file =>
                 Path.GetFileNameWithoutExtension(file)
                     .Equals(name, StringComparison.OrdinalIgnoreCase)
             );
-    }
 
     private string? FindBaseHere(string directory, string name)
     {
@@ -267,11 +262,7 @@ public sealed class SquadResolver(AboxConfig config)
 
         var matches = Directory
             .EnumerateDirectories(teams)
-            .SelectMany(team => Directory.EnumerateFiles(team, "*.abox"))
-            .Where(file =>
-                Path.GetFileNameWithoutExtension(file)
-                    .Equals(name, StringComparison.OrdinalIgnoreCase)
-            )
+            .SelectMany(team => FindNamedFiles(team, name, "*.abox"))
             .ToList();
 
         if (matches.Count > 1)
@@ -345,12 +336,7 @@ public sealed class SquadResolver(AboxConfig config)
             );
         }
 
-        var match = Directory
-            .EnumerateFiles(kitsDirectory, "*.workload")
-            .FirstOrDefault(file =>
-                Path.GetFileNameWithoutExtension(file)
-                    .Equals(name, StringComparison.OrdinalIgnoreCase)
-            );
+        var match = FindNamedFiles(kitsDirectory, name, "*.workload").FirstOrDefault();
 
         return match
             ?? throw new AboxException(
@@ -369,14 +355,13 @@ public sealed class SquadResolver(AboxConfig config)
         {
             foreach (var (name, value) in file.Parameters)
             {
-                if (origins.TryGetValue(name, out var origin))
-                {
-                    throw new AboxException(
-                        $"The parameter '{name}' is declared twice: in '{origin}' and in '{file.Path}'. A parameter is declared once."
-                    );
-                }
-
-                origins[name] = file.Path;
+                RejectDuplicate(
+                    origins,
+                    name,
+                    file.Path,
+                    $"parameter '{name}'",
+                    "A parameter is declared once."
+                );
                 parameters[name] = value;
             }
         }
@@ -397,14 +382,13 @@ public sealed class SquadResolver(AboxConfig config)
         {
             foreach (var kit in file.Kits)
             {
-                if (origins.TryGetValue(kit.Repository, out var origin))
-                {
-                    throw new AboxException(
-                        $"The kit '{kit.Name}' is declared twice: in '{origin}' and in '{file.Path}'. One repository is used once."
-                    );
-                }
-
-                origins[kit.Repository] = file.Path;
+                RejectDuplicate(
+                    origins,
+                    kit.Repository,
+                    file.Path,
+                    $"kit '{kit.Name}'",
+                    "One repository is used once."
+                );
 
                 var arguments = kit.Arguments.ToDictionary(
                     argument => argument.Key,
@@ -454,14 +438,13 @@ public sealed class SquadResolver(AboxConfig config)
         {
             foreach (var server in file.Mcp)
             {
-                if (origins.TryGetValue(server.Name, out var origin))
-                {
-                    throw new AboxException(
-                        $"The MCP server '{server.Name}' is declared twice: in '{origin}' and in '{file.Path}'. A server is declared once."
-                    );
-                }
-
-                origins[server.Name] = file.Path;
+                RejectDuplicate(
+                    origins,
+                    server.Name,
+                    file.Path,
+                    $"MCP server '{server.Name}'",
+                    "A server is declared once."
+                );
 
                 servers.Add(
                     new McpDeclaration(
@@ -500,14 +483,13 @@ public sealed class SquadResolver(AboxConfig config)
         {
             foreach (var secret in file.Secrets)
             {
-                if (origins.TryGetValue(secret.Service, out var origin))
-                {
-                    throw new AboxException(
-                        $"The secret '{secret.Service}' is declared twice: in '{origin}' and in '{file.Path}'. A secret is declared once."
-                    );
-                }
-
-                origins[secret.Service] = file.Path;
+                RejectDuplicate(
+                    origins,
+                    secret.Service,
+                    file.Path,
+                    $"secret '{secret.Service}'",
+                    "A secret is declared once."
+                );
                 secrets.Add(secret);
             }
         }
@@ -526,12 +508,13 @@ public sealed class SquadResolver(AboxConfig config)
             {
                 var entry = StateEntry.Parse(value);
 
-                if (origins.TryGetValue(entry.SandboxPath, out var origin))
-                {
-                    throw new AboxException(
-                        $"The state directory '{value}' is declared twice: in '{origin}' and in '{file.Path}'. A state directory is declared once."
-                    );
-                }
+                RejectDuplicate(
+                    origins,
+                    entry.SandboxPath,
+                    file.Path,
+                    $"state directory '{value}'",
+                    "A state directory is declared once."
+                );
 
                 foreach (var existing in entries)
                 {
@@ -543,11 +526,25 @@ public sealed class SquadResolver(AboxConfig config)
                     }
                 }
 
-                origins[entry.SandboxPath] = file.Path;
                 entries.Add(entry);
             }
         }
 
         return entries;
+    }
+
+    private static void RejectDuplicate(
+        Dictionary<string, string> origins,
+        string key,
+        string path,
+        string declaration,
+        string rule
+    )
+    {
+        if (origins.TryGetValue(key, out var origin))
+            throw new AboxException(
+                $"The {declaration} is declared twice: in '{origin}' and in '{path}'. {rule}"
+            );
+        origins[key] = path;
     }
 }

@@ -1,8 +1,8 @@
-using Abox.Build;
 using Abox.Configuration;
 using Abox.Features.Publish;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.LocalState;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -165,9 +165,9 @@ public sealed class PublishCommandTests
 
     private PublishCommand Command(AboxConfig config) =>
         new(
-            config,
-            new SquadResolver(config),
-            new PublishService(_store, _programs, _runner, _console),
+            new Lazy<AboxConfig>(() => config),
+            new Lazy<SquadResolver>(() => new SquadResolver(config)),
+            new PublishService(_store, _programs, new OciRegistry(_runner), _console),
             _console
         );
 
