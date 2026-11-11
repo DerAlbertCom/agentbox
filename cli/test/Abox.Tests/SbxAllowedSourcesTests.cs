@@ -491,6 +491,55 @@ public sealed class SbxAllowedSourcesTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FailedOrCancelledUpdatesReleaseTheLockForTheNextClient(bool cancelled)
+    {
+        using var cancellation = new CancellationTokenSource();
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                if (cancelled)
+                {
+                    cancellation.Cancel();
+                    call.Arg<CancellationToken>().ThrowIfCancellationRequested();
+                }
+
+                return new ProcessResult(1, "", "settings unavailable");
+            });
+        var first = () => _client.EnsureKitSourceAllowedAsync(Prefix, cancellation.Token);
+        if (cancelled)
+        {
+            await first.Should().ThrowAsync<OperationCanceledException>();
+        }
+        else
+        {
+            await first.Should().ThrowAsync<AboxException>();
+        }
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProcessResult(
+                    0,
+                    JsonSerializer.Serialize(
+                        new
+                        {
+                            key = "kit.allowedSources",
+                            type = "json",
+                            source = "override",
+                            value = new[] { Prefix },
+                        }
+                    ),
+                    ""
+                )
+            );
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        await new SbxClient(_runner).EnsureKitSourceAllowedAsync(Prefix, timeout.Token);
+    }
+
+    [Theory]
     [InlineData("*")]
     [InlineData("rwest.jfrog.io/")]
     [InlineData("rwest.jfrog.io/repo/*")]

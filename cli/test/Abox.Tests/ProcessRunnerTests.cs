@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Abox.Infrastructure;
 
 namespace Abox.Tests;
@@ -73,6 +74,109 @@ public sealed class ProcessRunnerTests
 
         result.Succeeded.Should().BeTrue();
         result.StandardOutput.Should().Contain("the value");
+    }
+
+    [Fact]
+    public async Task LargeOutputIsDrainedWhileTheStandardInputIsBeingWritten()
+    {
+        using var root = new TempDirectory();
+        var stdout = string.Concat(Enumerable.Repeat(new string('x', 1024) + "\n", 1024));
+        root.File("stdout.txt", stdout);
+        var stdin = string.Concat(Enumerable.Repeat("stdin line\n", 100_000));
+        var request = new ProcessRequest(
+            OperatingSystem.IsWindows() ? "powershell" : "sh",
+            OperatingSystem.IsWindows()
+                ?
+                [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "$PID | Set-Content pid.tmp; Move-Item pid.tmp pid.txt; [Console]::Out.Write([IO.File]::ReadAllText('stdout.txt')); [Console]::Out.Flush(); [Console]::Out.Write([Console]::In.ReadToEnd())",
+                ]
+                : ["-c", "echo $$ > pid.tmp; mv pid.tmp pid.txt; cat stdout.txt; cat"],
+            WorkingDirectory: root.Path,
+            StandardInput: stdin
+        );
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        try
+        {
+            var result = await new ProcessRunner().RunAsync(request, cancellation.Token);
+
+            result.Succeeded.Should().BeTrue();
+            result.StandardOutput.Should().Be((stdout + stdin).Replace("\n", Environment.NewLine));
+            result.StandardError.Should().BeEmpty();
+        }
+        finally
+        {
+            KillChildIfRunning(root.Path);
+        }
+    }
+
+    [Fact]
+    public async Task CancellingABlockedStandardInputWriteStopsTheChild()
+    {
+        using var root = new TempDirectory();
+        using var cancellation = new CancellationTokenSource();
+        var request = new ProcessRequest(
+            OperatingSystem.IsWindows() ? "powershell" : "sh",
+            OperatingSystem.IsWindows()
+                ?
+                [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "$PID | Set-Content pid.tmp; Move-Item pid.tmp pid.txt; Start-Sleep -Seconds 60",
+                ]
+                : ["-c", "echo $$ > pid.tmp; mv pid.tmp pid.txt; sleep 60"],
+            WorkingDirectory: root.Path,
+            StandardInput: new string('x', 4 * 1024 * 1024)
+        );
+        var running = new ProcessRunner().RunAsync(request, cancellation.Token);
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var pidFile = Path.Combine(root.Path, "pid.txt");
+            while (!File.Exists(pidFile))
+            {
+                await Task.Delay(50, timeout.Token);
+            }
+            var pid = int.Parse((await File.ReadAllTextAsync(pidFile, timeout.Token)).Trim());
+            using var child = Process.GetProcessById(pid);
+            cancellation.Cancel();
+
+            var action = () => running.WaitAsync(timeout.Token);
+            await action.Should().ThrowAsync<OperationCanceledException>();
+            child.HasExited.Should().BeTrue();
+        }
+        finally
+        {
+            cancellation.Cancel();
+            KillChildIfRunning(root.Path);
+        }
+    }
+
+    private static void KillChildIfRunning(string directory)
+    {
+        var pidFile = Path.Combine(directory, "pid.txt");
+        if (!File.Exists(pidFile))
+        {
+            return;
+        }
+
+        try
+        {
+            using var process = Process.GetProcessById(int.Parse(File.ReadAllText(pidFile).Trim()));
+            process.Kill(entireProcessTree: true);
+            process.WaitForExit();
+        }
+        catch (ArgumentException)
+        {
+            // The process has already exited.
+        }
+        catch (InvalidOperationException)
+        {
+            // The process exited before it could be killed.
+        }
     }
 
     [Fact]

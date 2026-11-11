@@ -3,7 +3,8 @@ using Abox.Infrastructure;
 namespace Abox.Features;
 
 /// <summary>
-/// Runs the work of a command and turns an abox error into a message and exit code 1.
+/// Turns abox errors into exit code 1 and cancellation into exit code 130.
+/// Used by command actions and by the entry point, which also guards composition.
 /// </summary>
 public static class CommandHandling
 {
@@ -21,7 +22,7 @@ public static class CommandHandling
         catch (OperationCanceledException)
         {
             console.WriteError("error: the command was cancelled.");
-            return 1;
+            return 130;
         }
     }
 }

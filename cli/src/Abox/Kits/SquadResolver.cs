@@ -243,12 +243,6 @@ public sealed class SquadResolver(AboxConfig config)
     /// </summary>
     private static string? FindConfigurationFileDirectly(string directory, string name)
     {
-        var expected = Path.Combine(directory, name + ".abox");
-        if (File.Exists(expected))
-        {
-            return expected;
-        }
-
         return Directory
             .EnumerateFiles(directory, "*.abox")
             .FirstOrDefault(file =>

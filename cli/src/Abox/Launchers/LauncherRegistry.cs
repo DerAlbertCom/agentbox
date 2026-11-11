@@ -9,8 +9,17 @@ public sealed class LauncherRegistry
 
     public LauncherRegistry(IEnumerable<ILauncher> launchers)
     {
-        _launchers = launchers.ToDictionary(launcher => launcher.Id, StringComparer.Ordinal);
         All = launchers.ToList();
+        var byId = new Dictionary<string, ILauncher>(StringComparer.Ordinal);
+        foreach (var launcher in All)
+        {
+            if (!byId.TryAdd(launcher.Id, launcher))
+            {
+                throw new AboxException($"There is a duplicate launcher id '{launcher.Id}'.");
+            }
+        }
+
+        _launchers = byId;
     }
 
     /// <summary>All launchers.</summary>

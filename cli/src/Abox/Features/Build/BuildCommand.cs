@@ -13,10 +13,10 @@ namespace Abox.Features.Build;
 public sealed class BuildCommand : Command
 {
     public BuildCommand(
-        AboxConfig config,
+        Lazy<AboxConfig> config,
         Preflight preflight,
-        SquadResolver resolver,
-        BuildService build,
+        Lazy<SquadResolver> resolver,
+        Lazy<BuildService> build,
         IConsole console
     )
         : base("build", "Build the kit set of a team: its workload and the kits of its squads.")
@@ -67,15 +67,15 @@ public sealed class BuildCommand : Command
         SetAction(
             async (parseResult, cancellationToken) =>
             {
-                var named = parseResult.GetValue(teams);
-                var wanted =
-                    named is { Length: > 0 } ? named
-                    : config.DefaultTeam is { } fallback ? [fallback]
-                    : [];
-
                 return await CommandHandling.RunAsync(
                     async () =>
                     {
+                        var settings = config.Value;
+                        var named = parseResult.GetValue(teams);
+                        var wanted =
+                            named is { Length: > 0 } ? named
+                            : settings.DefaultTeam is { } fallback ? [fallback]
+                            : [];
                         if (wanted.Length == 0)
                         {
                             throw new AboxException(
@@ -88,10 +88,10 @@ public sealed class BuildCommand : Command
                         );
                         var request = new BuildRequest(
                             wanted
-                                .Select(team => resolver.ResolveTeam(rootDirectory, team))
+                                .Select(team => resolver.Value.ResolveTeam(rootDirectory, team))
                                 .ToList(),
                             rootDirectory,
-                            parseResult.GetValue(tag) ?? config.DefaultTag,
+                            parseResult.GetValue(tag) ?? settings.DefaultTag,
                             !parseResult.GetValue(verify),
                             !parseResult.GetValue(personal),
                             parseResult.GetValue(metadata)
@@ -105,7 +105,7 @@ public sealed class BuildCommand : Command
                             return 1;
                         }
 
-                        return await build.BuildAsync(request, cancellationToken);
+                        return await build.Value.BuildAsync(request, cancellationToken);
                     },
                     console
                 );

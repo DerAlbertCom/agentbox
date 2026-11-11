@@ -44,10 +44,10 @@ public sealed class BuildCommandTests
             console
         );
         var command = new BuildCommand(
-            config,
+            new Lazy<AboxConfig>(() => config),
             new Preflight(console, sbx, programs),
-            resolver,
-            service,
+            new Lazy<SquadResolver>(() => resolver),
+            new Lazy<BuildService>(() => service),
             console
         );
         var arguments = new List<string>

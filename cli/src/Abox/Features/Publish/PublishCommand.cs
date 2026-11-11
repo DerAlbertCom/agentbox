@@ -9,8 +9,8 @@ namespace Abox.Features.Publish;
 public sealed class PublishCommand : Command
 {
     public PublishCommand(
-        AboxConfig config,
-        SquadResolver resolver,
+        Lazy<AboxConfig> config,
+        Lazy<SquadResolver> resolver,
         PublishService publish,
         IConsole console
     )
@@ -47,10 +47,11 @@ public sealed class PublishCommand : Command
                 await CommandHandling.RunAsync(
                     async () =>
                     {
+                        var settings = config.Value;
                         var named = parseResult.GetValue(teams);
                         var wanted =
                             named is { Length: > 0 } ? named
-                            : config.DefaultTeam is { } fallback ? [fallback]
+                            : settings.DefaultTeam is { } fallback ? [fallback]
                             : [];
                         if (wanted.Length == 0)
                         {
@@ -61,7 +62,7 @@ public sealed class PublishCommand : Command
 
                         var resolved = wanted
                             .Select(team =>
-                                resolver.ResolveTeam(
+                                resolver.Value.ResolveTeam(
                                     parseResult.GetValue(root) ?? Directory.GetCurrentDirectory(),
                                     team
                                 )
@@ -70,7 +71,7 @@ public sealed class PublishCommand : Command
                         return await publish.PublishAsync(
                             new PublishRequest(
                                 resolved,
-                                parseResult.GetValue(tag) ?? config.DefaultTag,
+                                parseResult.GetValue(tag) ?? settings.DefaultTag,
                                 parseResult.GetValue(builder)
                             ),
                             cancellationToken

@@ -78,31 +78,33 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
             );
         }
 
-        if (request.StandardInput is not null)
-        {
-            await process.StandardInput.WriteAsync(
-                request.StandardInput.AsMemory(),
-                cancellationToken
-            );
-            process.StandardInput.Close();
-        }
-
-        if (!request.AttachConsole)
-        {
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-        }
-
         try
         {
+            if (!request.AttachConsole)
+            {
+                process.BeginOutputReadLine();
+                process.BeginErrorReadLine();
+            }
+
+            if (request.StandardInput is not null)
+            {
+                await process.StandardInput.WriteAsync(
+                    request.StandardInput.AsMemory(),
+                    cancellationToken
+                );
+                await process.StandardInput.FlushAsync(cancellationToken);
+                process.StandardInput.Close();
+            }
+
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            // A cancelled command must not leave the child running behind its back.
+            // Cancellation during input or exit must not leave children or their workers running.
             try
             {
-                process.Kill();
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
             }
             catch (InvalidOperationException)
             {

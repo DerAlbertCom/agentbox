@@ -1,5 +1,3 @@
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Abox.Infrastructure;
@@ -11,7 +9,7 @@ public sealed partial class SbxClient
     private const string AllowedSourcesKey = "kit.allowedSources";
 
     /// <summary>Preserves the evaluated allowlist, adding only the requested repository prefix.</summary>
-    public Task EnsureKitSourceAllowedAsync(
+    public async Task EnsureKitSourceAllowedAsync(
         string repositoryPrefix,
         CancellationToken cancellationToken
     )
@@ -23,42 +21,9 @@ public sealed partial class SbxClient
             );
         }
 
-        // sbx has no atomic append. Serialize abox processes' read/merge/write operations.
-        // The mutex must be acquired and released on the same thread, without awaits.
-        return Task.Run(
-            () =>
-            {
-                using var mutex = CreateAllowedSourcesMutex();
-                var acquired = false;
-                try
-                {
-                    while (!acquired)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        try
-                        {
-                            acquired = mutex.WaitOne(TimeSpan.FromMilliseconds(100));
-                        }
-                        catch (AbandonedMutexException)
-                        {
-                            acquired = true;
-                        }
-                    }
-
-                    EnsureKitSourceAllowedCoreAsync(repositoryPrefix, cancellationToken)
-                        .GetAwaiter()
-                        .GetResult();
-                }
-                finally
-                {
-                    if (acquired)
-                    {
-                        mutex.ReleaseMutex();
-                    }
-                }
-            },
-            cancellationToken
-        );
+        // sbx has no atomic append. The per-user file lock spans processes and awaits.
+        using var settingsLock = await AcquireAllowedSourcesLockAsync(cancellationToken);
+        await EnsureKitSourceAllowedCoreAsync(repositoryPrefix, cancellationToken);
     }
 
     private async Task EnsureKitSourceAllowedCoreAsync(
@@ -182,27 +147,62 @@ public sealed partial class SbxClient
             )
         );
 
-    private static Mutex CreateAllowedSourcesMutex()
+    private static async Task<FileStream> AcquireAllowedSourcesLockAsync(
+        CancellationToken cancellationToken
+    )
     {
         try
         {
-            // CurrentUserOnly restricts access but does not disambiguate Windows object names.
-            var user = $"{Environment.UserDomainName}\0{Environment.UserName}";
-            var identityHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(user)));
-            return new Mutex(
-                $"abox-sbx-kit-allowedSources-{identityHash}",
-                new NamedWaitHandleOptions { CurrentUserOnly = true, CurrentSessionOnly = false }
+            // LocalApplicationData is shared by this user's sessions, unlike session-scoped temp directories.
+            var localApplicationData = Environment.GetFolderPath(
+                Environment.SpecialFolder.LocalApplicationData,
+                Environment.SpecialFolderOption.DoNotVerify
             );
+            if (!Path.IsPathFullyQualified(localApplicationData))
+            {
+                throw new IOException("Cannot locate the user's local application data directory.");
+            }
+
+            var directory = Path.Combine(localApplicationData, "abox", "locks");
+            if (OperatingSystem.IsWindows())
+            {
+                Directory.CreateDirectory(directory);
+            }
+            else
+            {
+                Directory.CreateDirectory(
+                    directory,
+                    UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute
+                );
+            }
+            var path = Path.Combine(directory, "sbx-kit-allowedSources.lock");
+            while (true)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    // Keep the file after release: unlinking it would let waiters lock different files.
+                    return new FileStream(
+                        path,
+                        FileMode.OpenOrCreate,
+                        FileAccess.ReadWrite,
+                        FileShare.None
+                    );
+                }
+                catch (IOException exception)
+                    when (OperatingSystem.IsWindows()
+                            ? (exception.HResult & 0xffff) is 32 or 33
+                            : exception.HResult is 11 or 35
+                    ) // EWOULDBLOCK on Linux and macOS.
+                {
+                    await Task.Delay(TimeSpan.FromMilliseconds(100), cancellationToken);
+                }
+            }
         }
-        catch (Exception exception)
-            when (exception
-                    is UnauthorizedAccessException
-                        or IOException
-                        or WaitHandleCannotBeOpenedException
-            )
+        catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
         {
             throw new AboxException(
-                $"Cannot lock updates to '{AllowedSourcesKey}'. Close other abox processes and check OS permissions for user-scoped synchronization objects, then retry. No settings were changed and no sandbox was replaced.",
+                $"Cannot lock updates to '{AllowedSourcesKey}'. Close other abox processes and check permissions for the abox lock directory in your local application data, then retry. No settings were changed and no sandbox was replaced.",
                 exception
             );
         }

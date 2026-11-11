@@ -3,10 +3,12 @@ using Abox.Kits;
 
 namespace Abox.Tests;
 
-public sealed class SquadResolverTests
+public sealed class SquadResolverTests : IDisposable
 {
     private readonly TempDirectory _root = new();
     private readonly SquadResolver _resolver = new(new AboxConfig());
+
+    public void Dispose() => _root.Dispose();
 
     public SquadResolverTests()
     {
@@ -125,7 +127,7 @@ public sealed class SquadResolverTests
         var kit = squad.Kits.Should().ContainSingle().Which;
         kit.Name.Should().Be("pi-config");
         kit.IsLocal.Should().BeTrue();
-        kit.Directory.Should().EndWith("kits/pi-config");
+        kit.Directory.Should().EndWith(Path.Combine("kits", "pi-config"));
     }
 
     [Fact]

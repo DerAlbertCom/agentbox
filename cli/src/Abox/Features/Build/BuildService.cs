@@ -43,17 +43,14 @@ public sealed class BuildService(
         {
             foreach (var squad in team.Squads)
             {
-                if (!await BuildSquadAsync(team.Name, squad, request, cancellationToken))
-                {
-                    return 1;
-                }
+                await BuildSquadAsync(team.Name, squad, request, cancellationToken);
             }
         }
 
         return 0;
     }
 
-    private async Task<bool> BuildSquadAsync(
+    private async Task BuildSquadAsync(
         string teamName,
         string squadName,
         BuildRequest request,
@@ -126,8 +123,6 @@ public sealed class BuildService(
         console.WriteLine(
             $"Create a sandbox from {(request.MetadataOnly ? "the matching published set" : "it")} with: abox create --team {teamName} --squad {squad.Name} --tag {request.Tag}{(request.MetadataOnly ? "" : " --local")}"
         );
-
-        return true;
     }
 
     private async Task VerifyAsync(

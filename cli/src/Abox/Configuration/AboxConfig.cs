@@ -22,4 +22,8 @@ public sealed class AboxConfig
 
     /// <summary>The JFrog repository used to pull published squad kit sets.</summary>
     public string PullRepository { get; init; } = "mtiae-docker-release";
+
+    /// <summary>The absolute sandbox folder, preferring the command line over the user default.</summary>
+    public string ResolveLocation(string? location) =>
+        Path.GetFullPath(location ?? DefaultLocation ?? Directory.GetCurrentDirectory());
 }

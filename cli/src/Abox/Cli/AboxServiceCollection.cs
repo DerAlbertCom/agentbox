@@ -54,9 +54,26 @@ public static class AboxServiceCollection
         services.AddSingleton(console);
         services.AddSingleton(trailing);
         services.AddSingleton(AboxPaths.Create());
-        services.AddSingleton(provider =>
+        services.AddSingleton(provider => new Lazy<AboxConfig>(() =>
             AboxConfigLoader.Load(provider.GetRequiredService<AboxPaths>())
-        );
+        ));
+        services.AddSingleton(provider => provider.GetRequiredService<Lazy<AboxConfig>>().Value);
+        // Commands describe their syntax eagerly, but resolve configuration-dependent work only in actions.
+        services.AddSingleton(provider => new Lazy<SquadResolver>(
+            provider.GetRequiredService<SquadResolver>
+        ));
+        services.AddSingleton(provider => new Lazy<BuildService>(
+            provider.GetRequiredService<BuildService>
+        ));
+        services.AddSingleton(provider => new Lazy<CreateService>(
+            provider.GetRequiredService<CreateService>
+        ));
+        services.AddSingleton(provider => new Lazy<RunService>(
+            provider.GetRequiredService<RunService>
+        ));
+        services.AddSingleton(provider => new Lazy<SecretsService>(
+            provider.GetRequiredService<SecretsService>
+        ));
         services.AddSingleton<ProcessOutput>();
         services.AddSingleton<IProcessRunner, ProcessRunner>();
         services.AddSingleton<IHostPrograms, HostPrograms>();
@@ -70,7 +87,7 @@ public static class AboxServiceCollection
         services.AddSingleton<StateMixinGenerator>();
         services.AddSingleton<ILauncher, ShellLauncher>();
         services.AddSingleton<ILauncher, HerdrAppLauncher>();
-        services.AddSingleton(provider => new LauncherRegistry(provider.GetServices<ILauncher>()));
+        services.AddSingleton<LauncherRegistry>();
         return services;
     }
 }

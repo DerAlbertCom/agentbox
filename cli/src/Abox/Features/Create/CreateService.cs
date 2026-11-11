@@ -50,6 +50,17 @@ public sealed class CreateService(
                         "Remote create requires --squad <name>; published squad discovery is not supported."
                     )
             );
+        if (request.Local)
+        {
+            squad =
+                request.Team.Squads.FirstOrDefault(name =>
+                    name.Equals(squad, StringComparison.OrdinalIgnoreCase)
+                )
+                ?? throw new AboxException(
+                    $"There is no squad '{squad}' in team '{request.Team.Name}'."
+                );
+        }
+
         var reference = request.Local
             ? null
             : RegistryImageName.OfSquad(
@@ -120,6 +131,7 @@ public sealed class CreateService(
         }
 
         var kitSource = remote?.Reference ?? localImage!.RuntimeKitDirectory;
+        var arguments = KitArguments(request.Local ? manifest.Kits : []);
 
         var name = SandboxName.For(location);
         var mcpToRegister = await FindMcpServersToRegisterAsync(manifest, cancellationToken);
@@ -141,12 +153,6 @@ public sealed class CreateService(
         {
             mixins.Add(manifest.StateMixinDirectory);
         }
-
-        var arguments = (request.Local ? manifest.Kits : [])
-            .SelectMany(kit => kit.Arguments)
-            .GroupBy(argument => argument.Key, StringComparer.Ordinal)
-            .Select(group => group.First())
-            .ToDictionary(group => group.Key, group => group.Value, StringComparer.Ordinal);
 
         var outcome = await sbx.CreateAsync(
             new SbxCreateRequest(
@@ -186,6 +192,31 @@ public sealed class CreateService(
         console.WriteLine($"Created sandbox '{name}' for '{location}'.");
         console.WriteLine($"Open it with: abox run --location {location}");
         return 0;
+    }
+
+    private static Dictionary<string, string> KitArguments(IReadOnlyList<ManifestKit> kits)
+    {
+        var arguments = new Dictionary<string, string>(StringComparer.Ordinal);
+        var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var kit in kits)
+        {
+            foreach (var (key, value) in kit.Arguments)
+            {
+                if (arguments.TryGetValue(key, out var existing) && existing != value)
+                {
+                    throw new AboxException(
+                        $"The kit argument '{key}' has conflicting values in kits '{owners[key]}' and '{kit.Name}'."
+                    );
+                }
+
+                if (arguments.TryAdd(key, value))
+                {
+                    owners.Add(key, kit.Name);
+                }
+            }
+        }
+
+        return arguments;
     }
 
     /// <summary>

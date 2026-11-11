@@ -424,6 +424,35 @@ public sealed class WorkloadKitGeneratorTests
     }
 
     [Fact]
+    public void GeneratedFilesUseLinuxLineEndings()
+    {
+        _root.File("setup.sh", "#!/bin/bash\r\necho setup\r\n");
+        _generator.Generate(
+            WriteWorkload("apt: [git]\nmise: [nodejs@24.4.3]\nscripts: [setup.sh]\n"),
+            Path.Combine(_root.Path, "kit")
+        );
+
+        foreach (var file in new[] { "workload.dockerfile", "workload.yaml", "scripts/setup.sh" })
+        {
+            File.ReadAllText(Path.Combine(_root.Path, "kit", file)).Should().NotContain("\r");
+        }
+    }
+
+    [Theory]
+    [InlineData("setup.sh")]
+    [InlineData("SETUP.SH")]
+    public void ScriptsWithTheSameFileNameCannotOverwriteEachOther(string secondName)
+    {
+        _root.File("first/setup.sh", "echo first\n");
+        _root.File($"second/{secondName}", "echo second\n");
+        var workload = WriteWorkload($"scripts: [first/setup.sh, second/{secondName}]\n");
+
+        var action = () => _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
+
+        action.Should().Throw<AboxException>().WithMessage($"*first/setup.sh*second/{secondName}*");
+    }
+
+    [Fact]
     public void TheWorkspaceIsTheWorkingDirectoryOfTheImage()
     {
         var workload = WriteWorkload("");

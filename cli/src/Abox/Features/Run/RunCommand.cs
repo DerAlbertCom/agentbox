@@ -1,5 +1,6 @@
 using System.CommandLine;
 using Abox.Cli;
+using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Launchers;
@@ -12,9 +13,10 @@ namespace Abox.Features.Run;
 public sealed class RunCommand : Command
 {
     public RunCommand(
+        Lazy<AboxConfig> config,
         LauncherRegistry launchers,
         Preflight preflight,
-        RunService run,
+        Lazy<RunService> run,
         TrailingArguments trailing,
         IConsole console
     )
@@ -30,7 +32,8 @@ public sealed class RunCommand : Command
 
         var location = new Option<string>("--location")
         {
-            Description = "The folder whose sandbox is opened. Defaults to the current directory.",
+            Description =
+                "The folder whose sandbox is opened. Defaults to the location of the user configuration, or the current directory.",
         };
 
         Arguments.Add(launcher);
@@ -50,21 +53,21 @@ public sealed class RunCommand : Command
         SetAction(
             async (parseResult, cancellationToken) =>
             {
-                var request = new RunRequest(
-                    parseResult.GetValue(launcher) ?? "shell",
-                    parseResult.GetValue(location) ?? Directory.GetCurrentDirectory(),
-                    trailing.Values
-                );
-
                 return await CommandHandling.RunAsync(
                     async () =>
                     {
+                        var request = new RunRequest(
+                            parseResult.GetValue(launcher) ?? "shell",
+                            config.Value.ResolveLocation(parseResult.GetValue(location)),
+                            trailing.Values
+                        );
+
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                         {
                             return 1;
                         }
 
-                        return await run.RunAsync(request, cancellationToken);
+                        return await run.Value.RunAsync(request, cancellationToken);
                     },
                     console
                 );

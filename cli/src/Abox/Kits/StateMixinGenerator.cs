@@ -37,7 +37,7 @@ public sealed class StateMixinGenerator
 
         File.WriteAllText(
             Path.Combine(targetDirectory, MixinName + ".yaml"),
-            descriptor.ToString()
+            descriptor.ToString().ReplaceLineEndings("\n")
         );
 
         return targetDirectory;

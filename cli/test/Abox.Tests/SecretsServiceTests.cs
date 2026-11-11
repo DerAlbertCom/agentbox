@@ -4,6 +4,8 @@ using Abox.Features.Create;
 using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
+using Abox.Health;
+using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Sbx;
 using NSubstitute;
@@ -71,6 +73,35 @@ public sealed class SecretsServiceTests
         _console.AllText.Should().Contain("github");
         _console.AllText.Should().Contain("pi-config");
         _console.AllText.Should().Contain("not set");
+    }
+
+    [Theory]
+    [InlineData("list")]
+    [InlineData("set")]
+    [InlineData("remove")]
+    public async Task SecretsCommandsUseTheConfiguredDefaultTeam(string action)
+    {
+        _root.File(
+            "teams/sample/ac.abox",
+            "workload: mti-ca-dotnet\nsecrets: [{service: github}]\n"
+        );
+        _console.Answers.Add("the-token");
+        var programs = Substitute.For<IHostPrograms>();
+        programs.Exists("sbx").Returns(true);
+        _sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
+        _sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
+        var command = new SecretsCommand(
+            new Lazy<AboxConfig>(() => new AboxConfig { DefaultTeam = "sample" }),
+            new Preflight(_console, _sbx, programs),
+            new Lazy<SecretsService>(() => _service),
+            _console
+        );
+
+        (await command.Parse([action, "--squad", "ac", "--root", _root.Path]).InvokeAsync())
+            .Should()
+            .Be(0);
+
+        _console.AllText.Should().NotContain("No team is given");
     }
 
     [Fact]
@@ -302,6 +333,75 @@ public sealed class SecretsServiceTests
 
         await _sbx.Received(1)
             .RemoveSecretAsync("elastic", "api.elastic.co", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task EnvironmentOnlyCustomSecretsAreRemovedByTheirEnvironmentVariable()
+    {
+        _root.File(
+            "teams/sample/ac.abox",
+            "workload: mti-ca-dotnet\nsecrets: [{service: elastic, env: ELASTIC_API_KEY}]\n"
+        );
+        _console.Answers.Add("the-key");
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "", ""));
+        var service = new SecretsService(
+            _resolver,
+            new PersonalConfigurations(
+                AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path)
+            ),
+            new SbxClient(runner),
+            _console
+        );
+
+        (await service.SetAsync(Request(), CancellationToken.None)).Should().Be(0);
+        (await service.RemoveAsync(Request(), CancellationToken.None)).Should().Be(0);
+
+        await runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.SequenceEqual(
+                        new[]
+                        {
+                            "secret",
+                            "set-custom",
+                            "--env",
+                            "ELASTIC_API_KEY",
+                            "--value-stdin",
+                        }
+                    )
+                    && request.StandardInput == "the-key"
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        await runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.SequenceEqual(
+                        new[] { "secret", "rm", "--env-name", "ELASTIC_API_KEY", "--force" }
+                    )
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task EnvironmentOnlyCustomSecretsAreRecognisedAsStored()
+    {
+        _root.File(
+            "teams/sample/ac.abox",
+            "workload: mti-ca-dotnet\nsecrets: [{service: elastic, env: ELASTIC_API_KEY}]\n"
+        );
+        _sbx.ListSecretsAsync(Arg.Any<CancellationToken>())
+            .Returns(new HostSecrets([], [new CustomSecret([], "ELASTIC_API_KEY")]));
+
+        (await _service.ListAsync(Request(), CancellationToken.None)).Should().Be(0);
+
+        _console.AllText.Should().Contain("stored").And.NotContain("not set");
     }
 
     private SecretsRequest Request() => new("sample", "ac", _root.Path, []);

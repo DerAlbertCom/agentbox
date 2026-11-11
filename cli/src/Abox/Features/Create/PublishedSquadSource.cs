@@ -49,7 +49,7 @@ public sealed class PublishedSquadSource(
         if (!programs.Exists("docker"))
         {
             throw new AboxException(
-                "Remote create needs Docker with Buildx to read the published squad metadata. Install Docker and run 'docker login rwest.jfrog.io' with read access; no local build or team sources are needed."
+                $"Remote create needs Docker with Buildx to read the published squad metadata. Install Docker and run 'docker login {RegistryImageName.Registry}' with read access; no local build or team sources are needed."
             );
         }
 
@@ -416,7 +416,7 @@ public sealed class PublishedSquadSource(
         {
             // Docker handles credentials; never echo credential helpers, tokens or their output in errors.
             throw new AboxException(
-                $"Cannot read the published squad metadata (docker {arguments[0]}, exit code {result.ExitCode}). Check the published tag and Docker/Buildx, and run 'docker login rwest.jfrog.io' with read access to the set and its bundled components. For an older artifact, ask a maintainer to republish it with current abox. The existing sandbox was not replaced."
+                $"Cannot read the published squad metadata (docker {arguments[0]}, exit code {result.ExitCode}). Check the published tag and Docker/Buildx, and run 'docker login {RegistryImageName.Registry}' with read access to the set and its bundled components. For an older artifact, ask a maintainer to republish it with current abox. The existing sandbox was not replaced."
             );
         }
         return result;

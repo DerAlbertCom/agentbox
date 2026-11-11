@@ -109,6 +109,61 @@ public sealed class CreateCommandTests
     }
 
     [Fact]
+    public async Task LocalCreateAcceptsSquadNamesInAnotherCase()
+    {
+        var command = Command("");
+
+        (await InvokeAsync(command, ["--local", "--squad", "AC", "--tag", "release"]))
+            .Should()
+            .Be(0);
+    }
+
+    [Fact]
+    public async Task LocalCreateFindsTeamsNextToItsLocation()
+    {
+        var command = Command("");
+        using var project = new TempDirectory();
+        project.File("teams/sample/ac.abox", "workload: sample\n");
+        Directory.Delete(Path.Combine(_root.Path, "teams"), recursive: true);
+
+        (await InvokeAsync(command, ["--local", "--location", project.Path, "--tag", "release"]))
+            .Should()
+            .Be(0);
+
+        await _sbx.Received(1)
+            .CreateAsync(
+                Arg.Is<SbxCreateRequest>(request => request.Location == project.Path),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task LocalCreateCanResolveTeamsFromAnExplicitRootOutsideTheLocation()
+    {
+        var command = Command("");
+        using var workspace = new TempDirectory();
+
+        (
+            await InvokeAsync(
+                command,
+                [
+                    "--local",
+                    "--squad",
+                    "ac",
+                    "--tag",
+                    "release",
+                    "--location",
+                    workspace.Path,
+                    "--root",
+                    _root.Path,
+                ]
+            )
+        )
+            .Should()
+            .Be(0);
+    }
+
+    [Fact]
     public async Task PullingUsesTheDefaultTagFromSettings()
     {
         var command = Command("defaultTag: release\npullRepository: team-docker-release\n");
@@ -193,18 +248,20 @@ public sealed class CreateCommandTests
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
         return new CreateCommand(
-            config,
+            new Lazy<AboxConfig>(() => config),
             new Preflight(_console, _sbx, programs),
-            new SquadResolver(config),
-            new CreateService(
-                store,
-                new SandboxRecordStore(paths),
-                paths,
-                config,
-                _sbx,
-                LocalWorkloadTest.Images(),
-                _console,
-                PublishedSquadTest.Source()
+            new Lazy<SquadResolver>(() => new SquadResolver(config)),
+            new Lazy<CreateService>(() =>
+                new CreateService(
+                    store,
+                    new SandboxRecordStore(paths),
+                    paths,
+                    config,
+                    _sbx,
+                    LocalWorkloadTest.Images(),
+                    _console,
+                    PublishedSquadTest.Source()
+                )
             ),
             _console
         );

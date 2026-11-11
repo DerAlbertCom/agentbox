@@ -11,9 +11,9 @@ namespace Abox.Features.Secrets;
 public sealed class SecretsCommand : Command
 {
     public SecretsCommand(
-        AboxConfig config,
+        Lazy<AboxConfig> config,
         Preflight preflight,
-        SecretsService secrets,
+        Lazy<SecretsService> secrets,
         IConsole console
     )
         : base("secrets", "Manage the host secrets the kits of a squad ask for.")
@@ -26,7 +26,7 @@ public sealed class SecretsCommand : Command
                 "list",
                 "List the services of the squad and whether they are stored.",
                 withService: false,
-                (request, cancellationToken) => secrets.ListAsync(request, cancellationToken)
+                (request, cancellationToken) => secrets.Value.ListAsync(request, cancellationToken)
             )
         );
         Subcommands.Add(
@@ -37,7 +37,7 @@ public sealed class SecretsCommand : Command
                 "set",
                 "Ask for the secrets of the squad and store them on the host.",
                 withService: true,
-                (request, cancellationToken) => secrets.SetAsync(request, cancellationToken)
+                (request, cancellationToken) => secrets.Value.SetAsync(request, cancellationToken)
             )
         );
         Subcommands.Add(
@@ -48,13 +48,14 @@ public sealed class SecretsCommand : Command
                 "remove",
                 "Remove the secrets of the squad from the host.",
                 withService: true,
-                (request, cancellationToken) => secrets.RemoveAsync(request, cancellationToken)
+                (request, cancellationToken) =>
+                    secrets.Value.RemoveAsync(request, cancellationToken)
             )
         );
     }
 
     private static Command SubCommand(
-        AboxConfig config,
+        Lazy<AboxConfig> config,
         Preflight preflight,
         IConsole console,
         string name,
@@ -113,12 +114,12 @@ public sealed class SecretsCommand : Command
                             throw new AboxException("No squad is given. Give --squad <name>.");
                         }
 
-                        if (parseResult.GetValue(team) is not { } teamName)
-                        {
-                            throw new AboxException(
+                        var teamName =
+                            parseResult.GetValue(team)
+                            ?? config.Value.DefaultTeam
+                            ?? throw new AboxException(
                                 "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
                             );
-                        }
 
                         var request = new SecretsRequest(
                             teamName,

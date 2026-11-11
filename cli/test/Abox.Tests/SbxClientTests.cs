@@ -15,6 +15,95 @@ public sealed class SbxClientTests
     }
 
     [Theory]
+    [InlineData("hc", 0, true)]
+    [InlineData("missing", 1, false)]
+    [InlineData("missing; echo injected", 1, false)]
+    [InlineData("$(echo injected)", 1, false)]
+    public async Task ProgramProbesPassTheNameAsDataNotShellCode(
+        string program,
+        int exitCode,
+        bool expected
+    )
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(exitCode, "", ""));
+
+        var found = await _client.HasProgramAsync("sample", program, CancellationToken.None);
+
+        found.Should().Be(expected);
+        await _runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.FileName == "sbx"
+                    && request.Arguments.SequenceEqual(
+                        new[] { "exec", "sample", "sh", "-c", "command -v \"$1\"", "_", program }
+                    )
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
+    [InlineData("remove-template")]
+    [InlineData("create")]
+    [InlineData("remove-sandbox")]
+    [InlineData("stop")]
+    [InlineData("inspect")]
+    [InlineData("set-secret")]
+    [InlineData("set-custom-secret")]
+    [InlineData("remove-secret")]
+    [InlineData("add-mcp")]
+    public async Task OutcomesPreserveTheExitCodeAndBothStreamsWithoutThrowing(string command)
+    {
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(17, "stdout", "stderr"));
+        var cancellationToken = CancellationToken.None;
+
+        var outcome = await (
+            command switch
+            {
+                "remove-template" => _client.RemoveTemplateAsync("image", cancellationToken),
+                "create" => _client.CreateAsync(
+                    new SbxCreateRequest(
+                        "kit",
+                        "location",
+                        "sample",
+                        [],
+                        new Dictionary<string, string>(),
+                        [],
+                        []
+                    ),
+                    cancellationToken
+                ),
+                "remove-sandbox" => _client.RemoveSandboxAsync("sample", cancellationToken),
+                "stop" => _client.StopSandboxAsync("sample", cancellationToken),
+                "inspect" => _client.InspectKitAsync("kit", cancellationToken),
+                "set-secret" => _client.SetSecretAsync("service", "value", cancellationToken),
+                "set-custom-secret" => _client.SetCustomSecretAsync(
+                    "service",
+                    "host",
+                    "ENV",
+                    "value",
+                    cancellationToken
+                ),
+                "remove-secret" => _client.RemoveSecretAsync("service", null, cancellationToken),
+                "add-mcp" => _client.AddMcpServerAsync(
+                    "server",
+                    "https://example.com",
+                    cancellationToken
+                ),
+                _ => throw new ArgumentOutOfRangeException(nameof(command)),
+            }
+        );
+
+        outcome.ExitCode.Should().Be(17);
+        outcome.Output.Should().Be("stdoutstderr");
+    }
+
+    [Theory]
     [InlineData("rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest", "always")]
     [InlineData("/kits/workload", "never")]
     public async Task CreationPassesTheExplicitPullPolicy(string source, string pullPolicy)

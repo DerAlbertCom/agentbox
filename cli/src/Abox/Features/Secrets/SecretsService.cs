@@ -146,7 +146,10 @@ public sealed class SecretsService(
             var outcome = await sbx.RemoveSecretAsync(
                 name,
                 declaration?.IsCustom == true ? declaration.Host : null,
-                cancellationToken
+                cancellationToken,
+                declaration?.IsCustom == true && declaration.Host is null
+                    ? declaration.EnvironmentVariable
+                    : null
             );
             if (!outcome.Succeeded)
             {
@@ -163,13 +166,20 @@ public sealed class SecretsService(
 
     /// <summary>
     /// Whether the value of a service is on the host. A service sbx does not know is
-    /// stored under its host, not under its name.
+    /// stored under its host or environment variable, not under its service name.
     /// </summary>
     private static bool IsStored(string name, SecretDeclaration? declaration, HostSecrets stored)
     {
         if (declaration?.IsCustom == true && declaration.Host is not null)
         {
             return stored.Custom.Any(custom => custom.Targets.Contains(declaration.Host));
+        }
+
+        if (declaration?.IsCustom == true && declaration.EnvironmentVariable is not null)
+        {
+            return stored.Custom.Any(custom =>
+                custom.EnvironmentVariable == declaration.EnvironmentVariable
+            );
         }
 
         return stored.Services.Contains(name);

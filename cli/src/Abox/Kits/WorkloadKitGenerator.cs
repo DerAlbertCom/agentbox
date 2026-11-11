@@ -26,6 +26,18 @@ public sealed class WorkloadKitGenerator
     /// </summary>
     public void Generate(WorkloadFile workload, string targetDirectory)
     {
+        var scripts = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var script in workload.Scripts)
+        {
+            var fileName = Path.GetFileName(script);
+            if (!scripts.TryAdd(fileName, script))
+            {
+                throw new AboxException(
+                    $"The scripts '{scripts[fileName]}' and '{script}' have the same output file name '{fileName}'."
+                );
+            }
+        }
+
         Directory.CreateDirectory(targetDirectory);
 
         WriteDescriptor(workload, targetDirectory);
@@ -48,7 +60,10 @@ public sealed class WorkloadKitGenerator
             .AppendLine("  - type: com.docker.sandbox/sbx@1")
             .ToString();
 
-        File.WriteAllText(Path.Combine(targetDirectory, KitName + ".yaml"), descriptor);
+        File.WriteAllText(
+            Path.Combine(targetDirectory, KitName + ".yaml"),
+            descriptor.ReplaceLineEndings("\n")
+        );
     }
 
     private static void WriteDockerfile(WorkloadFile workload, string targetDirectory)
@@ -162,7 +177,7 @@ public sealed class WorkloadKitGenerator
 
         File.WriteAllText(
             Path.Combine(targetDirectory, KitName + ".dockerfile"),
-            dockerfile.ToString()
+            dockerfile.ToString().ReplaceLineEndings("\n")
         );
     }
 
@@ -239,10 +254,9 @@ public sealed class WorkloadKitGenerator
                 );
             }
 
-            File.Copy(
-                source,
+            File.WriteAllText(
                 Path.Combine(scriptsDirectory, Path.GetFileName(script)),
-                overwrite: true
+                File.ReadAllText(source).ReplaceLineEndings("\n")
             );
         }
     }

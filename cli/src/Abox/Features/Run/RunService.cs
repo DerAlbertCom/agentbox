@@ -20,6 +20,7 @@ public sealed record RunRequest(string LauncherId, string Location, IReadOnlyLis
 /// </summary>
 public sealed class RunService(
     LauncherRegistry launchers,
+    AboxConfig config,
     SquadResolver resolver,
     BuildStore store,
     SandboxRecordStore records,
@@ -55,7 +56,7 @@ public sealed class RunService(
         if (sandbox is null)
         {
             console.WriteError($"There is no sandbox for '{location}'.");
-            console.WriteError($"Create it with: abox create --location {location}");
+            console.WriteError($"Create it with: {CreateCommandFor(name, location)}");
             return 1;
         }
 
@@ -75,7 +76,7 @@ public sealed class RunService(
                 $"The image of '{name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
             );
             console.WriteError(
-                $"Create the sandbox again for this folder: abox create --location {location}"
+                $"Create the sandbox again for this folder: {CreateCommandFor(name, location)}"
             );
             return 1;
         }
@@ -90,6 +91,57 @@ public sealed class RunService(
         );
 
         return await launcher.RunAsync(context, cancellationToken);
+    }
+
+    private string CreateCommandFor(string name, string location)
+    {
+        var record = records.Load(name);
+        var squad = string.IsNullOrWhiteSpace(record?.Squad) ? null : record.Squad;
+        var tag = string.IsNullOrWhiteSpace(record?.Tag) ? config.DefaultTag : record.Tag;
+        var manifest =
+            record is { KitReference: null } && squad is not null ? store.Load(squad, tag) : null;
+        var team = string.IsNullOrWhiteSpace(record?.Team) ? null : record.Team;
+        if (team is null && record is not null)
+        {
+            var reference = manifest?.Reference;
+            var prefix = $"agentbox-{Abox.Features.Build.ImageName.Tenant}-";
+            var suffix = ":" + tag;
+            if (
+                reference is not null
+                && reference.StartsWith(prefix, StringComparison.Ordinal)
+                && reference.EndsWith(suffix, StringComparison.Ordinal)
+                && reference.Length > prefix.Length + suffix.Length
+            )
+            {
+                team = reference[prefix.Length..^suffix.Length];
+            }
+        }
+
+        team ??= config.DefaultTeam;
+        if (squad is null && team is not null)
+        {
+            try
+            {
+                var resolved = resolver.ResolveTeam(location, team);
+                team = resolved.Name;
+                if (resolved.Squads.Count == 1)
+                {
+                    squad = resolved.Squads[0];
+                }
+            }
+            catch (AboxException)
+            {
+                // Remote creation does not require local team sources.
+            }
+        }
+
+        var placeholders =
+            team is null || squad is null ? " (replace <name> placeholders)" : string.Empty;
+        var local = record is { KitReference: null } ? " --local" : string.Empty;
+        var root = !string.IsNullOrWhiteSpace(manifest?.RootDirectory)
+            ? $" --root \"{manifest.RootDirectory}\""
+            : string.Empty;
+        return $"abox create --team {team ?? "<name>"} --squad {squad ?? "<name>"} --tag {tag}{local}{root} --location \"{location}\"{placeholders}";
     }
 
     /// <summary>
@@ -130,7 +182,10 @@ public sealed class RunService(
             return true;
         }
 
-        var team = resolver.ResolveTeam(Path.GetFullPath(location), record.Team);
+        var team = resolver.ResolveTeam(
+            string.IsNullOrWhiteSpace(manifest.RootDirectory) ? location : manifest.RootDirectory,
+            record.Team
+        );
 
         return await create.CreateAsync(
                 new CreateRequest(

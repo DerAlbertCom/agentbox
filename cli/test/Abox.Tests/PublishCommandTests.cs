@@ -165,8 +165,8 @@ public sealed class PublishCommandTests
 
     private PublishCommand Command(AboxConfig config) =>
         new(
-            config,
-            new SquadResolver(config),
+            new Lazy<AboxConfig>(() => config),
+            new Lazy<SquadResolver>(() => new SquadResolver(config)),
             new PublishService(_store, _programs, _runner, _console),
             _console
         );

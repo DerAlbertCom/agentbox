@@ -184,13 +184,16 @@ reproducibility. `sbx kit push` is deliberately not used: its
 legacy `spec.yaml` packager does not understand these v3 descriptors; see
 [artifact-format.md](artifact-format.md).
 
-### `abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag>]
+### `abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag>]
 [--local] [--yes]`
 
 1. Takes the team from `--team` or `defaultTeam`. Remote create requires `--squad`
    and never resolves local team folders; it works from any directory without a
    config file, source tree, local manifest or build. Only `--local` resolves the
    team like `build` and asks for an omitted squad (or uses its only squad).
+   The sandbox location is `--location`, then `defaultLocation`, then the current
+   folder. Local team discovery starts there and searches parent folders; `--root`
+   overrides that starting directory when the sources live in another project.
 2. Before registry preparation, remote create reads
    `sbx settings get kit.allowedSources --json` and automatically appends the
    validated `rwest.jfrog.io/<pullRepository>/` prefix using `sbx settings set`
@@ -224,6 +227,8 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
 5. Passes one `--mount` per state directory under `<state dir>/<sandbox>/` on the host.
 6. Passes the validated MCP server names with `--static-mcp`. A server with no URL
    must already be registered; a missing registration fails before replacement.
+   Local kit arguments with the same key must have equal values; conflicting values
+   are rejected with the key and both kit names before sandbox replacement.
 7. Creates the sandbox from
    the immutable platform digest resolved from
    `rwest.jfrog.io/<pullRepository>/agentbox-rwest-<team>/<squad>:<tag>`, with
@@ -278,13 +283,19 @@ give `--squad`. A pulled sandbox is not offered a local-build replacement by
 
 ### `abox run [<launcher>] [--location <path>] [-- <argv>...]`
 
-1. Checks the programs the launcher needs on the host.
+1. Resolves `--location`, then `defaultLocation`, then the current folder, just like
+   `create`. Checks the programs the launcher needs on the host.
 2. Checks that the folder has a sandbox. Without one, the command prints the
-   `abox create` command to run.
+   `abox create` command to run, including `--team`, `--squad` and `--tag` from its
+   sandbox record, build metadata or configured default team when available. Local
+   records retain `--local` and their build's `--root`; unknown team/squad names are marked `<name>` placeholders
+   to replace. The same complete hint is used when launcher programs are missing.
 3. Asks the runtime where the workspace of the sandbox is (`WORKSPACE_DIR`).
 4. For a locally created sandbox, offers to replace it when the build of its squad is newer than the one the
    sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
-   the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local.
+   the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local,
+   resolving team sources from the newer build's recorded root (or the sandbox
+   location for legacy metadata), so a separate `create --root` project stays usable.
 5. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
 6. Starts the launcher.
@@ -292,17 +303,22 @@ give `--squad`. A pulled sandbox is not offered a local-build replacement by
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.
 
-### `abox secrets list|set|remove --team <name> --squad <name> [--service <name>]`
+### `abox secrets list|set|remove [--team <name>] --squad <name> [--service <name>]`
 
 The kits of a squad ask for a service with the `credential@1` capability. The `secrets`
 section of the configuration says how the value of that service is obtained. abox keeps
 the values on the host, through `sbx secret`, so they never enter a sandbox.
+The team defaults to the user setting `defaultTeam` when `--team` is omitted.
 
 - `list` shows the services the kits ask for, the kits that ask for them, and whether
   the value is stored on the host.
 - `set` asks for the values and stores them. The value goes through the standard input
   of sbx, so it stays out of the process list and out of the shell history.
-- `remove` takes the values off the host.
+- `remove` takes the values off the host. Custom secrets are matched by `--host`,
+  or by sbx's `--env-name` selector when only `env` was declared; service names
+  are used only for service secrets. `list` uses the same custom-secret identity.
+  sbx 0.51 requires destination hosts for credential substitution; environment-only
+  legacy mappings remain removable, but need a `host` to supply credentials.
 
 ### `abox prune`
 
@@ -414,6 +430,10 @@ keeps them all, and every list is reversed, because mise activates the first ent
 its list: the last entry of the workload is the default of the image.
 The GitHub token is passed as a BuildKit secret, so it never lands in a layer. The
 generated image has `/home/agent/workspace` as its working directory.
+Generated Dockerfiles and workload/state descriptors, and copied workload scripts,
+use LF line endings on every host OS. Scripts are copied by file name; two source
+paths with the same file name (case-insensitive for cross-platform builds) are
+rejected instead of overwriting one another.
 
 When tools or scripts are requested, the generator installs mise as `agent` if it
 is missing, then checks that it runs. The installer is downloaded before execution,
@@ -477,6 +497,9 @@ cli/src/Abox/
   every command the container has, one per slice.
 - A slice registers itself: `AddAbox` calls one method per slice and that method adds
   the command and the service of the slice.
+- The entry point builds a plain service provider, not a host: it does not load
+  `appsettings.json` from the working directory. Commands defer configuration-dependent
+  dependencies until their actions run, so help, `exec` and `pipe` need no user configuration.
 - The services take their dependencies in their constructor, so the tests can hand them
   a substitute sbx (NSubstitute in the test project).
 - The YAML is read in one place (`YamlReader`), so every file is read the same way and

@@ -79,6 +79,64 @@ public sealed class CreateServiceTests
             );
     }
 
+    [Fact]
+    public async Task LocalSquadNamesUseTheCanonicalCaseForBuildsAndRecords()
+    {
+        SaveBuild();
+
+        var exitCode = await _service.CreateAsync(
+            Request() with
+            {
+                Squad = "AC",
+            },
+            CancellationToken.None
+        );
+
+        exitCode.Should().Be(0);
+        _records.Load(SandboxName.For(_root.Path))!.Squad.Should().Be("ac");
+    }
+
+    [Theory]
+    [InlineData("team")]
+    [InlineData("different")]
+    public async Task SharedKitArgumentsMustHaveTheSameValue(string value)
+    {
+        SaveBuild();
+        var manifest = _store.Load("ac", "latest")!;
+        manifest.Kits.Add(
+            new ManifestKit
+            {
+                Name = "other-kit",
+                Reference = "/kits/other",
+                Arguments = new Dictionary<string, string> { ["mode"] = value },
+            }
+        );
+        _store.Save(manifest);
+
+        if (value == "team")
+        {
+            (await _service.CreateAsync(Request(), CancellationToken.None)).Should().Be(0);
+            await _sbx.Received(1)
+                .CreateAsync(
+                    Arg.Is<SbxCreateRequest>(request =>
+                        request.KitArguments.Count == 1 && request.KitArguments["mode"] == "team"
+                    ),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+        else
+        {
+            var action = () => _service.CreateAsync(Request(), CancellationToken.None);
+            (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+                "*mode*pi-config*other-kit*"
+            );
+            await _sbx.DidNotReceive()
+                .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await _sbx.DidNotReceive()
+                .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+        }
+    }
+
     [Theory]
     [InlineData("mtiae-docker-release")]
     [InlineData("team-docker-release")]
