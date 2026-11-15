@@ -40,6 +40,8 @@ public sealed class BuildService(
     /// <summary>Builds the squads of the teams and returns the exit code of the command.</summary>
     public async Task<int> BuildAsync(BuildRequest request, CancellationToken cancellationToken)
     {
+        RegistryImageName.ValidateTag(request.Tag);
+
         foreach (var team in request.Teams)
         {
             foreach (var squad in team.Squads)

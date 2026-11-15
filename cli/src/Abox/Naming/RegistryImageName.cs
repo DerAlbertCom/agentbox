@@ -42,11 +42,19 @@ public static class RegistryImageName
     {
         var prefix = PullRepositoryPrefix(repository);
 
-        if (!Regex.IsMatch(tag, @"\A[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\z"))
-        {
-            throw new AboxException($"'{tag}' is not a valid registry tag.");
-        }
+        ValidateTag(tag);
 
         return $"{prefix}{SquadRepository(team, squad)}:{tag}";
+    }
+
+    /// <summary>Rejects tags that cannot name either a registry image or a local build.</summary>
+    public static void ValidateTag(string? tag)
+    {
+        if (tag is null || !Regex.IsMatch(tag, @"\A[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\z"))
+        {
+            throw new AboxException(
+                $"'{tag}' is not a valid registry tag. Use 1-128 ASCII letters, digits, underscores, periods or hyphens, starting with a letter, digit or underscore."
+            );
+        }
     }
 }

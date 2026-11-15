@@ -3,6 +3,7 @@ using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.Naming;
 
 namespace Abox.Features.Build;
 
@@ -71,6 +72,8 @@ public sealed class BuildCommand : Command
                     async () =>
                     {
                         var settings = config.Value;
+                        var selectedTag = parseResult.GetValue(tag) ?? settings.DefaultTag;
+                        RegistryImageName.ValidateTag(selectedTag);
                         var named = parseResult.GetValue(teams);
                         var wanted =
                             named is { Length: > 0 } ? named
@@ -91,7 +94,7 @@ public sealed class BuildCommand : Command
                                 .Select(team => resolver.Value.ResolveTeam(rootDirectory, team))
                                 .ToList(),
                             rootDirectory,
-                            parseResult.GetValue(tag) ?? settings.DefaultTag,
+                            selectedTag,
                             !parseResult.GetValue(verify),
                             !parseResult.GetValue(personal),
                             parseResult.GetValue(metadata)

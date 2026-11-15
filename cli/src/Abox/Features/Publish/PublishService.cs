@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
@@ -27,10 +26,7 @@ public sealed class PublishService(
 
     public async Task<int> PublishAsync(PublishRequest request, CancellationToken cancellationToken)
     {
-        if (!Regex.IsMatch(request.Tag, @"\A[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\z"))
-        {
-            throw new AboxException($"'{request.Tag}' is not a valid registry tag.");
-        }
+        RegistryImageName.ValidateTag(request.Tag);
 
         RejectCaseCollisions(request);
         var builds = request
