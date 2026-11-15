@@ -80,6 +80,12 @@ git diff --check
 | Full Debug executable | 1008 passed, 0 failed, 7 platform skips (1015 total) |
 | CSharpier and whitespace check | Passed |
 
+After implementation commit `0092805`, `git merge
+integration/issue-12-endpoint-overrides` reported already up to date at `2e51210`;
+the integration tip was confirmed to be an ancestor of this branch. The Debug
+solution build and **full 1015-test executable run were repeated after that merge
+check**, with the same zero-warning build and 1008 passes/7 skips/zero failures.
+
 The seven existing skips are four native-symlink receiver fixtures, two
 native-file-symlink discovery fixtures and one case-distinct host-directory
 collision fixture unsupported by this Windows host. They are not claimed as
