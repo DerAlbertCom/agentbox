@@ -16,6 +16,7 @@ public static class AboxConfigLoader
         "kitsDirectory",
         "defaultTag",
         "pullRepository",
+        "userSecretsDenyList",
     ];
 
     public static AboxConfig Load(AboxPaths paths)
@@ -45,6 +46,7 @@ public static class AboxConfigLoader
             KitsDirectory = Or(reader.GetString("kitsDirectory"), defaults.KitsDirectory),
             DefaultTag = Or(reader.GetString("defaultTag"), defaults.DefaultTag),
             PullRepository = pullRepository,
+            UserSecretsDenyList = reader.GetStringList("userSecretsDenyList"),
         };
     }
 

@@ -20,11 +20,12 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | `abox run [<launcher>] [--location <path>] [-- <argv>...]` | Starts a launcher for the sandbox of a folder. The default launcher is a shell. |
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
+| `abox user-secrets [--location <path>] [--force]` | Copies explicitly selected local .NET user-secret stores into the folder's existing sandbox. |
 
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
 
-Both `create` and `run` use `--location`, then the user setting `defaultLocation`,
+`create`, `run` and `user-secrets` use `--location`, then the user setting `defaultLocation`,
 then the current folder. For `create --local`, team discovery starts at that location
 and searches its parents, unless `--root <dir>` selects a separate source project.
 For `create`, `--root` requires `--local`; remote create rejects it because no local
@@ -50,6 +51,10 @@ terminal and are not captured or printed twice. Diagnostics omit arguments,
 environment settings and stdin, and redact known credential values if a tool
 echoes them. Tool output can still contain other sensitive data; review it before
 sharing.
+
+`user-secrets` transfers are an exception: their child stdout, stderr and raw
+errors are discarded, **even with `--verbose`**, including scalar fragments.
+Only store IDs, key names/counts and safe recovery messages are reported.
 
 ## The layout of a project
 
@@ -142,17 +147,99 @@ teamsDirectory: teams
 kitsDirectory: kits
 defaultTag: latest
 pullRepository: mtiae-docker-release
+userSecretsDenyList:
+  - staging.example.internal
+  - production.example.internal
 ```
 
-- `defaultLocation` is unset by default: `create` and `run` use the current folder unless `--location` is given.
+- `defaultLocation` is unset by default: `create`, `run` and `user-secrets` use the current folder unless `--location` is given.
 - `teamsDirectory` names the project's teams directory; the default is `teams`.
 - `kitsDirectory` names the kits directory relative to the project root; the default is `kits`.
+- `userSecretsDenyList` is a list of nonempty **literal substrings**, matched
+  case-insensitively against selected original values before any sandbox writes.
+  It defaults to `[]`: there is no built-in staging/production detection. Add your
+  environment markers here; do not put secret values in configuration.
 
 The file is at `$XDG_CONFIG_HOME/abox/config.yaml` when `XDG_CONFIG_HOME` is an
 absolute path; otherwise it is `~/.config/abox/config.yaml` on Linux/macOS or
 `%USERPROFILE%\.abox\config\config.yaml` on Windows. `pullRepository` is one
 lowercase JFrog repository name, not a URL, host, path or tag. Omitted or blank
 values use the default. It is independent of each workload's `publishRepository`.
+
+### Copying .NET user secrets
+
+Create the sandbox first, then declare only the intended store IDs in **that
+folder's `abox.json`** (not a squad `.abox` file):
+
+```json
+{
+  "userSecrets": ["5b3e0f6a-1c2d-4e5f-a6b7-c8d9e0f1a2b3", "my-dev-store"]
+}
+```
+
+```sh
+abox user-secrets --location /path/to/project
+# Explicit safety override, only when you have checked the blocked key:
+abox user-secrets --location /path/to/project --force
+```
+
+Each plain ID selects its **whole store**. An absent/empty `userSecrets` array
+selects nothing; missing/invalid `abox.json` is an on-demand error. Filter objects
+(`{"id":"...","keys":["ConnectionStrings:*"]}`) currently fail rather than
+silently copying everything. IDs must be 1–128 ASCII letters/digits/dots/underscores/
+hyphens, beginning with a letter/digit, without trailing dots or Windows device
+names. Duplicate IDs and duplicate effective .NET keys are rejected
+case-insensitively, including nested/colon-key collisions. The folder JSON is
+strict; store JSON accepts .NET-style comments and trailing commas and must have
+an object root. Nested objects, arrays and scalar types are preserved.
+
+The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when
+`APPDATA` is set, **including on Unix**, otherwise
+`<HOME>/.microsoft/usersecrets/<id>/secrets.json`. Empty/relative environment roots
+fail; abox does not guess another user's profile. Only named files are read; host
+files are never changed. The sandbox destination is independently resolved from
+the effective, non-root **default exec application user** and its `APPDATA`/`HOME`,
+using the same precedence. An application launched with a different environment
+must use matching roots. No host paths, local kits or published-source checkout
+are needed inside the sandbox. A stopped sandbox may be started by sbx exec;
+a missing sandbox is never created/replaced by this command.
+
+All selected originals are snapshotted in memory, parsed and checked against the
+global deny list **before any destination write**. Strings are checked after JSON
+unescaping, as are number/boolean text values; null/empty containers have no text.
+A block identifies the store/key, never the value. `--force` reports its use and
+bypasses **only** this deny check, not invalid config/JSON, missing files, unsafe
+paths, cancellation or transport failures. Copying is runtime-only: payloads and
+integrity frames travel over UTF-8/no-BOM stdin, never process arguments, images,
+build inputs or published artifacts. This does not change `abox secrets`.
+
+Rerunning replaces the **entire** destination store, removing old keys. The fixed
+receiver checks the byte count and SHA-256 frame before a same-directory atomic
+rename; short/corrupt/interrupted input cannot commit a truncated file. Secret
+root/store directories are `0700`, files `0600`; symlinks in destination paths,
+nonregular files, multiply-linked files and wrong ownership are rejected. The
+sandbox needs `sh` and GNU-compatible coreutils (`stat`, `mktemp`, `sha256sum`,
+`mv -T`, etc.). No TTY or root exec is used.
+
+**Recovery:** validation is all-store, but transfer is atomic **per file**, not a
+cross-store transaction. A later transport failure/cancellation can leave earlier
+stores replaced; even a completed rename can be unconfirmed if its acknowledgement
+is lost. No rollback is claimed. Fix the reported problem and rerun
+`abox user-secrets` for the same folder (and explicitly repeat `--force` if needed).
+Errors exit 1, cancellation exits 130. Cancellation before a complete verified
+frame preserves the previous file; a full frame already committed may remain.
+A forcibly killed receiver may leave a private `.secrets.*` temporary file; it is
+not read by .NET. Sandbox removal/replacement removes these runtime files too.
+Atomic replacement is not crash-durable storage or protection from malicious
+concurrent filesystem changes by the application user/root; sandbox contents and
+memory remain accessible to that user, not encrypted.
+
+Automatic copying on create/replace, key filters and endpoint rewriting are
+separate follow-ups. For now a `squad` string in `abox.json` is accepted for that
+future lifecycle flow but does not choose/change an existing sandbox: the command
+always targets the folder. No URLs or connection strings are rewritten yet.
+
+### Creating local and published sandboxes
 
 For example, `abox create --team sample --squad ac --tag latest` pulls
 `rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest`, validates its

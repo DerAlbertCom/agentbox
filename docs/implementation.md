@@ -15,6 +15,11 @@ raw arguments, environment settings or stdin, and redacts known credential value
 echoed in captured diagnostics. Attached-console processes keep their existing
 interactive output without duplicate diagnostics. See [the usage example](../README.md#seeing-tool-output).
 
+An opt-in `ProcessOutputPolicy.Sensitive` instead discards child output (including
+raw errors and scalar fragments), prohibits attached streams and writes explicit
+UTF-8/no-BOM stdin. It is used by user-secrets transfers even with `--verbose`;
+ordinary process diagnostics and `abox secrets` keep their existing behavior.
+
 ### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal] [--metadata-only]`
 
 Normal builds run the following full image-building path. The explicit
@@ -330,6 +335,52 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
   sbx 0.51 requires destination hosts for credential substitution; environment-only
   legacy mappings remain removable, but need a `host` to supply credentials.
 
+### `abox user-secrets [--location <path>] [--force]`
+
+The on-demand path copies whole named .NET stores into an existing local or
+published sandbox, with no kit-source or build dependency. See the
+[configuration, safety and recovery contract](../README.md#copying-net-user-secrets).
+The global YAML `userSecretsDenyList` matches case-insensitive literal substrings
+in original scalar values; it defaults to empty. Filter objects fail explicitly
+until #7. No rewriting (#8) or create/run lifecycle integration (#9) is included.
+
+Shared orchestration is in `UserSecrets/`, outside command slices:
+
+- `FolderConfig.LoadAsync(location, token)` reads runtime-only `abox.json`,
+  returning null for absence. A missing file is an on-demand error but a lifecycle
+  no-op. Its optional `squad` is parsed, not yet used for squad selection.
+- `UserSecretsCopy.PrepareAsync(folderConfig, force, token)` validates all entries,
+  snapshots every selected host file and its nested JSON tree, rejects duplicate
+  effective case-insensitive .NET keys, then checks all selected **original**
+  values. It makes no sandbox calls/writes. The returned `PreparedUserSecrets` is
+  opaque, in-memory and has a value-free `ToString`; reports contain IDs/counts only.
+- `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
+  before writing. `UserSecretsCopy.Target.cs` is the location for #8's supported
+  policy discovery and transformation, returning target snapshots without changing
+  originals or the deny decision. No hook framework or alternate pipeline is needed.
+  The internal snapshot constructor clones the supplied JSON root; #8 can retain
+  `store.Values` as the selected original values alongside a transformed root.
+- `SbxClient.UserSecrets.cs` owns captured default-user exec, environment/path checks
+  and the fixed receiver. All ancestor symlinks, nonregular/multiply-linked files
+  and wrong-owned secret directories/files fail. It verifies stdin byte count and
+  digest before same-directory atomic replacement. GNU-compatible coreutils are
+  required. Secret root/store directories are 0700, files 0600. It does not assume
+  `/home/agent` or run as root. The host adapter and receiver both prefer APPDATA
+  over HOME, even on Unix, and reject unusable environment roots rather than guess.
+
+Validation atomicity is all-store; transport atomicity is per-file. Failures report
+completed counts and safe retry, never promise rollback or confirmation after lost
+acknowledgements. Cancellation remains exit 130 and the on-demand command explains
+partial-copy/retry behavior. Host files never change; no payload becomes a build
+input, image layer or published artifact. Concurrent malicious filesystem edits by
+the sandbox user/root and crash durability are outside this contract.
+
+For #7, extend `UserSecretSelection.cs` and `UserSecretSnapshot.cs` (the parse/select
+step retains the JSON tree and computes effective leaf keys). Preserve the selected
+originals-before-deny ordering; do not add another transfer path. For #9, load/prepare
+before destructive replacement and copy after creation and truthful record save,
+before success/launcher. Missing folder configuration must skip all extra work.
+
 ### `abox prune [--full] [--sbx]`
 
 Sbx stores every kit it builds as a template image: one image per build plus one per kit
@@ -482,10 +533,13 @@ cli/src/Abox/
     Create/         abox create: the command and its slice registration
     Run/            abox run: the command and the service that does its work
     Secrets/        abox secrets: the command and the service that does its work
+    UserSecrets/    abox user-secrets: on-demand command only
     Prune/          abox prune: the command and the service that does its work
     Sandbox/        the commands other programs call: abox exec and abox pipe
     CommandHandling.cs  turns an abox error into a message and an exit code
   Configuration/    the directories and the user configuration
+    FolderConfig.cs runtime-only abox.json (not squad/build configuration)
+  UserSecrets/      shared preparation, original-value policy and copy flow
   Kits/             the .abox and .workload files, the chain, the kit generators
   LocalState/       local on-disk state shared by the command slices
     BuildManifest.cs
@@ -570,13 +624,16 @@ cli/src/Abox/
 
 ## What is not built yet
 
-- Local .NET user-secrets copying and address rewriting (#2). The resumed
+- Automatic .NET user-secrets copying (#9), key filtering (#7) and address rewriting
+  (#8) remain under #2; the safe on-demand whole-store copy (#6) is implemented. The resumed
   [verification spike](verification/user-secrets/README.md) proves supported
   kit-policy discovery and synthetic transport in local and published sandboxes.
   The approved direction uses `host.docker.internal` and unchanged published host
   ports, not experimental relays or inferred hostnames. The accessible published
   set has no host-access declarations; its nonempty-policy rewrite case remains
-  unverified. Production UTF-8/sensitive-output transport is still #6 work.
+  unverified (an explicitly accepted limitation). Production UTF-8/sensitive-output
+  transport and framed atomic replacement are implemented and covered by #6's
+  automated adapter tests and synthetic-only production-copy smoke.
 - Discovering published squads remotely when `--squad` is omitted.
 - Pruning local builds, versioned runtime kits, host-Docker `abox-workload` images
   and registry components. `abox prune` currently removes only sbx template images.

@@ -86,6 +86,7 @@ public sealed class AboxRootCommandTests
     [InlineData("--help")]
     [InlineData("build", "--help")]
     [InlineData("secrets", "list", "--help")]
+    [InlineData("user-secrets", "--help")]
     [InlineData("exec", "sample")]
     [InlineData("pipe", "sample")]
     public async Task CommandsThatDoNotUseConfigurationWorkEvenWhenTheFileIsInvalid(
