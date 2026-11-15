@@ -21,7 +21,7 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
     {
         try
         {
-            if (request.OutputPolicy == ProcessOutputPolicy.Sensitive && request.AttachConsole)
+            if (request.OutputPolicy != ProcessOutputPolicy.Normal && request.AttachConsole)
                 throw new AboxException("Sensitive processes cannot attach console streams.");
             return await RunCoreAsync(request, cancellationToken);
         }
@@ -29,7 +29,7 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
         {
             throw;
         }
-        catch (Exception) when (request.OutputPolicy == ProcessOutputPolicy.Sensitive)
+        catch (Exception) when (request.OutputPolicy != ProcessOutputPolicy.Normal)
         {
             // Even exceptions can contain fragments of a payload or child diagnostics.
             throw new AboxException(

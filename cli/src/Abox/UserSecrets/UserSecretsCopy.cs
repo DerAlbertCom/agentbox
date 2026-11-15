@@ -80,7 +80,7 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
         cancellationToken.ThrowIfCancellationRequested();
         if (prepared.Stores.Count == 0)
             return new UserSecretsReport([], prepared.SafetyOverride);
-        IReadOnlyList<UserSecretSnapshot> targetStores;
+        IReadOnlyList<UserSecretsTargetStore> targetStores;
         try
         {
             targetStores = await PrepareTargetAsync(prepared, sandbox, cancellationToken);
@@ -92,12 +92,13 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
         catch (Exception)
         {
             throw new AboxException(
-                "Cannot prepare user-secret destinations. No stores were copied. Check the application user's absolute HOME/APPDATA, ownership, ordinary paths and shell/coreutils; fix the runtime and retry 'abox user-secrets'. Child diagnostics were suppressed."
+                "Cannot prepare user-secret destinations or rewrite policy. No stores were copied. Check 'sbx policy ls <sandbox> --source kit --type network --json' and 'sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>' for complete, valid metadata, and the application user's absolute HOME/APPDATA, ownership, ordinary paths and shell/coreutils; fix the runtime and retry 'abox user-secrets'. No policy was changed; child diagnostics were suppressed."
             );
         }
         var copied = new List<UserSecretsStoreReport>();
-        foreach (var store in targetStores)
+        foreach (var target in targetStores)
         {
+            var store = target.Snapshot;
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
@@ -119,7 +120,12 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                     $"User-secret transfer failed for store '{store.Id}' after {copied.Count} completed stores. Earlier files may have been replaced; the current result may be unconfirmed. Fix the destination/runtime and retry 'abox user-secrets' for this folder; no cross-store rollback is attempted."
                 );
             }
-            copied.Add(new UserSecretsStoreReport(store.Id, store.KeyCount));
+            copied.Add(
+                new UserSecretsStoreReport(store.Id, store.KeyCount)
+                {
+                    RewrittenKeys = target.RewrittenKeys,
+                }
+            );
         }
         return new UserSecretsReport(copied.AsReadOnly(), prepared.SafetyOverride);
     }
@@ -143,7 +149,11 @@ public sealed class PreparedUserSecrets
         $"Prepared user secrets ({Stores.Count} stores; values hidden)";
 }
 
-public sealed record UserSecretsStoreReport(string Id, int KeyCount);
+public sealed record UserSecretsStoreReport(string Id, int KeyCount)
+{
+    public IReadOnlyList<string> RewrittenKeys { get; init; } = [];
+    public int RewrittenKeyCount => RewrittenKeys.Count;
+}
 
 /// <summary>Successful copy summary; SafetyOverride records actual selected-original deny matches allowed by --force.</summary>
 public sealed record UserSecretsReport(
