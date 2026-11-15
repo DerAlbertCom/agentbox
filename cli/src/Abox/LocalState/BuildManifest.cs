@@ -12,7 +12,7 @@ public sealed class BuildManifest
     /// <summary>When the build was made.</summary>
     public DateTimeOffset CreatedAt { get; set; }
 
-    /// <summary>The directory the squad's configurations live in.</summary>
+    /// <summary>The owning project root discovered with the selected team.</summary>
     public string RootDirectory { get; set; } = string.Empty;
 
     /// <summary>The name of the workload the base image is built from.</summary>

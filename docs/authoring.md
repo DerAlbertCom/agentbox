@@ -60,6 +60,34 @@ abox run --location <folder>                 # open the sandbox of the folder
 
 The user configuration (in the abox config directory) can fix the defaults:
 `defaultTeam` is the team the commands use when they are not asked for one.
+An explicit `--team` replaces that default; `build` and `publish` accept repeated
+`--team` selections, while `create` and `secrets` select one team. Without either
+an explicit team or a default, these commands report the same missing-team error.
+
+### Finding sources from nested folders
+
+`build`, `publish` and `secrets` search for the selected team starting in the current
+directory and continuing through its parents. Local `create` starts at its resolved
+`--location`/`defaultLocation` instead. For each command, `--root <dir>` overrides
+that start directory (`create` requires `--local` with it). Relative roots are
+resolved against the invocation directory before searching parents, just like their
+absolute equivalents; a root need not itself contain the teams folder.
+
+Once the team is found, the project that owns that teams folder also supplies the
+local kits and shared workloads, not the nested invocation folder or sandbox
+location. `teamsDirectory` (default `teams`) and `kitsDirectory` (default `kits`)
+select the configured directories within that owning project, including nested
+paths such as `config/teams` and `shared/kits`. The workload beside the root
+configuration still wins over a shared workload. Personal configuration additions
+use the selected project's kits too. Builds record the owning project root so a
+later local replacement can find the same sources.
+
+For example, from `project/src/app`, with sources under `project/teams` and
+`project/kits`, `abox build --team sample`, `abox publish --team sample` and
+`abox secrets list --team sample --squad ac` use the same project sources as when
+run from `project`. `abox create --local --team sample --squad ac --location .`
+selects the same team's local build. A separate workspace can use
+`abox create --local --team sample --squad ac --location <workspace> --root <project>`.
 
 ## The squad: `.abox`
 
