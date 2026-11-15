@@ -125,12 +125,15 @@ dotnet csharpier check cli
 git diff --check
 ```
 
-Final verification after merging the latest integration tip (still `7e37db3`;
-Git reported already up to date): ticket-specific **30 passed**; policy **130 passed**;
-process **31 passed**; command **571 passed, 2 skipped**; full Debug **1676 passed,
+Final verification after merging integration tip `5b48ba6` (including #39) in
+merge commit `9ec11e5`: ticket-specific **30 passed**; policy **130 passed**;
+process **31 passed**; command **571 passed, 2 skipped**; full Debug **1693 passed,
 7 skipped, zero failures**. The seven capability skips concern native file
 symlinks/receiver symlinks and case-distinct directories on this Windows host;
 they do not count as passing, and no new ticket test was skipped. Release was
 used only for the standalone benchmark; no Release test run or live sandbox
 operation is claimed. The Debug solution and Release benchmark builds had zero
-warnings/errors; CSharpier and whitespace checks passed.
+warnings/errors; CSharpier and whitespace checks passed. Before integration of
+#39, this ticket independently passed **1676 Debug tests with the same 7 skips**.
+Policy/process/command suites, the full Debug suite, the Debug solution build and
+format/whitespace checks were rerun successfully after the integration merge.
