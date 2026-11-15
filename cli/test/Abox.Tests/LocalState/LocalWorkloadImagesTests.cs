@@ -5,7 +5,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class LocalWorkloadImagesTests
+public sealed partial class LocalWorkloadImagesTests
 {
     private readonly TempDirectory _root = new();
     private readonly IProcessRunner _runner = LocalWorkloadTest.Runner();

@@ -21,6 +21,12 @@ public sealed class WorkloadKitGenerator
     /// <summary>The BuildKit secret the GitHub token is passed as, so it stays out of the layers.</summary>
     public const string GitHubTokenSecret = "github_token";
 
+    /// <summary>Passes the optional host token by environment-backed BuildKit secret, never by value.</summary>
+    public static IReadOnlyList<string> GitHubBuildSecretArguments() =>
+        string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN"))
+            ? []
+            : ["--secret", $"id={GitHubTokenSecret},env=GITHUB_TOKEN"];
+
     /// <summary>
     /// Writes the kit into a directory, replacing what was there before.
     /// </summary>

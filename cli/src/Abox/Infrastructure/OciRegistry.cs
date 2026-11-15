@@ -26,6 +26,12 @@ public sealed class OciRegistry(IProcessRunner runner) : IOciRegistry
     public const string DescriptorAnnotation = "vnd.docker.sandbox.kit.descriptor";
     private static readonly Regex DigestPattern = new(@"\Asha256:[a-f0-9]{64}\z");
 
+    public static void RequireDocker(IHostPrograms programs, string error)
+    {
+        if (!programs.Exists("docker"))
+            throw new AboxException(error);
+    }
+
     public static bool IsDigest(string? value) => value is not null && DigestPattern.IsMatch(value);
 
     public static string Digest(string? value) =>
