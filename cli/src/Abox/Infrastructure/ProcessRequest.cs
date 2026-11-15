@@ -30,4 +30,7 @@ public enum ProcessOutputPolicy
 {
     Normal,
     Sensitive,
+
+    // Capture trusted-command metadata for parsing, but never emit raw child diagnostics.
+    CapturedSensitive,
 }
