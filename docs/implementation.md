@@ -70,6 +70,16 @@ does not skip the workload image build.
 The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unless the
 command or the user configuration says otherwise.
 
+Normal and metadata-only builds, local/remote creation and reusable build-store
+access use the same registry-tag grammar: 1–128 ASCII letters, digits, underscores,
+periods or hyphens, starting with a letter, digit or underscore. The selected
+`--tag` or configured `defaultTag` is rejected before tag-derived filesystem access,
+generated script/certificate cleanup or external-tool/runtime operations. Paths,
+separators, whitespace and empty/overlong tags are invalid. An omitted `defaultTag`
+still means `latest`; an explicitly blank default is invalid when selected, not a
+request to fall back to `latest`. Valid explicit tags can override invalid defaults.
+Published reference naming and tag promotion are unchanged.
+
 **Metadata-only preparation:** `--metadata-only` resolves configurations, writes
 generated workload/state sources and saves the manifest, but skips sbx preflight,
 all kit inspection and all Docker/Buildx/image operations. `LocalWorkload` is
@@ -416,7 +426,11 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
 - `list` shows the services the kits ask for, the kits that ask for them, and whether
   the value is stored on the host.
 - `set` asks for the values and stores them. The value goes through the standard input
-  of sbx, so it stays out of the process list and out of the shell history.
+  of sbx as explicit UTF-8 without a BOM or added newline, preserving non-ASCII service
+  and custom secrets independently of the console code page. It stays out of process
+  arguments, environment settings and shell history. Normal redacted diagnostics remain
+  available; this encoding opt-in does not change sensitive-transfer suppression,
+  attached-console streams or raw pipes.
 - `remove` takes the values off the host. Custom secrets are matched by `--host`,
   or by sbx's `--env-name` selector when only `env` was declared; service names
   are used only for service secrets. `list` uses the same custom-secret identity.

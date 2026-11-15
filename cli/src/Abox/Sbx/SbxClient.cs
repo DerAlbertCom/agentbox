@@ -325,7 +325,12 @@ public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : 
     )
     {
         return RunOutcomeAsync(
-            new ProcessRequest(ExecutableName, ["secret", "set", service], StandardInput: value),
+            new ProcessRequest(
+                ExecutableName,
+                ["secret", "set", service],
+                StandardInput: value,
+                UseUtf8StandardInput: true
+            ),
             cancellationToken
         );
     }
@@ -359,7 +364,12 @@ public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : 
         arguments.Add("--value-stdin");
 
         return RunOutcomeAsync(
-            new ProcessRequest(ExecutableName, arguments, StandardInput: value),
+            new ProcessRequest(
+                ExecutableName,
+                arguments,
+                StandardInput: value,
+                UseUtf8StandardInput: true
+            ),
             cancellationToken
         );
     }
