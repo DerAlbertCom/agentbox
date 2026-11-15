@@ -14,6 +14,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task UnrelatedComputedProjectIdNeitherWarnsNorBlocksSelectedStoreGeneration()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Root.File(
@@ -35,8 +36,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample")
             .Should()
             .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
@@ -46,6 +50,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task LiteralUnselectedConsumersDoNotBlockGenerationDespiteImplicitWorkspaceImports()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Root.File(
@@ -69,8 +74,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample")
             .Should()
             .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
@@ -97,6 +105,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     {
         foreach (var verbose in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["first","sample"]}""");
             cli.Store("first", "{}");
@@ -145,10 +154,11 @@ public sealed class UserSecretsAppSettingsCommandTests
             var processes = Substitute.For<IProcessRunner>();
             cli.Services.AddSingleton(processes);
 
-            (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
-                .Should()
-                .Be(0, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
 
+            // Assert
+            exit.Should().Be(0, cli.Console.AllText);
             cli.Console.AllText.Should()
                 .NotContain("Warning:")
                 .And.NotContain("Worker.csproj")
@@ -175,14 +185,18 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task ImportsAboveTheSelectedWorkspaceDoNotEstablishAssociations()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", "{}");
         cli.Root.File("Directory.Build.props", "not XML: outside the selected workspace");
         cli.Root.File("folder/src/Api.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />");
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample").Should().Be("{}");
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Api.csproj");
     }
@@ -194,6 +208,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         bool invalidAppsettings
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first",{"id":"sample","keys":[]}]}""");
         cli.Store("first", "{}");
@@ -208,8 +223,11 @@ public sealed class UserSecretsAppSettingsCommandTests
             cli.Root.File("folder/Api/appsettings.json", "not JSON: SyntheticPrivateValue");
         }
 
-        (await cli.Run("--verbose", "--force")).Should().Be(1);
+        // Act
+        var exit = await cli.Run("--verbose", "--force");
 
+        // Assert
+        exit.Should().Be(1);
         await cli.NoWrites();
         cli.Console.AllText.Should()
             .Contain("sample")
@@ -222,6 +240,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [InlineData(true)]
     public async Task LinkedProjectFilesAreNeverReadAndDoNotPreventSelectedStores(bool generate)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", """{"Copied":"synthetic-only"}""");
@@ -264,8 +283,11 @@ public sealed class UserSecretsAppSettingsCommandTests
                 .Returns(new[] { 8004 });
         }
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Linked.csproj");
         Written(cli, "sample")
             .Should()
@@ -279,6 +301,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task GeneratedParentScalarsAndCopiedChildKeysAreDistinctInTheDotNetJsonProvider()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         var host = cli.Store("sample", """{"Api":{"Key":"synthetic-only"}}""");
@@ -290,8 +313,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 5000 });
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         var payload = Written(cli, "sample");
         payload
             .Should()
@@ -322,6 +348,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     )]
     public async Task CertainlyUnselectedProjectsDoNotWarnOrPreventGeneration(string declaration)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", "{}");
@@ -338,8 +365,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample")
             .Should()
             .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
@@ -358,6 +388,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         bool generate
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first","sample"]}""");
         cli.Store("first", "{}");
@@ -392,8 +423,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run("--verbose", "--force")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose", "--force");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         cli.Console.AllText.Should()
             .NotContain("Warning:")
             .And.NotContain("Broken.csproj")
@@ -437,6 +471,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         string endpoint
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", JsonSerializer.Serialize(new { Copied = endpoint }));
@@ -454,8 +489,11 @@ public sealed class UserSecretsAppSettingsCommandTests
             .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
             .ToDictionary(path => path, File.ReadAllBytes);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written.RootElement.GetProperty("Copied").GetString().Should().Be(endpoint);
@@ -471,6 +509,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         string import
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", """{"Copied":"synthetic-only"}""");
@@ -483,8 +522,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         var processes = Substitute.For<IProcessRunner>();
         cli.Services.AddSingleton(processes);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample").Should().Be("""{"Copied":"synthetic-only"}""");
         cli.Console.AllText.Should()
             .NotContain("Warning:")
@@ -500,6 +542,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         bool lowercase
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Root.File(
@@ -515,8 +558,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run()).Should().Be(lowercase ? 0 : 1, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(lowercase ? 0 : 1, cli.Console.AllText);
         if (lowercase)
             Written(cli, "sample")
                 .Should()
@@ -532,6 +578,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         bool destination
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first","sample"]}""");
         cli.Store("first", "{}");
@@ -559,8 +606,11 @@ public sealed class UserSecretsAppSettingsCommandTests
                     )
                 );
 
-        (await cli.Run("--verbose", "--force")).Should().Be(1);
+        // Act
+        var exit = await cli.Run("--verbose", "--force");
 
+        // Assert
+        exit.Should().Be(1);
         await cli.NoWrites();
         cli.Console.AllText.Should()
             .Contain("No stores were copied")
@@ -570,10 +620,16 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task EmptySelectionDoesNotDiscoverProjectsAndUnmatchedStoresStillCopyOnly()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":[]}""");
         cli.Root.File("folder/Bad.csproj", "not XML: an empty selection must not inspect projects");
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        // Act
+        var emptyExit = await cli.Run();
+
+        // Assert
+        emptyExit.Should().Be(0, cli.Console.AllText);
         await cli.NoWrites();
         cli.Sbx.ReceivedCalls()
             .Should()
@@ -581,6 +637,7 @@ public sealed class UserSecretsAppSettingsCommandTests
                 call.GetMethodInfo().Name == nameof(ISbxClient.GetUserSecretsHostPortsAsync)
             );
 
+        // Arrange
         File.Delete(Path.Combine(cli.Location, "Bad.csproj"));
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", """{"Url":"http://localhost:8004/copied"}""");
@@ -588,7 +645,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var copyExit = await cli.Run();
+
+        // Assert
+        copyExit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample").Should().Be("""{"Url":"http://host.docker.internal:8004/copied"}""");
     }
 
@@ -601,6 +662,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         string json
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first",{"id":"sample","keys":[]}]}""");
         cli.Store("first", "{}");
@@ -611,8 +673,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         );
         cli.Root.File("folder/appsettings.json", json);
 
-        (await cli.Run("--verbose", "--force")).Should().Be(1);
+        // Act
+        var exit = await cli.Run("--verbose", "--force");
 
+        // Assert
+        exit.Should().Be(1);
         await cli.NoWrites();
         cli.Console.AllText.Should()
             .Contain("sample")
@@ -625,6 +690,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task ExplicitCopyRebuildsTheDestinationAndDropsStaleGeneratedEntries()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", """{"Copied":"synthetic-only"}""");
@@ -638,15 +704,25 @@ public sealed class UserSecretsAppSettingsCommandTests
         );
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 4317, 8006 });
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        // Act
+        var firstExit = await cli.Run();
+
+        // Assert
+        firstExit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample").Should().Contain("Telemetry").And.Contain("LocalStack");
 
+        // Arrange
         cli.Root.File(
             "folder/appsettings.json",
             """{"Telemetry":"http://localhost:5000/api","LocalStack":"http://localhost:8006/current"}"""
         );
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var refreshExit = await cli.Run();
+
+        // Assert
+        refreshExit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample")
             .Should()
             .Be(
@@ -657,6 +733,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task RemoteUnmappedAndArbitraryLocalhostValuesAreNeitherGeneratedNorTreatedAsAdaptationFailures()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { UserSecretsDenyList = ["synthetic-denied"] }
         );
@@ -691,8 +768,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run("--force")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--force");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.EnumerateObject().Should().HaveCount(3);
         written
@@ -712,6 +792,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task InternalDirectoryLinksAreDeduplicatedAndCyclesDoNotAddSharedConsumers()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         var target = cli.Root.Directory_("folder/src/Api");
@@ -731,7 +812,11 @@ public sealed class UserSecretsAppSettingsCommandTests
             .Returns(new[] { 8004 });
         try
         {
-            (await cli.Run()).Should().Be(0, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run();
+
+            // Assert
+            exit.Should().Be(0, cli.Console.AllText);
             Written(cli, "sample")
                 .Should()
                 .Be("""{"Url":"http://host.docker.internal:8004/path"}""");
@@ -797,6 +882,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         foreach (var generated in new[] { false, true })
         foreach (var verbose in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["first","sample"]}""");
             cli.Store("first", """{"Valid":"http://localhost:8004/safe"}""");
@@ -819,10 +905,11 @@ public sealed class UserSecretsAppSettingsCommandTests
                 .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
                 .ToDictionary(path => path, File.ReadAllBytes);
 
-            (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
-                .Should()
-                .Be(1, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
 
+            // Assert
+            exit.Should().Be(1, cli.Console.AllText);
             await cli.NoWrites();
             cli.Console.AllText.Should()
                 .Contain("sample")
@@ -850,6 +937,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         bool verbose
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { UserSecretsDenyList = ["synthetic-private"] }
         );
@@ -866,15 +954,14 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (
-            await cli.Run([
-                .. force ? new[] { "--force" } : [],
-                .. verbose ? new[] { "--verbose" } : [],
-            ])
-        )
-            .Should()
-            .Be(force ? 0 : 1, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run([
+            .. force ? new[] { "--force" } : [],
+            .. verbose ? new[] { "--verbose" } : [],
+        ]);
 
+        // Assert
+        exit.Should().Be(force ? 0 : 1, cli.Console.AllText);
         if (force)
         {
             Written(cli, "sample").Should().Contain("host.docker.internal");
@@ -931,6 +1018,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         string expected
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Root.File(
@@ -945,8 +1033,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 80, 8004, 5432 });
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.GetProperty("Generated").GetString().Should().Be(expected);
         written.RootElement.GetProperty("Copied").GetString().Should().Be(expected);
@@ -986,6 +1077,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         string declaration
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first",{"id":"sample","keys":[]}]}""");
         cli.Store("first", "{}");
@@ -998,8 +1090,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run("--verbose", "--force")).Should().Be(1, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose", "--force");
 
+        // Assert
+        exit.Should().Be(1, cli.Console.AllText);
         await cli.NoWrites();
         cli.Console.AllText.Should()
             .Contain("Api.csproj")
@@ -1014,6 +1109,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task MissingHostAndProjectConfigurationFailsActionablyBeforeAnyDestinationWrite()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first","missing"]}""");
         cli.Store("first", "{}");
@@ -1022,8 +1118,11 @@ public sealed class UserSecretsAppSettingsCommandTests
             "<Project><PropertyGroup><UserSecretsId>missing</UserSecretsId></PropertyGroup></Project>"
         );
 
-        (await cli.Run("--force")).Should().Be(1);
+        // Act
+        var exit = await cli.Run("--force");
 
+        // Assert
+        exit.Should().Be(1);
         await cli.NoWrites();
         cli.Console.AllText.Should()
             .Contain("missing")
@@ -1036,6 +1135,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [InlineData(true)]
     public async Task DiscoveryNeverReadsDirectoryLinksOutsideTheWorkspace(bool throughLinkedParent)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", "{}");
@@ -1062,7 +1162,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         }
         try
         {
-            (await cli.Run()).Should().Be(0, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run();
+
+            // Assert
+            exit.Should().Be(0, cli.Console.AllText);
             Written(cli, "sample").Should().Be("{}");
         }
         finally
@@ -1082,6 +1186,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         string excluded
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Root.File(
@@ -1116,8 +1221,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample")
             .Should()
             .Contain("host.docker.internal")
@@ -1134,6 +1242,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         int expectedCount
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("{\"userSecrets\":[" + selection + "]}");
         cli.Root.File(
@@ -1155,8 +1264,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.EnumerateObject().Should().HaveCount(expectedCount);
         if (expectedCount > 0)
@@ -1189,6 +1301,7 @@ public sealed class UserSecretsAppSettingsCommandTests
     [Fact]
     public async Task SelectedProjectCanGenerateOverridesWithoutAHostStoreOrExecutingABuild()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         var project = cli.Root.File(
@@ -1205,8 +1318,11 @@ public sealed class UserSecretsAppSettingsCommandTests
         var processes = Substitute.For<IProcessRunner>();
         cli.Services.AddSingleton(processes);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written

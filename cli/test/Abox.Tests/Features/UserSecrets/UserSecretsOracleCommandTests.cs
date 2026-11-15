@@ -20,6 +20,7 @@ public sealed class UserSecretsOracleCommandTests
     {
         foreach (var reverse in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["first","sample"]}""");
             cli.Store("first", "{}");
@@ -43,8 +44,11 @@ public sealed class UserSecretsOracleCommandTests
             MappedPorts(cli);
             var originals = Originals(cli);
 
-            (await cli.Run("--verbose")).Should().Be(compatible ? 0 : 1, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run("--verbose");
 
+            // Assert
+            exit.Should().Be(compatible ? 0 : 1, cli.Console.AllText);
             if (compatible)
             {
                 using var written = JsonDocument.Parse(Written(cli, "sample"));
@@ -71,6 +75,7 @@ public sealed class UserSecretsOracleCommandTests
     [Fact]
     public async Task SharedOracleDescriptorsMergeAndAuthoritativeSecretsSuppressLowerPriorityConflicts()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         const string descriptor =
@@ -91,7 +96,11 @@ public sealed class UserSecretsOracleCommandTests
         );
         MappedPorts(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var mergedExit = await cli.Run();
+
+        // Assert
+        mergedExit.Should().Be(0, cli.Console.AllText);
         using (var written = JsonDocument.Parse(Written(cli, "sample")))
             written
                 .RootElement.GetProperty("Oracle")
@@ -101,12 +110,18 @@ public sealed class UserSecretsOracleCommandTests
                     "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=host.docker.internal)(PORT=1521))(CONNECT_DATA=(SID=synthetic-service)))"
                 );
 
+        // Arrange
         cli.Root.File(
             "folder/Worker/appsettings.json",
             """{"Oracle":"//remote.test:1521/synthetic-instance"}"""
         );
         cli.Store("sample", JsonSerializer.Serialize(new { Oracle = descriptor }));
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        // Act
+        var authoritativeExit = await cli.Run();
+
+        // Assert
+        authoritativeExit.Should().Be(0, cli.Console.AllText);
         using (var written = JsonDocument.Parse(Written(cli, "sample")))
             written
                 .RootElement.GetProperty("Oracle")
@@ -128,6 +143,7 @@ public sealed class UserSecretsOracleCommandTests
         int expectedCount
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("{\"userSecrets\":[" + selection + "]}");
         Project(
@@ -155,8 +171,11 @@ public sealed class UserSecretsOracleCommandTests
         MappedPorts(cli);
         var originals = Originals(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.EnumerateObject().Should().HaveCount(expectedCount);
         if (expectedCount > 0)
@@ -199,6 +218,7 @@ public sealed class UserSecretsOracleCommandTests
         bool authoritative
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure(
             authoritative
@@ -216,8 +236,11 @@ public sealed class UserSecretsOracleCommandTests
             cli.Store("sample", """{"endpoint":"remote.test:1521/synthetic-service"}""");
         MappedPorts(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample")
             .Should()
             .Be(authoritative ? """{"endpoint":"remote.test:1521/synthetic-service"}""" : "{}");
@@ -234,6 +257,7 @@ public sealed class UserSecretsOracleCommandTests
         bool force
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { UserSecretsDenyList = ["synthetic-service"] }
         );
@@ -248,10 +272,11 @@ public sealed class UserSecretsOracleCommandTests
         MappedPorts(cli);
         var originals = Originals(cli);
 
-        (await cli.Run(["--verbose", .. force ? new[] { "--force" } : []]))
-            .Should()
-            .Be(force ? 0 : 1, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run(["--verbose", .. force ? new[] { "--force" } : []]);
 
+        // Assert
+        exit.Should().Be(force ? 0 : 1, cli.Console.AllText);
         if (force)
         {
             using var written = JsonDocument.Parse(Written(cli, "sample"));
@@ -279,6 +304,7 @@ public sealed class UserSecretsOracleCommandTests
     [Fact]
     public async Task EachCopyUsesCurrentOracleConfigurationAndPolicyWithoutSelectingUnrequestedStores()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(cli, new { Endpoint = "localhost:1521/synthetic-service" });
@@ -292,21 +318,37 @@ public sealed class UserSecretsOracleCommandTests
         );
         MappedPorts(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var firstExit = await cli.Run();
+
+        // Assert
+        firstExit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample").Should().Contain("host.docker.internal");
 
+        // Arrange
         cli.Root.File(
             "folder/Api/appsettings.json",
             """{"Endpoint":"localhost:5000/synthetic-service"}"""
         );
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        // Act
+        var unmappedExit = await cli.Run();
+
+        // Assert
+        unmappedExit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample").Should().Be("{}");
 
+        // Arrange
         Project(cli, new { Endpoint = "localhost:1521/synthetic-service" });
         cli.Store("sample", """{"Copied":"//localhost/synthetic-service"}""");
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(Array.Empty<int>());
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        // Act
+        var noPolicyExit = await cli.Run();
+
+        // Assert
+        noPolicyExit.Should().Be(0, cli.Console.AllText);
         Written(cli, "sample").Should().Be("""{"Copied":"//localhost/synthetic-service"}""");
         SafeDiagnostics(cli);
     }
@@ -319,6 +361,7 @@ public sealed class UserSecretsOracleCommandTests
     {
         foreach (var verbose in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["sample"]}""");
             Project(cli, new { Generated = original });
@@ -326,8 +369,11 @@ public sealed class UserSecretsOracleCommandTests
             MappedPorts(cli);
             var originals = Originals(cli);
 
-            (await cli.Run(verbose ? ["--verbose"] : [])).Should().Be(0, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run(verbose ? ["--verbose"] : []);
 
+            // Assert
+            exit.Should().Be(0, cli.Console.AllText);
             using var written = JsonDocument.Parse(Written(cli, "sample"));
             written.RootElement.EnumerateObject().Should().ContainSingle();
             written.RootElement.GetProperty("Copied").GetString().Should().Be(original);
@@ -371,6 +417,7 @@ public sealed class UserSecretsOracleCommandTests
         string original
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(cli, new { Generated = original });
@@ -378,8 +425,11 @@ public sealed class UserSecretsOracleCommandTests
         MappedPorts(cli);
         var originals = Originals(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written.RootElement.GetProperty("Copied").GetString().Should().Be(original);
@@ -439,6 +489,7 @@ public sealed class UserSecretsOracleCommandTests
         foreach (var generated in new[] { false, true })
         foreach (var verbose in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["first","sample"]}""");
             cli.Store("first", """{"Valid":"http://localhost:8004/synthetic-service"}""");
@@ -449,10 +500,11 @@ public sealed class UserSecretsOracleCommandTests
             MappedPorts(cli);
             var originals = Originals(cli);
 
-            (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
-                .Should()
-                .Be(1, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
 
+            // Assert
+            exit.Should().Be(1, cli.Console.AllText);
             await cli.NoWrites();
             cli.Console.AllText.Should()
                 .Contain("sample")
@@ -474,6 +526,7 @@ public sealed class UserSecretsOracleCommandTests
     )]
     public async Task DescriptorsWithoutPortArePreservedWhenDefaultIsUnmapped(string original)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(cli, new { Generated = original });
@@ -482,8 +535,11 @@ public sealed class UserSecretsOracleCommandTests
             .Returns(new[] { 8004 });
         var originals = Originals(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written.RootElement.GetProperty("Copied").GetString().Should().Be(original);
@@ -517,6 +573,7 @@ public sealed class UserSecretsOracleCommandTests
         string expected
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(cli, new { Generated = original });
@@ -524,8 +581,11 @@ public sealed class UserSecretsOracleCommandTests
         MappedPorts(cli);
         var originals = Originals(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.GetProperty("Generated").GetString().Should().Be(expected);
         written.RootElement.GetProperty("Copied").GetString().Should().Be(expected);
@@ -570,6 +630,7 @@ public sealed class UserSecretsOracleCommandTests
         string expected
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(cli, new { Generated = original });
@@ -577,8 +638,11 @@ public sealed class UserSecretsOracleCommandTests
         MappedPorts(cli);
         var originals = Originals(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "sample"));
         written.RootElement.GetProperty("Generated").GetString().Should().Be(expected);
         written.RootElement.GetProperty("Nested")[0].GetString().Should().Be(expected);

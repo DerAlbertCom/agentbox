@@ -12,6 +12,7 @@ public sealed class UserSecretsSharedStoreCommandTests
     [InlineData(true)]
     public async Task CompatibleOverridesMergeOnceAcrossCaseInsensitiveKeys(bool reverse)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["shared"]}""");
         Project(
@@ -28,8 +29,11 @@ public sealed class UserSecretsSharedStoreCommandTests
             .Returns(new[] { 8004 });
         var originals = Sources(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "shared")
             .Should()
             .Be("""{"Services:Url":"http://host.docker.internal:8004/synthetic-path"}""");
@@ -51,6 +55,7 @@ public sealed class UserSecretsSharedStoreCommandTests
         foreach (var reverse in new[] { false, true })
         foreach (var verbose in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["first","shared"]}""");
             cli.Store("first", """{"Valid":"http://localhost:8004/synthetic-first"}""");
@@ -77,10 +82,11 @@ public sealed class UserSecretsSharedStoreCommandTests
                 .Returns(new[] { 8004, 4317 });
             var originals = Sources(cli);
 
-            (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
-                .Should()
-                .Be(1, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
 
+            // Assert
+            exit.Should().Be(1, cli.Console.AllText);
             await cli.NoWrites();
             cli.Console.AllText.Should()
                 .Contain("shared")
@@ -103,6 +109,7 @@ public sealed class UserSecretsSharedStoreCommandTests
         bool reverse
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["shared"]}""");
         Project(
@@ -119,8 +126,11 @@ public sealed class UserSecretsSharedStoreCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004, 4317, 5432 });
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli, "shared")
             .Should()
             .Be(
@@ -142,6 +152,7 @@ public sealed class UserSecretsSharedStoreCommandTests
     {
         foreach (var reverse in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["first","shared"]}""");
             cli.Store("first", "{}");
@@ -160,8 +171,11 @@ public sealed class UserSecretsSharedStoreCommandTests
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
                 .Returns(new[] { 5432 });
 
-            (await cli.Run("--verbose")).Should().Be(1);
+            // Act
+            var exit = await cli.Run("--verbose");
 
+            // Assert
+            exit.Should().Be(1);
             await cli.NoWrites();
             cli.Console.AllText.Should()
                 .Contain("conflict")
@@ -180,6 +194,7 @@ public sealed class UserSecretsSharedStoreCommandTests
         string hostValue
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":[{"id":"shared","keys":["endpoint","Safe"]}]}""");
         cli.Store("shared", "{\"ENDPOINT\":" + hostValue + "}");
@@ -198,8 +213,11 @@ public sealed class UserSecretsSharedStoreCommandTests
             .Returns(new[] { 8004, 4317 });
         var originals = Sources(cli);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "shared"));
         written.RootElement.EnumerateObject().Should().HaveCount(2);
         written
@@ -234,6 +252,7 @@ public sealed class UserSecretsSharedStoreCommandTests
         int expectedCount
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("{\"userSecrets\":[{\"id\":\"shared\",\"keys\":" + keys + "}]}");
         cli.Store("shared", """{"Excluded":"http://localhost:8004/synthetic-host"}""");
@@ -255,8 +274,11 @@ public sealed class UserSecretsSharedStoreCommandTests
             .Returns(new[] { 8004 });
         var originals = Sources(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli, "shared"));
         written.RootElement.EnumerateObject().Should().HaveCount(expectedCount);
         if (expectedCount > 0)
@@ -277,6 +299,7 @@ public sealed class UserSecretsSharedStoreCommandTests
         bool force
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { UserSecretsDenyList = ["127.0.0.2"] }
         );
@@ -287,10 +310,11 @@ public sealed class UserSecretsSharedStoreCommandTests
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 
-        (await cli.Run(force ? ["--force", "--verbose"] : ["--verbose"]))
-            .Should()
-            .Be(force ? 0 : 1, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run(force ? ["--force", "--verbose"] : ["--verbose"]);
 
+        // Assert
+        exit.Should().Be(force ? 0 : 1, cli.Console.AllText);
         if (force)
         {
             Written(cli, "shared")
