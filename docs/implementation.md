@@ -570,6 +570,10 @@ cli/src/Abox/
 
 ## What is not built yet
 
+- Local .NET user-secrets copying and address rewriting (#2). The
+  [verification spike](verification/user-secrets/README.md) records runtime
+  blockers, descriptor-survival checks, transport fixtures and unresolved
+  hostname attribution; it is not a completed runtime compatibility proof.
 - Discovering published squads remotely when `--squad` is omitted.
 - Pruning local builds, versioned runtime kits, host-Docker `abox-workload` images
   and registry components. `abox prune` currently removes only sbx template images.

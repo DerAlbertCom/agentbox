@@ -1,0 +1,8 @@
+# syntax=docker.io/docker/sandbox-kit:3@sha256:adbc0d1ea63451871d5d78111120bb29f2fd2b265e63d39c664ae2c3d722c805
+schemaVersion: "3"
+kind: set
+displayName: Read-only published-input staging probe
+version: "1.0.0"
+kits:
+  - ref: docker.io/docker/sbx-kit-shell@sha256:15bdd0110a79518f4abba2eb1332f020eec6f4b66a9c808d69a8aebf0e8ee176
+  - ref: docker.io/docker/sbx-kit-gh@sha256:2af919e2a6782f3aa5aa15711d0dadc08088b529f07df5d7005e3271e97da1cb
