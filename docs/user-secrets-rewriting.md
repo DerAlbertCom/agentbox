@@ -1,8 +1,10 @@
 # User-secret endpoint rewriting
 
 `abox user-secrets` and automatic copying use the same prepared, selected store
-snapshots. Original selected scalar values are checked against the global deny
-list **before** sandbox lookup or rewriting. `--force` bypasses only that deny
+snapshots, including [appsettings-derived overrides](user-secrets-appsettings.md).
+Original selected host scalar values are checked against the global deny
+list **before** sandbox lookup or rewriting; originals that would generate
+appsettings overrides are checked during all-store target preparation. `--force` bypasses only that deny
 list, not invalid stores, unavailable policy metadata, or destination validation.
 Host stores are never changed. Nothing is added to a build input, image, kit, or
 published artifact; `abox secrets` is unchanged.
@@ -26,9 +28,9 @@ Missing, malformed or unavailable required metadata fails before any store write
 An empty inventory is valid: ambient/manual/global authorization never supplies
 rewrite intent. These commands do not change policy.
 
-For supported endpoint fields, **only** `localhost` (case-insensitive) and the
-literal `127.0.0.1` change to `host.docker.internal`, retaining the **same explicit
-published host port**, and only when that port is inventoried and currently
+For supported URL/PostgreSQL endpoint fields, `localhost` (case-insensitive),
+dotted IPv4 loopback and IPv6 loopback change to `host.docker.internal`, retaining
+the **same published host port**, and only when that port is inventoried and currently
 authorized. Policy checks do not prove service availability and cannot prevent a
 later policy change. No global allow rule is created or broadened.
 
@@ -53,23 +55,33 @@ descriptor or `/etc/hosts` lookup. `sbx inspect` is not a port inventory and
 Rewriting operates on whole JSON string values, including nested objects/arrays,
 not arbitrary substring occurrences:
 
-- Absolute hierarchical URIs with an explicit decimal port and the literal
-  loopback authority host, for example HTTP(S), PostgreSQL or `tcp://`. Optional
+- Absolute hierarchical URIs with a loopback authority host, for example HTTP(S),
+  PostgreSQL or `tcp://`. An explicit decimal port or the URI scheme's standard
+  default port must be mapped. Optional
   userinfo is retained. Only the authority host span changes; scheme casing,
   credentials, port spelling, paths, escapes, query strings and fragments do not.
 - SQL Server comma-port endpoint fields `Server`, `Data Source`, `Address`, `Addr`
   and `Network Address` (case-insensitive), optionally prefixed with `tcp:`.
-- A separate `Port` field with a bare loopback `Host` (PostgreSQL-style) or `Server`
-  (MySQL-style) field. No default port is inferred.
+- A separate `Port` field with a loopback `Host` (PostgreSQL-style, including bare
+  or bracketed IPv6) or `Server` (MySQL-style) field. A PostgreSQL `Host` without
+  `Port` uses the standard 5432 default only if that host port is mapped.
+- PostgreSQL single `Host=localhost:8004` / `Host=[::1]:8004` inline ports are
+  supported without a separate `Port` field. Mixed inline/separate port sources
+  for a mapped-local inline endpoint are rejected as ambiguous.
 - Connection-string field order, spacing, single/double quoting and doubled quote
   escapes in other fields are preserved. Semicolons inside quoted values do not
   split fields. Credentials and unrelated fields are never recursively rewritten.
 
-Unsupported or ambiguous forms are preserved: IPv6, host aliases, nonliteral
-loopback spellings, omitted ports, SQL named instances, multiple hosts/endpoints,
-duplicate field names, ODBC brace syntax, Oracle descriptors/Easy Connect,
-embedded prose/JSON, relative URLs, malformed quoting and URLs containing raw
-whitespace/backslashes. Named endpoints and undeclared ports always stay unchanged.
+Recognized mapped-local endpoints that cannot be adapted unambiguously now fail
+before **any** destination write: malformed mapped-local URLs, multiple connection
+hosts/ports, duplicate fields and recognized endpoints with malformed quoting or
+unsupported brace syntax. Diagnostics name the store/key and, for generated
+values, project, but never include the value. `--force` does not bypass this.
+Named endpoints, undeclared ports and arbitrary strings always stay unchanged;
+merely containing `localhost` is not an error. Host aliases, nonliteral/shorthand
+loopback spellings, SQL named instances, Oracle descriptors/Easy Connect, split
+host/port settings, embedded prose/JSON and relative URLs are outside the supported
+shapes. Oracle and explicitly recognized split settings are separate follow-ups.
 This is deliberately not a generic connection-string normalizer. JSON whitespace,
 comments and escape spelling are not a preservation contract; transfer serializes
 the selected JSON tree and excludes skipped comments. Unchanged string contents

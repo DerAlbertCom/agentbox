@@ -234,9 +234,11 @@ the **whole store**. An ID ending in one `*`, such as `Cape.*`, selects every lo
 store whose ID starts with the literal prefix `Cape.` (ordinal, case-insensitive).
 Only a safe nonempty literal prefix plus one terminal `*` is supported: no bare
 `*`, paths, recursive lookup or other glob syntax. A prefix with no matches selects
-no stores; a missing exact ID still fails. A matched directory without a readable
-`secrets.json` fails the entire preparation, even with `--force`; it is not an
-unmatched prefix. Matches use actual host ID spelling and
+no stores; an exact ID still selects a store when no host directory exists.
+Copy-only stores require a readable `secrets.json`; missing files may instead use
+matching project appsettings sources as described below. An incomplete matched
+directory is not an unmatched prefix. Unreadable/invalid present files fail, even
+with `--force`. Matches use actual host ID spelling and
 are sorted; overlapping exact/prefix selections copy each store once, unioning
 their key selections (a whole-store selection wins). Repeated identical selection
 strings are still rejected case-insensitively. Matching unsafe host directory names
@@ -280,7 +282,7 @@ unknown recorded squad: it copies no secrets and changes no squad.
 
 Local/published creation, explicit replacement and an accepted newer-local-build
 replacement from `run` use the **same copy flow** as `abox user-secrets`. Folder
-configuration and all selected host originals are validated **before removal** of
+configuration, project appsettings and all selected host originals are validated **before removal** of
 an existing sandbox. After successful creation, abox saves the truthful new sandbox
 record, then copies secrets **before reporting full success or launching**.
 Target-only discovery/transfer failures can therefore occur after creation.
@@ -292,11 +294,13 @@ declined replacement and cancellation do not start a subsequent copy. Missing or
 invalid `abox.json` is an on-demand error. See the
 [lifecycle and recovery details](docs/user-secrets-lifecycle.md).
 
-All selected originals are snapshotted in memory, parsed and checked against the
+All selected host originals are snapshotted in memory, parsed and checked against the
 global deny list **before rewriting or any destination write**. Only selected
 scalar values are checked: strings after JSON unescaping, plus number/boolean text;
 null/empty containers have no text. A blocked unmatched value does not prevent a
-safe filtered copy. A block names the store/key, never the value.
+safe filtered copy. Appsettings originals that would generate overrides receive
+the same deny check during all-store target preparation, before any destination
+write. A block names the store/key/project, never the value.
 
 `--force` is **on-demand only** and bypasses only matched deny-list policy, not
 invalid configuration/JSON, missing files, policy metadata/destination
@@ -308,6 +312,31 @@ not force. If validation blocks creation, correct the values/selection. For an
 intentional override, explicitly deselect the blocked stores, create, restore the
 selection, then run `abox user-secrets --force`; restoring selection alone does
 not trigger a copy.
+
+#### Appsettings-derived sandbox overrides
+
+Selected stores can also receive sandbox-only endpoint overrides from associated
+projects' appsettings, **without editing project files or requiring a host secrets
+file**. Discovery searches only beneath the selected `abox.json` workspace and
+associates literal `UserSecretsId` declarations without running/evaluating MSBuild.
+It excludes `.git`, `bin`, `obj`, nCrunch artifacts, escaping directory links and
+cycles. Discovery never selects additional stores; store prefixes still expand
+only existing host directories.
+
+Project-local `appsettings.json` is combined with lowercase
+`appsettings.development.json` (development wins, keys are case-insensitive).
+Selected host keys always win, but still receive eligible endpoint adaptation.
+Existing exact/wildcard/empty key filters apply to copied **and generated** keys.
+Only eligible URL/PostgreSQL values needing a host change are generated, not the
+whole appsettings file. A store with no matching project remains copy-only.
+
+Each create/replacement/explicit copy rebuilds the complete destination, removing
+stale generated entries. Ordinary `run` still performs no copy. As a temporary
+fail-closed restriction, generation for a store with multiple discovered consumers
+is rejected; authoritative copy-only secrets are allowed. Oracle, split settings
+and shared-store merging are follow-ups. This bounded discovery does not simulate
+custom providers, environment/CLI overrides or service readiness. See
+[precedence, discovery, refresh and safety details](docs/user-secrets-appsettings.md).
 
 #### Paths, transfer and endpoint rewriting
 
@@ -342,8 +371,11 @@ http://127.0.0.1:8006/path -> http://host.docker.internal:8006/path
 ```
 
 Named hosts (including `host.docker.internal`) retain their names/ports for
-TLS/SNI. Undeclared ports, unsupported/ambiguous forms and unrelated credentials,
-fields, paths and queries remain unchanged. A service published as `8004:5432`
+TLS/SNI. URL/PostgreSQL rewriting includes IPv4/IPv6 loopback. Undeclared ports and
+unrelated credentials, fields, paths and queries remain unchanged. Recognized
+mapped-local endpoints with unsafe/ambiguous syntax fail before any destination
+write, rather than silently retaining known broken configuration. Arbitrary text
+and unmapped localhost references are not errors. A service published as `8004:5432`
 does **not** imply a `5432 -> 8004` rewrite. Wildcard/global/manual rules are not
 kit intent; a valid empty inventory means no rewrites. Unavailable/malformed
 required metadata fails before writes, not by guessing. There is no host kit-source,

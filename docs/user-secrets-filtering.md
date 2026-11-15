@@ -51,10 +51,12 @@ and objects such as `{"id":"Cape.*","keys":["ConnectionStrings:*"]}` support thi
   changes remain outside the contract.
 - A no-match prefix (including an absent host root) selects no stores and writes
   nothing. It does not broaden selection or clear any destination. An exact ID
-  still requires a readable host file and fails if missing. A matched store
-  directory without `secrets.json` is selected but incomplete: it fails all
-  preparation before sandbox calls, even with `--force`, rather than being skipped
-  as a no-match. Enumeration/permission errors fail, never silently become no matches.
+  still selects a store when no host directory exists. A readable host file is
+  required for copy-only stores; an associated project's standard appsettings can
+  now supply configuration when the host file is missing. A matched store
+  directory without `secrets.json` is selected, not silently skipped as a no-match;
+  without that project source it fails all preparation, even with `--force`.
+  Enumeration/permission errors fail, never silently become no matches.
 - Selection entries are processed in declaration order; each prefix expands in
   ordinal case-insensitive ID order, with actual host spelling retained. When
   prefixes are present, an exact selection also resolves to the corresponding
@@ -108,7 +110,7 @@ booleans, nulls and empty containers are preserved. Plain IDs and objects withou
 `keys` retain the whole store's JSON structure. Comments are not configuration
 values and are not copied as secret content.
 
-All selected host files must still be readable, valid UTF-8/JSON objects. Duplicate
+All present selected host files must still be readable, valid UTF-8/JSON objects. Duplicate
 effective .NET keys (including case-only duplicates, nested/flat collisions and
 array-index collisions) fail validation **before filtering**, even if neither
 duplicate would be selected. Filtering and force cannot bypass malformed input.
@@ -119,6 +121,13 @@ does not block a safe selection. A denied selected value stops preparation for
 all stores before any destination call/write, identifying its store and key but
 not its value. `--force` overrides only that policy, not validation or transport
 errors. Host files are never modified.
+
+The same patterns govern [appsettings-derived endpoint overrides](user-secrets-appsettings.md).
+Selected host keys take precedence case-insensitively, including null and values
+needing no rewrite. Excluded keys cannot reappear through generation. Appsettings
+files are validated before filtering; only selected originals that would generate
+an override undergo the deny check during all-store target preparation. This can
+follow runtime policy discovery, but always precedes destination writes.
 
 Every selected store replaces its entire destination file through the existing
 sensitive-stdin, validated atomic-replacement transport. An empty selected result
@@ -131,5 +140,5 @@ Atomic replacement is per file, not transactional across stores. A transport
 failure can leave earlier stores replaced; fix the destination/runtime and retry
 `abox user-secrets`. There is no cross-store rollback. Payloads remain runtime-only,
 not image/build/publication inputs; existing `abox secrets` behavior is unchanged.
-Address rewriting and automatic create/replacement integration are separate
-follow-on work, not provided by filtering itself.
+Address rewriting, appsettings generation and automatic create/replacement use
+these same selections through the shared copy flow.

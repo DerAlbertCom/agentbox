@@ -21,6 +21,8 @@ internal sealed class UserSecretSnapshot
     internal JsonElement Root { get; }
     internal IReadOnlyDictionary<string, string?> Values { get; }
     internal int KeyCount => Values.Count;
+    internal IReadOnlyDictionary<string, JsonElement> EffectiveLeaves { get; init; } =
+        new Dictionary<string, JsonElement>();
 
     internal static UserSecretSnapshot Parse(UserSecretSelection selection, string json)
     {
@@ -54,9 +56,23 @@ internal sealed class UserSecretSnapshot
                             value => value.Value,
                             StringComparer.OrdinalIgnoreCase
                         )
-                );
+                )
+                {
+                    EffectiveLeaves = selected.ToDictionary(
+                        pair => pair.Key,
+                        pair => pair.Value.Clone(),
+                        StringComparer.OrdinalIgnoreCase
+                    ),
+                };
             }
-            return new UserSecretSnapshot(id, document.RootElement, values);
+            return new UserSecretSnapshot(id, document.RootElement, values)
+            {
+                EffectiveLeaves = leaves.ToDictionary(
+                    pair => pair.Key,
+                    pair => pair.Value.Clone(),
+                    StringComparer.OrdinalIgnoreCase
+                ),
+            };
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException)
         {

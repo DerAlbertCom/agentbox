@@ -1,12 +1,18 @@
 using System.Text;
 using System.Text.Json;
 using Abox.Configuration;
+using Abox.Infrastructure;
 using Abox.Sbx;
 
 namespace Abox.UserSecrets;
 
 /// <summary>Shared on-demand/lifecycle flow. Preparation never contacts or writes a sandbox.</summary>
-public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost host, ISbxClient sbx)
+public sealed partial class UserSecretsCopy(
+    AboxConfig config,
+    UserSecretsHost host,
+    ISbxClient sbx,
+    IConsole? console = null
+)
 {
     public async Task<PreparedUserSecrets> PrepareAsync(
         FolderConfig? folderConfig,
@@ -16,7 +22,7 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (folderConfig is null)
-            return new PreparedUserSecrets([], false);
+            return new PreparedUserSecrets([], false, force, [], []);
         // Callers can construct settings directly, without the YAML loader's validation.
         if (
             config.UserSecretsDenyList is null
@@ -29,9 +35,20 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
         var selections = folderConfig.UserSecrets.Any(selection => selection.IsPrefixPattern)
             ? UserSecretSelection.Expand(folderConfig.UserSecrets, host.StoreIds(cancellationToken))
             : folderConfig.UserSecrets;
+        var discovery = await ProjectSettings.ReadAsync(
+            folderConfig.Location,
+            selections,
+            cancellationToken,
+            console is null ? null : console.WriteError
+        );
         foreach (var selection in selections)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var consumers = discovery
+                .Projects.Where(project =>
+                    project.Settings.Id.Equals(selection.Id, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToArray();
             string json;
             try
             {
@@ -40,6 +57,13 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                     new UTF8Encoding(false, true),
                     cancellationToken
                 );
+            }
+            catch (Exception exception)
+                when (consumers.Any(project => project.HasAppSettingsSource)
+                    && exception is FileNotFoundException or DirectoryNotFoundException
+                )
+            {
+                json = "{}";
             }
             catch (DecoderFallbackException)
             {
@@ -51,7 +75,7 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                 when (exception is IOException or UnauthorizedAccessException)
             {
                 throw new AboxException(
-                    $"Cannot read user-secret store '{selection.Id}'. Check its existence and file permissions on this host."
+                    $"Cannot read user-secret store '{selection.Id}'. Check its existence and file permissions on this host, or supply project-local appsettings.json/appsettings.development.json beneath this workspace with an unconditional literal UserSecretsId. Computed/imported IDs are not evaluated."
                 );
             }
             stores.Add(UserSecretSnapshot.Parse(selection, json));
@@ -59,21 +83,40 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
         var safetyOverride = false;
         foreach (var store in stores)
         foreach (var (key, value) in store.Values)
-            if (
-                value is not null
-                && config.UserSecretsDenyList.Any(denied =>
-                    value.Contains(denied, StringComparison.OrdinalIgnoreCase)
-                )
-            )
-            {
-                if (!force)
-                    throw new AboxException(
-                        $"User-secret store '{store.Id}', key {JsonSerializer.Serialize(key)}, is blocked by the global deny list. No stores were copied. Use --force only if this is intentional."
-                    );
-                safetyOverride = true;
-            }
-        return new PreparedUserSecrets(stores, safetyOverride);
+            safetyOverride |= CheckOriginal(store.Id, key, value, force);
+        return new PreparedUserSecrets(
+            stores,
+            safetyOverride,
+            force,
+            discovery.Projects,
+            discovery.UnresolvedProjects
+        );
     }
+
+    private bool CheckOriginal(
+        string id,
+        string key,
+        string? value,
+        bool force,
+        string? project = null
+    )
+    {
+        if (
+            value is null
+            || !config.UserSecretsDenyList.Any(denied =>
+                value.Contains(denied, StringComparison.OrdinalIgnoreCase)
+            )
+        )
+            return false;
+        if (!force)
+            throw new AboxException(
+                $"{DescribeSetting(id, key, project)}, is blocked by the global deny list. No stores were copied. Use --force only if this is intentional."
+            );
+        return true;
+    }
+
+    private static string DescribeSetting(string id, string key, string? project) =>
+        $"User-secret store '{id}', key {JsonSerializer.Serialize(key)}{(project is null ? "" : $", project {JsonSerializer.Serialize(project)}")}";
 
     public async Task<UserSecretsReport> CopyAsync(
         PreparedUserSecrets prepared,
@@ -84,21 +127,11 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
         cancellationToken.ThrowIfCancellationRequested();
         if (prepared.Stores.Count == 0)
             return new UserSecretsReport([], prepared.SafetyOverride);
-        IReadOnlyList<UserSecretsTargetStore> targetStores;
-        try
-        {
-            targetStores = await PrepareTargetAsync(prepared, sandbox, cancellationToken);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            throw new AboxException(
-                "Cannot prepare user-secret destinations or rewrite policy. No stores were copied. Check 'sbx policy ls <sandbox> --source kit --type network --json' and 'sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>' for complete, valid metadata, and the application user's absolute HOME/APPDATA, ownership, ordinary paths and shell/coreutils; fix the runtime and retry 'abox user-secrets'. No policy was changed; child diagnostics were suppressed."
-            );
-        }
+        var (targetStores, safetyOverride) = await PrepareTargetAsync(
+            prepared,
+            sandbox,
+            cancellationToken
+        );
         var copied = new List<UserSecretsStoreReport>();
         foreach (var target in targetStores)
         {
@@ -131,20 +164,32 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                 }
             );
         }
-        return new UserSecretsReport(copied.AsReadOnly(), prepared.SafetyOverride);
+        return new UserSecretsReport(copied.AsReadOnly(), safetyOverride);
     }
 }
 
 /// <summary>Opaque, in-memory validated snapshot; no payload-bearing generated ToString.</summary>
 public sealed class PreparedUserSecrets
 {
-    internal PreparedUserSecrets(IReadOnlyList<UserSecretSnapshot> stores, bool safetyOverride)
+    internal PreparedUserSecrets(
+        IReadOnlyList<UserSecretSnapshot> stores,
+        bool safetyOverride,
+        bool force,
+        IReadOnlyList<ProjectSettings> projects,
+        IReadOnlyList<string> unresolvedProjects
+    )
     {
         Stores = stores;
         SafetyOverride = safetyOverride;
+        Force = force;
+        Projects = projects;
+        UnresolvedProjects = unresolvedProjects;
     }
 
     internal IReadOnlyList<UserSecretSnapshot> Stores { get; }
+    internal bool Force { get; }
+    internal IReadOnlyList<ProjectSettings> Projects { get; }
+    internal IReadOnlyList<string> UnresolvedProjects { get; }
 
     /// <summary>At least one selected original value matched the deny list and was allowed by --force.</summary>
     public bool SafetyOverride { get; }
