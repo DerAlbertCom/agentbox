@@ -16,6 +16,7 @@ public sealed partial class UserSecretsCommandTests
     [InlineData("other")]
     public async Task OnDemandCopyDoesNotRequireASandboxSquadRecord(string? recordedSquad)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
@@ -23,8 +24,11 @@ public sealed partial class UserSecretsCommandTests
         if (recordedSquad is not null)
             records.Save(fixture.Name, new SandboxRecord { Squad = recordedSquad });
 
-        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0, fixture.Console.AllText);
         await fixture
             .Sbx.Received(1)
             .WriteUserSecretsAsync(fixture.Name, "sample", "{}", Arg.Any<CancellationToken>());
@@ -40,12 +44,16 @@ public sealed partial class UserSecretsCommandTests
     [Fact]
     public async Task MalformedUtf8InFolderConfigurationIsRejectedRatherThanNormalized()
     {
+        // Arrange
         using var fixture = new Fixture();
         var path = fixture.Root.File("folder/abox.json", "");
         File.WriteAllBytes(path, [123, 34, 115, 113, 117, 97, 100, 34, 58, 34, 0xff, 34, 125]);
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("abox.json").And.Contain("UTF");
         await fixture.NoWrites();
     }
@@ -53,6 +61,7 @@ public sealed partial class UserSecretsCommandTests
     [Fact]
     public async Task AnUnreadableHostStoreIsAnActionableErrorWithoutWrites()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         var source = fixture.Store("sample", "{\"Password\":\"synthetic-private\"}");
@@ -63,8 +72,11 @@ public sealed partial class UserSecretsCommandTests
             FileShare.None
         );
 
-        (await fixture.Run("--force", "--verbose")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force", "--verbose");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture
             .Console.AllText.Should()
             .Contain("sample")
@@ -87,13 +99,17 @@ public sealed partial class UserSecretsCommandTests
     [InlineData("{\"squad\":\"\"}")]
     public async Task MissingOrInvalidFolderConfigurationNeverWidensSelection(string? json)
     {
+        // Arrange
         using var fixture = new Fixture();
         if (json is not null)
             fixture.Root.File("folder/abox.json", json);
         fixture.Store("sample", "{\"Password\":\"synthetic-value\"}");
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().NotContain("synthetic-value");
         await fixture.NoWrites();
     }
@@ -104,13 +120,17 @@ public sealed partial class UserSecretsCommandTests
     [InlineData("{\"Password\":\"\\uD800\"}")]
     public async Task ALaterMalformedStoreCausesZeroWritesEvenWithForce(string json)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["first","later"]}""");
         fixture.Store("first", "{}");
         fixture.Store("later", json);
 
-        (await fixture.Run("--force", "--verbose")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force", "--verbose");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture
             .Console.AllText.Should()
             .Contain("later")
@@ -122,9 +142,15 @@ public sealed partial class UserSecretsCommandTests
     [Fact]
     public async Task AMissingOrUnreadableStoreIsActionableAndNeverBypassedByForce()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["missing"]}""");
-        (await fixture.Run("--force")).Should().Be(1);
+
+        // Act
+        var exitCode = await fixture.Run("--force");
+
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("missing").And.Contain("permissions");
         await fixture.NoWrites();
     }
@@ -134,6 +160,7 @@ public sealed partial class UserSecretsCommandTests
     [InlineData(true)]
     public async Task AppDataHasPrecedenceOnEveryHostAndHomeUsesTheUnixDotNetLayout(bool unix)
     {
+        // Arrange
         using var fixture = new Fixture(unix: unix);
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         fixture.Root.File(
@@ -143,8 +170,11 @@ public sealed partial class UserSecretsCommandTests
         if (!unix)
             fixture.Store("sample", "{\"Windows\":\"Grüße 🔒\"}");
 
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0);
         await fixture
             .Sbx.Received(1)
             .WriteUserSecretsAsync(
@@ -165,12 +195,16 @@ public sealed partial class UserSecretsCommandTests
         bool success
     )
     {
+        // Arrange
         using var fixture = new Fixture(configYaml: yaml);
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         fixture.Store("sample", "{\"Endpoint\":\"host[STAGE]server\"}");
 
-        (await fixture.Run()).Should().Be(success ? 0 : 1);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(success ? 0 : 1);
         fixture.Console.AllText.Should().NotContain("host[STAGE]server");
         if (!success)
             await fixture.NoWrites();
@@ -189,14 +223,18 @@ public sealed partial class UserSecretsCommandTests
     [InlineData("CON.txt")]
     public async Task UnsafeIdsAreRejectedBeforeAnyHostStoreOrDestinationAccess(string id)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Root.File(
             "folder/abox.json",
             System.Text.Json.JsonSerializer.Serialize(new { userSecrets = new[] { id } })
         );
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("Unsafe user-secret ID");
         await fixture.NoWrites();
     }
@@ -207,13 +245,17 @@ public sealed partial class UserSecretsCommandTests
     [InlineData("{\"\":{\"Child\":\"one\"},\":child\":\"two\"}")]
     public async Task DuplicateEffectiveDotNetKeysFailBeforeAnyWriteEvenWithForce(string json)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["first","later"]}""");
         fixture.Store("first", "{}");
         fixture.Store("later", json);
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture
             .Console.AllText.Should()
             .Contain("duplicate")
@@ -225,13 +267,17 @@ public sealed partial class UserSecretsCommandTests
     [Fact]
     public async Task InvalidUtf8IsNotSilentlyReplacedInASecretValue()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         var source = fixture.Store("sample", "");
         File.WriteAllBytes(source, [123, 34, 75, 34, 58, 34, 0xff, 34, 125]);
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("UTF");
         await fixture.NoWrites();
     }
@@ -243,6 +289,7 @@ public sealed partial class UserSecretsCommandTests
         bool force
     )
     {
+        // Arrange
         using var fixture = new Fixture(
             new AboxConfig { UserSecretsDenyList = ["PrOd.Example", "[stage]"] }
         );
@@ -253,8 +300,11 @@ public sealed partial class UserSecretsCommandTests
             """{"ConnectionStrings":{"Db":"Server=PROD.EXAMPLE;Password=synthetic"}}"""
         );
 
-        (await fixture.Run(force ? ["--force"] : [])).Should().Be(force ? 0 : 1);
+        // Act
+        var exitCode = await fixture.Run(force ? ["--force"] : []);
 
+        // Assert
+        exitCode.Should().Be(force ? 0 : 1);
         if (force)
         {
             await fixture
@@ -299,6 +349,7 @@ public sealed partial class UserSecretsCommandTests
     [Fact]
     public async Task CopiesOnlyNamedStoresIntoTheExistingFoldersSandbox()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         var source = fixture.Store(
@@ -307,8 +358,11 @@ public sealed partial class UserSecretsCommandTests
         );
         fixture.Store("unselected", "not JSON");
 
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0);
         await fixture
             .Sbx.Received(1)
             .WriteUserSecretsAsync(
