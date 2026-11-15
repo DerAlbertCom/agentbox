@@ -134,3 +134,58 @@ Focused before/after (362):       626c50f4d266ee78fd0cf65be82c8b36787a9440a24812
 The platform limitations and synthetic-only scope described above remain
 unchanged. No Release run, live runtime/registry/secret-store operation, issue/PR
 edit, or modification to the original user-changed `run-abox.ps1` is claimed.
+
+## Integration verification after #34
+
+On 2026-11-15, read #35 and #21 and their empty comment lists through `gh api`.
+Both worktrees were clean at their expected commits. Merged ticket commit
+`e11ba266e801e5fbd0850d545c19e440777b3d3f` into integration baseline
+`acf6977eb310a5195e753260165792a5ffe94722` with `--no-ff --no-commit`, inspected
+the staged result, then committed the conflict-free merge as
+`37cc2d696ba54f5db24d762220281f8fb083b6c8`.
+
+- All seven incoming C# files match the ticket byte-for-byte. The other 89 test
+  project files remain byte-for-byte identical to the integration baseline.
+  This preserves #32's command-only partial/namespaces/assertions, #33's moved
+  sandbox/local-state suites and creator-team partial, and #34's lifecycle partial,
+  shared harness and `ShellSandbox` compatibility without adaptations.
+- All seven moved suites match their pre-merge source after removing only phase
+  comments/whitespace and inlining the named CLI exit results. Assertions, helpers,
+  theory data, skip branches and command-level seams remain intact; the endpoint
+  command regression remains an exact content-preserving move.
+- Fresh pre-enumerated executable discovery before and after the merge is exactly
+  equal across every JSON field: **1,653 unique cases**, with no additions,
+  removals, changed metadata or duplicate IDs. This includes the same **362 endpoint
+  cases across 79 methods** and all **41 `SandboxCreatorTests` cases**.
+- Full-run XML matches the completed post-#34 baseline
+  (`audit21-merge34/after-full.xml`) as a multiset of name/type/method/result rows.
+  All seven skipped identities and nonempty reasons match exactly; focused results
+  and their two skips match the corresponding baseline subset too.
+
+| Check | Post-merge result |
+| --- | --- |
+| Debug solution builds before/after merge | Passed; zero warnings/errors |
+| Focused endpoint/generation executable | 360 passed, 2 skipped, zero failures/errors/not-run; 7.206 seconds |
+| Full Debug executable | 1,646 passed, 7 skipped, zero failures/errors/not-run; 57.553 seconds |
+| CSharpier | Passed; 207 C# files checked |
+| Working/staged/baseline diff whitespace checks | Passed |
+
+Build, discovery and test commands use the same SDK and executable as the rerun
+above. Tests ran with `-noLogo -noColor -maxThreads 2 -longRunning 120`, XML
+results and a 30-minute timeout, not `dotnet test`. Raw discovery, logs, XML and
+comparison results are under
+`C:/Users/UI520628/AppData/Local/Temp/11/opencode/audit21-merge35/`.
+The before/after fingerprints using the normalization procedure above are:
+
+```text
+Integration full discovery (1,653): 04e49791d1b7105878535a7fa24ba3d797a9d094ffa919e10e575e9e9424c135
+Integration endpoint cases (362):  89635ec4c1bf74731d967f2e466f87b68d9dd63aeb17186def85689f36fd6605
+```
+
+These are same-worktree comparisons: discovery IDs depend on the assembly path,
+so these hashes are not expected to match the ticket-worktree hashes above.
+The existing two file-link, four receiver-link and one case-distinct-directory
+skips remain platform limitations, not passing coverage. No production files,
+other ticket worktrees, live runtime/registry/secrets, issue/PR state or original
+user-modified launcher were changed. Release verification and final reviews remain
+deferred until #36 is integrated.
