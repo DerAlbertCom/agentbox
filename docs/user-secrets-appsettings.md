@@ -40,15 +40,29 @@ modified. Settings need not be under `ConnectionStrings`.
 - Associate selected stores case-insensitively with one unconditional literal
   `UserSecretsId` declaration in a project's top-level `PropertyGroup`, using the
   existing portable store-ID rules. Do not execute builds, evaluate MSBuild,
-  read imported properties, or guess computed/conditional/multiple/invalid IDs.
-  Unsupported explicit/imported associations produce value-free project warnings;
-  missing-store errors explain the required literal association and sources.
+  read imported property values, or guess computed/conditional/multiple/invalid IDs.
+  SDK projects without a literal ID also get an unresolved-association warning
+  when a `Directory.Build.props` or `Directory.Build.targets` exists between the
+  project and workspace root. Only its presence is checked: no import contents or
+  ancestors above the workspace are searched/evaluated. Explicit imports and
+  computed IDs that cannot be ruled out for the selection still produce value-free
+  project warnings. Definitely unselected literal IDs do not produce warnings.
+  Missing-store errors explain the required literal association and sources.
 - Discovery never selects an additional store or authorizes network access.
   Existing store-ID prefixes still expand **only host store directories**, not
   project IDs. Use an exact selected ID for a project-only store that has no host
   directory. No selected stores means no project discovery and no copy.
 - Only associated, selected projects' JSON is read. An unmatched selected store
   retains copy-only behavior and requires its readable host `secrets.json`.
+- Unreadable/malformed/DTD-bearing or linked project XML cannot establish an
+  association. Warn and permit validated host-only copying rather than breaking
+  copy-only selections because of an unrelated template. Do not guess its store
+  or read its appsettings. Since it could hide a literal shared-store consumer,
+  **generation is rejected while any discovered project XML is unreadable**;
+  repair that project or supply authoritative selected host keys. This warning
+  does not suppress validation of selected host files or associated appsettings,
+  even with empty key filters or force. Missing host files still need an actual
+  associated appsettings source. Directory traversal failures remain fatal.
 
 This is not a reconstruction of custom/linked/generated configuration providers,
 environment or command-line overrides, other environments, launch profiles,
@@ -97,6 +111,12 @@ Known mapped-local URLs with unsafe syntax and recognized ambiguous/malformed
 connection strings (such as multiple hosts/ports or duplicate fields) fail with
 store/key/project recovery information, without values. Arbitrary strings and
 unmapped localhost references are not errors merely for containing `localhost`.
+This includes PostgreSQL URL host lists and query-supplied hosts when an explicit
+mapped-local port is known. Query host/port options take precedence over the
+authority when deciding whether the endpoint is local and mapped; remote/unmapped
+overrides are preserved rather than adapting the overridden authority. Hostless
+forms such as `postgresql:///db?host=localhost`
+without an explicit port remain unchanged: no default port is inferred for them.
 Oracle Easy Connect/descriptors and recognized split host/port settings are
 separate follow-ups, not supported by this generation feature.
 

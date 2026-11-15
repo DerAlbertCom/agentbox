@@ -55,3 +55,94 @@ an independent Unix-host/live sbx run. The existing accepted live-policy matrix
 and its [published/nonempty-policy limitation](user-secrets/README.md) are unchanged.
 Shared-store generation remains temporarily rejected; Oracle, recognized split
 settings and compatible shared-store resolution are separate tickets under #12.
+
+## Review-fix verification against `b3a6672`
+
+The review-fix branch started clean at `b3a6672`, the integration tip. Issue #13's
+body and complete comments response were read through `gh api` (no comments were
+present). Only #13 behavior and its documentation were changed; no issue/PR writes
+or real host-secret/runtime operations were performed.
+
+### Reproductions and decisions
+
+All new behavior tests use the same confirmed CLI/harness seam described above.
+Focused commands used `dotnet $sdk10 test cli/agentbox.slnx --verbosity minimal
+--filter FullyQualifiedName~<test-name>` (adding `--no-restore` after restore), with
+`$sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'` to select the installed
+.NET 10 SDK explicitly without changing repository/global SDK settings.
+
+- **Implicit imports:** `ImplicitWorkspaceImports...` failed both props/targets
+  cases because no warning was emitted. Both now pass: SDK projects lacking an ID
+  warn about unresolved associations when workspace-local ancestor imports exist,
+  without reading their property values or evaluating MSBuild. A separate
+  red/green case covers Windows case-variant names using existing host path rules;
+  the workspace-parent fixture proves discovery never searches above the root.
+- **PostgreSQL URL ambiguity:** five new `KnownMappedButUnsupportedEndpoints...`
+  cases reproduced silent preservation of explicit-mapped local host lists and
+  query-host URLs. All now fail actionably, without values, in copied/generated
+  sources and normal/verbose modes, before any store is written. Thirteen preservation
+  fixtures cover unmapped/remote URLs, arbitrary text, local hosts paired with
+  unmapped ports, query options overriding authority hosts/ports, and hostless URLs
+  without explicit ports. Additional red/green slices check that an overridden
+  authority is never adapted or mistaken for a mapped-local effective endpoint,
+  and that an explicit mapped query port is not missed. In particular,
+  `postgresql:///db?host=localhost` does **not** infer port 5432, even when mapped.
+- **Unreadable project XML:** malformed, DTD-bearing and exclusively locked
+  unrelated projects reproduced the copy-only regression. The six paired
+  `IncompleteProjectDiscovery...` cases now allow validated host-only copies with
+  a warning, but reject generation while consumers are unknown. This deliberately
+  conservative restriction prevents an unreadable project from hiding another
+  literal shared-store consumer. No partial XML/string matching guesses an ID.
+  Separate empty-filter/force cases prove selected host JSON and associated
+  appsettings are still validated and fail with zero writes. Missing host stores
+  still require a real, successfully associated appsettings source. Directory
+  traversal failures remain fatal. Two file-link fixtures are explicit platform
+  skips here because Windows cannot create native file symlinks; they are not
+  claimed as passing.
+- **Warning scope:** three `UnsupportedButDefinitelyUnselectedLiteralIds...`
+  fixtures reproduced unnecessary warnings for conditional/multiple/invalid
+  unselected literals. They now pass without warnings. Computed or imported IDs
+  whose relationship to the selection is unknowable still warn intentionally:
+  suppressing those would contradict the unresolved-association requirement.
+- **Alleged generated-key collision — rejected with provider evidence:**
+  `GeneratedParentScalarsAndCopiedChildKeys...` passed against the existing emitted
+  shape using the actual `Microsoft.Extensions.Configuration.Json` 10.0.14
+  provider (test-only dependency). Host `{"Api":{"Key":"synthetic-only"}}` plus
+  generated `Api` emits
+  `{"Api":{"Key":"synthetic-only"},"Api":"http://host.docker.internal:5000"}`.
+  The provider loads exactly two distinct effective keys: `Api:Key` retains the
+  copied value and `Api` contains the adapted endpoint. A duplicate property name
+  at different effective-key paths is not a .NET key collision. No new rejection
+  or precedence change was introduced; host bytes remain unchanged.
+
+### Proportional standards cleanup
+
+Project discovery now delegates association and appsettings merging to coherent
+private helpers. Project metadata lives on the prepared operation, not on generic
+JSON snapshots: this removes the redundant snapshot clone and the
+`UserSecretSnapshot`/`ProjectSettings` mutual dependency. `EffectiveLeaves`,
+`HasAppSettingsSource` and `fullyParsedAndUnique` state what their data means. The
+shared ambiguity predicate and value-free setting description remove repeated
+logic/diagnostic suffixes. The internal prepared constructor requires explicit
+force state. The public optional console argument is intentionally preserved for
+existing non-CLI callers; CLI composition still supplies diagnostics. No
+speculative setting-context, port or path wrapper types were added. The code map
+now includes bounded project/appsettings discovery and generation, and affected
+list-continuation indentation is consistent.
+
+### Final review-fix checks
+
+| Check | Result |
+| --- | --- |
+| `dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet $sdk10 test cli/agentbox.slnx -c Debug --no-build --verbosity minimal` | 953 passed, 0 failed, 7 platform skips (960 total) |
+| `dotnet $sdk10 build cli/agentbox.slnx -c Release --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet $sdk10 test cli/agentbox.slnx -c Release --no-build --verbosity minimal` | 953 passed, 0 failed, 7 platform skips (960 total) |
+| `dotnet csharpier check cli` | Passed |
+| `git diff --check` | Passed |
+
+The seven skips comprise the five existing platform skips described above plus
+the two new native file-symlink discovery cases. Malformed/DTD/locked-file,
+workspace-directory-junction and cycle cases ran. The service-readiness,
+independent Unix/live sbx, shared-store and sibling-feature limitations above
+remain unchanged.

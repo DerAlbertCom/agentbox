@@ -52,21 +52,22 @@ accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
    Pass that same folder configuration snapshot (including absence) to the shared
    lifecycle; do not reload it between squad selection, preparation and replacement.
 2. Call shared `UserSecretsCopy.PrepareAsync(folderConfig, false, token)` to
-    snapshot **all** selected host stores and associated projects' standard
-    appsettings, and check selected host originals against the global deny list.
-    Missing sources, unreadable/malformed files or denied host originals fail
-    before any existing sandbox is removed. A missing host file is allowed when
-    an associated project's appsettings supplies configuration. No sandbox
-    metadata or destination access is needed for this preparation.
+   snapshot **all** selected host stores and associated projects' standard
+   appsettings, and check selected host originals against the global deny list.
+   Missing sources, unreadable/malformed selected files or denied host originals
+   fail before any existing sandbox is removed. Unreadable project XML warns and
+   permits validated host-only copying, but blocks generation at target preparation.
+   A missing host file is allowed when an associated project's appsettings supplies
+   configuration. No sandbox metadata or destination access is needed for preparation.
 3. Validate squad/build/state/MCP inputs and obtain replacement consent. Prepare
    state/MCP changes and then remove the old sandbox, if replacing.
 4. Create the sandbox. Only a successful creation saves its actual new record.
 5. Call shared `CopyAsync(prepared, sandbox, token)` **after saving that record**.
    This is exactly the on-demand copy path, including key selection and supported
-    policy-based rewriting and appsettings generation; there is no lifecycle-only
-    transport. Generation needs runtime policy, so generated-original deny checks,
-    unsafe adaptation and temporary shared-store checks occur here. All stores'
-    target/destination validation finishes before the first destination write.
+   policy-based rewriting and appsettings generation; there is no lifecycle-only
+   transport. Generation needs runtime policy, so generated-original deny checks,
+   unsafe adaptation and temporary shared-store checks occur here. All stores'
+   target/destination validation finishes before the first destination write.
 6. Only a successful required copy reports full creation success. `run` launches
    only after that succeeds.
 

@@ -22,7 +22,7 @@ public sealed partial class UserSecretsCopy(
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (folderConfig is null)
-            return new PreparedUserSecrets([], false);
+            return new PreparedUserSecrets([], false, force, [], []);
         // Callers can construct settings directly, without the YAML loader's validation.
         if (
             config.UserSecretsDenyList is null
@@ -35,7 +35,7 @@ public sealed partial class UserSecretsCopy(
         var selections = folderConfig.UserSecrets.Any(selection => selection.IsPrefixPattern)
             ? UserSecretSelection.Expand(folderConfig.UserSecrets, host.StoreIds(cancellationToken))
             : folderConfig.UserSecrets;
-        var projects = await ProjectSettings.ReadAsync(
+        var discovery = await ProjectSettings.ReadAsync(
             folderConfig.Location,
             selections,
             cancellationToken,
@@ -44,8 +44,8 @@ public sealed partial class UserSecretsCopy(
         foreach (var selection in selections)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var consumers = projects
-                .Where(project =>
+            var consumers = discovery
+                .Projects.Where(project =>
                     project.Settings.Id.Equals(selection.Id, StringComparison.OrdinalIgnoreCase)
                 )
                 .ToArray();
@@ -59,7 +59,7 @@ public sealed partial class UserSecretsCopy(
                 );
             }
             catch (Exception exception)
-                when (consumers.Any(project => project.HasSource)
+                when (consumers.Any(project => project.HasAppSettingsSource)
                     && exception is FileNotFoundException or DirectoryNotFoundException
                 )
             {
@@ -78,19 +78,19 @@ public sealed partial class UserSecretsCopy(
                     $"Cannot read user-secret store '{selection.Id}'. Check its existence and file permissions on this host, or supply project-local appsettings.json/appsettings.development.json beneath this workspace with an unconditional literal UserSecretsId. Computed/imported IDs are not evaluated."
                 );
             }
-            var snapshot = UserSecretSnapshot.Parse(selection, json);
-            stores.Add(
-                new UserSecretSnapshot(snapshot.Id, snapshot.Root, snapshot.Values)
-                {
-                    Projects = consumers,
-                }
-            );
+            stores.Add(UserSecretSnapshot.Parse(selection, json));
         }
         var safetyOverride = false;
         foreach (var store in stores)
         foreach (var (key, value) in store.Values)
             safetyOverride |= CheckOriginal(store.Id, key, value, force);
-        return new PreparedUserSecrets(stores, safetyOverride, force);
+        return new PreparedUserSecrets(
+            stores,
+            safetyOverride,
+            force,
+            discovery.Projects,
+            discovery.UnresolvedProjects
+        );
     }
 
     private bool CheckOriginal(
@@ -110,10 +110,13 @@ public sealed partial class UserSecretsCopy(
             return false;
         if (!force)
             throw new AboxException(
-                $"User-secret store '{id}', key {JsonSerializer.Serialize(key)}{(project is null ? "" : $", project {JsonSerializer.Serialize(project)}")}, is blocked by the global deny list. No stores were copied. Use --force only if this is intentional."
+                $"{DescribeSetting(id, key, project)}, is blocked by the global deny list. No stores were copied. Use --force only if this is intentional."
             );
         return true;
     }
+
+    private static string DescribeSetting(string id, string key, string? project) =>
+        $"User-secret store '{id}', key {JsonSerializer.Serialize(key)}{(project is null ? "" : $", project {JsonSerializer.Serialize(project)}")}";
 
     public async Task<UserSecretsReport> CopyAsync(
         PreparedUserSecrets prepared,
@@ -171,16 +174,22 @@ public sealed class PreparedUserSecrets
     internal PreparedUserSecrets(
         IReadOnlyList<UserSecretSnapshot> stores,
         bool safetyOverride,
-        bool force = false
+        bool force,
+        IReadOnlyList<ProjectSettings> projects,
+        IReadOnlyList<string> unresolvedProjects
     )
     {
         Stores = stores;
         SafetyOverride = safetyOverride;
         Force = force;
+        Projects = projects;
+        UnresolvedProjects = unresolvedProjects;
     }
 
     internal IReadOnlyList<UserSecretSnapshot> Stores { get; }
     internal bool Force { get; }
+    internal IReadOnlyList<ProjectSettings> Projects { get; }
+    internal IReadOnlyList<string> UnresolvedProjects { get; }
 
     /// <summary>At least one selected original value matched the deny list and was allowed by --force.</summary>
     public bool SafetyOverride { get; }

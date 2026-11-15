@@ -451,11 +451,11 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   patterns are validated separately from strict actual IDs. Expansion is ordinal
   case-insensitive, deterministic within each entry, and deduplicated across
   overlapping exact/prefix entries (key unions, whole store wins). No-match prefixes
-   select no stores; missing exact copy-only IDs fail. Matching unsafe/case-colliding host IDs
+  select no stores; missing exact copy-only IDs fail. Matching unsafe/case-colliding host IDs
   and symlinks/reparse points in the host user-secret root itself/stores/files fail
   before sandbox access; linked profile ancestors above that trusted root are allowed.
-   A matched directory without a readable `secrets.json` is not skipped as an
-   unmatched prefix; missing files require matching project appsettings sources. See
+  A matched directory without a readable `secrets.json` is not skipped as an
+  unmatched prefix; missing files require matching project appsettings sources. See
   [store-prefix semantics and verification](verification/user-secrets-store-prefixes.md).
   Preparation rejects duplicate
   effective case-insensitive .NET keys before filtering, then checks all selected
@@ -469,23 +469,26 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   `SafetyOverride` on the prepared snapshot/report means at least one selected
   original value actually matched the deny list and was allowed by `--force`, not
   merely that the flag was supplied. The on-demand warning uses the successful
-   copy report; lifecycle callers retain those semantics.
+  copy report; lifecycle callers retain those semantics.
 - `ProjectSettings` statically discovers selected stores' literal `UserSecretsId`
   consumers beneath the `FolderConfig` location, excluding artifacts, escaping
   directory links and cycles. It never evaluates MSBuild. Selected project-local
   base/lowercase-development JSON is validated and merged case-insensitively;
   only selected keys are retained. The prepared snapshots carry project originals
   in memory, allowing project-only generation without a host secrets file.
-  Unmatched stores remain copy-only. See [bounded appsettings discovery](user-secrets-appsettings.md).
+  Unmatched stores remain copy-only. Unreadable project XML warns without blocking
+  validated host-only copies, but prevents generation because consumers cannot be
+  established safely. Implicit workspace imports are detected, not evaluated.
+  See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
   before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
-   using sbx policy discovery, retaining originals for deny/force accounting.
-   Selected host keys block generated replacements. Eligible appsettings-only
-   values produce flat effective-key overrides subject to the same deny/filter
-   checks. A temporary fail-closed check rejects any generation for multiple
-   discovered consumers, but permits authoritative copy-only values. Parsing,
-   adaptation, deny, policy and destination checks complete for all stores before
-   the first write. Each new copy recalculates and removes stale generated entries.
+  using sbx policy discovery, retaining originals for deny/force accounting.
+  Selected host keys block generated replacements. Eligible appsettings-only
+  values produce flat effective-key overrides subject to the same deny/filter
+  checks. A temporary fail-closed check rejects any generation for multiple
+  discovered consumers, but permits authoritative copy-only values. Parsing,
+  adaptation, deny, policy and destination checks complete for all stores before
+  the first write. Each new copy recalculates and removes stale generated entries.
   Each selected store replaces its entire destination, clearing old unmatched keys,
   even for a zero-key `{}` result. Reports contain IDs, key names/counts, never values.
   Only parsed JSON data is serialized for transfer:
@@ -581,8 +584,10 @@ same **4 skips** (370 total). The Debug solution build had zero warnings/errors;
 CSharpier and `git diff --check` passed. No Release build or tests were run for
 that final-review change.
 
-Issue #13 verification: **918 passed, zero failures, 5 existing platform skips**
-(923 total) in both Debug and Release. Both solution builds had zero warnings/errors;
+Issue #13 review-fix verification: **953 passed, zero failures, 7 platform skips**
+(960 total) in both Debug and Release. The skips include two new native file-link
+discovery fixtures that this Windows host cannot create. Both solution builds had
+zero warnings/errors;
 CSharpier and `git diff --check` passed. New command-level coverage includes bounded
 project discovery, generation, precedence/filtering, URL/PostgreSQL adaptation,
 all-store validation, safe diagnostics, temporary shared-store rejection and
@@ -764,7 +769,8 @@ cli/src/Abox/
     CommandHandling.cs  turns an abox error into a message and an exit code
   Configuration/    the directories and the user configuration
     FolderConfig.cs runtime-only abox.json (not squad/build configuration)
-  UserSecrets/      shared key selection, original-value policy and runtime copy flow
+  UserSecrets/      shared selection/policy, bounded project/appsettings discovery,
+                    endpoint override generation and runtime copy flow
   Kits/             the .abox and .workload files, the chain, the kit generators
   LocalState/       local on-disk state shared by the command slices
     BuildManifest.cs

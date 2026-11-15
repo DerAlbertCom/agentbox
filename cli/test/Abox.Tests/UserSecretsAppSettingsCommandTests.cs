@@ -1,7 +1,9 @@
+using System.Text;
 using System.Text.Json;
 using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Sbx;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -9,6 +11,309 @@ namespace Abox.Tests;
 
 public sealed class UserSecretsAppSettingsCommandTests
 {
+    [Fact]
+    public async Task ImplicitImportNamesFollowExistingHostPathComparison()
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        cli.Store("sample", "{}");
+        cli.Root.File("folder/directory.build.props", "not XML: import contents are never read");
+        cli.Root.File("folder/Api.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />");
+
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+        Written(cli, "sample").Should().Be("{}");
+        cli.Console.AllText.Contains("Warning:").Should().Be(OperatingSystem.IsWindows());
+    }
+
+    [Fact]
+    public async Task ImplicitImportDiagnosticsNeverSearchAboveTheSelectedWorkspace()
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        cli.Store("sample", "{}");
+        cli.Root.File("Directory.Build.props", "not XML: outside the selected workspace");
+        cli.Root.File("folder/src/Api.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />");
+
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+        Written(cli, "sample").Should().Be("{}");
+        cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Api.csproj");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnknownProjectConsumersCannotBypassSelectedHostOrAssociatedAppsettingsValidation(
+        bool invalidAppsettings
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["first",{"id":"sample","keys":[]}]}""");
+        cli.Store("first", "{}");
+        cli.Store("sample", invalidAppsettings ? "{}" : "not JSON: SyntheticPrivateValue");
+        cli.Root.File("folder/Templates/Broken.csproj", "not XML: unknown consumers");
+        if (invalidAppsettings)
+        {
+            cli.Root.File(
+                "folder/Api/Api.csproj",
+                "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+            );
+            cli.Root.File("folder/Api/appsettings.json", "not JSON: SyntheticPrivateValue");
+        }
+
+        (await cli.Run("--verbose", "--force")).Should().Be(1);
+
+        await cli.NoWrites();
+        cli.Console.AllText.Should()
+            .Contain("sample")
+            .And.Contain("JSON")
+            .And.NotContain("SyntheticPrivateValue");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LinkedProjectFilesAreNeverReadAndDoNotPreventValidatedCopyOnlyStores(
+        bool generate
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        cli.Store("sample", """{"Copied":"synthetic-only"}""");
+        var target = cli.Root.File("Outside.csproj", "not XML: SyntheticPrivateValue");
+        var link = Path.Combine(cli.Location, "Linked.csproj");
+        try
+        {
+            File.CreateSymbolicLink(link, target);
+        }
+        catch (Exception exception)
+            when (exception is UnauthorizedAccessException or PlatformNotSupportedException
+                || (
+                    OperatingSystem.IsWindows()
+                    && exception is IOException
+                    && (exception.HResult & 0xffff) == 1314
+                )
+            )
+        {
+            throw new InvalidOperationException(
+                Xunit.v3.DynamicSkipToken.Value
+                    + "File symlink tests require native link privileges on this host.",
+                exception
+            );
+        }
+        if (generate)
+        {
+            cli.Root.File(
+                "folder/Api/Api.csproj",
+                "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+            );
+            cli.Root.File(
+                "folder/Api/appsettings.json",
+                """{"Endpoint":"http://localhost:8004/path"}"""
+            );
+            cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+                .Returns(new[] { 8004 });
+        }
+
+        (await cli.Run("--verbose")).Should().Be(generate ? 1 : 0, cli.Console.AllText);
+
+        cli.Console.AllText.Should()
+            .Contain("Linked.csproj")
+            .And.Contain("ordinary file")
+            .And.NotContain("SyntheticPrivateValue");
+        if (generate)
+            await cli.NoWrites();
+        else
+            Written(cli, "sample").Should().Be("""{"Copied":"synthetic-only"}""");
+    }
+
+    [Fact]
+    public async Task GeneratedParentScalarsAndCopiedChildKeysAreDistinctInTheDotNetJsonProvider()
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        var host = cli.Store("sample", """{"Api":{"Key":"synthetic-only"}}""");
+        cli.Root.File(
+            "folder/Api.csproj",
+            "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+        );
+        cli.Root.File("folder/appsettings.json", """{"Api":"http://localhost:5000"}""");
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 5000 });
+
+        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        var payload = Written(cli, "sample");
+        payload
+            .Should()
+            .Be("""{"Api":{"Key":"synthetic-only"},"Api":"http://host.docker.internal:5000"}""");
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(payload));
+        using var configuration = (ConfigurationRoot)
+            new ConfigurationBuilder().AddJsonStream(stream).Build();
+        configuration["Api"].Should().Be("http://host.docker.internal:5000");
+        configuration["Api:Key"].Should().Be("synthetic-only");
+        configuration.AsEnumerable().Should().HaveCount(2);
+        File.ReadAllText(host).Should().Be("""{"Api":{"Key":"synthetic-only"}}""");
+    }
+
+    [Theory]
+    [InlineData(
+        "<PropertyGroup Condition=\"'$(Configuration)' == 'Debug'\"><UserSecretsId>unselected</UserSecretsId></PropertyGroup>"
+    )]
+    [InlineData(
+        "<PropertyGroup><UserSecretsId>other</UserSecretsId><UserSecretsId>unselected</UserSecretsId></PropertyGroup>"
+    )]
+    [InlineData(
+        "<PropertyGroup><UserSecretsId>../SyntheticPrivateId</UserSecretsId></PropertyGroup>"
+    )]
+    public async Task UnsupportedButDefinitelyUnselectedLiteralIdsDoNotProduceAssociationWarnings(
+        string declaration
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        cli.Store("sample", "{}");
+        cli.Root.File("folder/Other.csproj", "<Project>" + declaration + "</Project>");
+        cli.Root.File("folder/appsettings.json", "not JSON: unrelated configuration");
+
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+        Written(cli, "sample").Should().Be("{}");
+        cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Other.csproj");
+    }
+
+    [Theory]
+    [InlineData("malformed", false)]
+    [InlineData("dtd", false)]
+    [InlineData("locked", false)]
+    [InlineData("malformed", true)]
+    [InlineData("dtd", true)]
+    [InlineData("locked", true)]
+    public async Task IncompleteProjectDiscoveryPreservesCopyOnlyButNeverGuessesGenerationConsumers(
+        string problem,
+        bool generate
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["first","sample"]}""");
+        cli.Store("first", "{}");
+        cli.Store("sample", """{"Copied":"synthetic-only"}""");
+        var broken = cli.Root.File(
+            "folder/Templates/Broken.csproj",
+            problem switch
+            {
+                "malformed" => "<Project><SyntheticPrivateId>unfinished",
+                "dtd" => "<!DOCTYPE Project [<!ENTITY private 'SyntheticPrivateId'>]><Project />",
+                _ => "<Project />",
+            }
+        );
+        using var locked =
+            problem == "locked"
+                ? new FileStream(broken, FileMode.Open, FileAccess.Read, FileShare.None)
+                : null;
+        if (generate)
+        {
+            cli.Root.File(
+                "folder/Api/Api.csproj",
+                "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+            );
+            cli.Root.File(
+                "folder/Api/appsettings.json",
+                """{"Endpoint":"http://localhost:8004/path"}"""
+            );
+        }
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 8004 });
+
+        (await cli.Run("--verbose", "--force")).Should().Be(generate ? 1 : 0, cli.Console.AllText);
+
+        cli.Console.AllText.Should().Contain("Broken.csproj").And.NotContain("SyntheticPrivateId");
+        if (generate)
+        {
+            await cli.NoWrites();
+            cli.Console.AllText.Should()
+                .Contain("sample")
+                .And.Contain("Endpoint")
+                .And.Contain("consumer");
+        }
+        else
+        {
+            Written(cli, "sample").Should().Be("""{"Copied":"synthetic-only"}""");
+            cli.Console.AllText.Should().Contain("Warning:").And.Contain("copy-only");
+        }
+    }
+
+    [Theory]
+    [InlineData("postgresql://localhost:5000,localhost:5001/db")]
+    [InlineData("postgresql://localhost:5000,remote.test:5432/db")]
+    [InlineData("postgresql://remote.test:5432,other.test:5433/db")]
+    [InlineData("postgresql:///db?host=localhost")]
+    [InlineData("postgresql:///db?host=localhost&port=5000")]
+    [InlineData("postgresql:///db?host=remote.test&port=5432")]
+    [InlineData("postgresql://remote.test:5432/db?host=localhost&port=5000")]
+    [InlineData("postgresql://localhost:5432/db?host=localhost&port=5000")]
+    [InlineData("postgresql://localhost:5432/db?host=remote.test&port=5432")]
+    [InlineData("postgresql://localhost:5432/db?port=5000")]
+    [InlineData("postgresql://localhost,other.test/db")]
+    [InlineData("a note about postgresql://localhost:5432,localhost:5433/db")]
+    [InlineData("postgresql:///db?password=localhost:5432&port=5432")]
+    public async Task UnmappedOrUnresolvedPostgresUrlsNeverInferPortsOrScanArbitraryText(
+        string endpoint
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        cli.Store("sample", JsonSerializer.Serialize(new { Copied = endpoint }));
+        cli.Root.File(
+            "folder/Api.csproj",
+            "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+        );
+        cli.Root.File(
+            "folder/appsettings.json",
+            JsonSerializer.Serialize(new { Generated = endpoint })
+        );
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 5432 });
+
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        written.RootElement.EnumerateObject().Should().ContainSingle();
+        written.RootElement.GetProperty("Copied").GetString().Should().Be(endpoint);
+        cli.Console.AllText.Should().NotContain("unsupported");
+    }
+
+    [Theory]
+    [InlineData("Directory.Build.props")]
+    [InlineData("Directory.Build.targets")]
+    public async Task ImplicitWorkspaceImportsAreDiagnosedWithoutReadingOrEvaluatingTheirIds(
+        string import
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        cli.Store("sample", """{"Copied":"synthetic-only"}""");
+        cli.Root.File("folder/src/Api/Api.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />");
+        cli.Root.File(
+            "folder/" + import,
+            "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup><Target Name=\"SyntheticNeverRun\"><Error Text=\"SyntheticPrivateId\" /></Target></Project>"
+        );
+        cli.Root.File("folder/src/Api/appsettings.json", "not JSON: association is unresolved");
+        var processes = Substitute.For<IProcessRunner>();
+        cli.Services.AddSingleton(processes);
+
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+        Written(cli, "sample").Should().Be("""{"Copied":"synthetic-only"}""");
+        cli.Console.AllText.Should()
+            .Contain("Api.csproj")
+            .And.Contain("UserSecretsId")
+            .And.Contain("MSBuild")
+            .And.NotContain("SyntheticPrivateId");
+        processes.ReceivedCalls().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -269,6 +574,13 @@ public sealed class UserSecretsAppSettingsCommandTests
     [InlineData("http://localhost/synthetic-private path")]
     [InlineData("http://localhost synthetic-private")]
     [InlineData("https://localhost:8004/path\u0000")]
+    [InlineData("postgresql://localhost:5432,localhost:5433/db?password=synthetic-password")]
+    [InlineData("postgresql://remote.test:5433,localhost:5432/db")]
+    [InlineData("postgres://synthetic-private:synthetic-password@[::1]:5432,remote.test:5433/db")]
+    [InlineData("postgresql:///db?host=localhost&port=5432&password=synthetic-password")]
+    [InlineData("postgresql:///db?port=5432&host=%3A%3A1")]
+    [InlineData("postgresql://localhost:5000/db?port=5432")]
+    [InlineData("postgresql://remote.test:5432/db?host=localhost")]
     [InlineData("Server=localhost,8004;Server=other,8004")]
     [InlineData("Server=localhost,8004;Host=other;Port=8004")]
     [InlineData("Server=localhost;Port=8004;Port=5432")]
@@ -306,7 +618,7 @@ public sealed class UserSecretsAppSettingsCommandTests
             else
                 cli.Store("sample", JsonSerializer.Serialize(new { Endpoint = endpoint }));
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
-                .Returns(new[] { 80, 8004 });
+                .Returns(new[] { 80, 8004, 5432 });
 
             (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
                 .Should()
@@ -506,9 +818,6 @@ public sealed class UserSecretsAppSettingsCommandTests
     )]
     [InlineData(
         "<PropertyGroup><UserSecretsId>sample</UserSecretsId><UserSecretsId>other</UserSecretsId></PropertyGroup>"
-    )]
-    [InlineData(
-        "<PropertyGroup><UserSecretsId>../SyntheticPrivateId</UserSecretsId></PropertyGroup>"
     )]
     [InlineData("<Import Project=\"SyntheticPrivateId.props\" />")]
     public async Task UnsupportedAssociationsAreDiagnosedWithoutGuessingOrBlockingCopyOnlySecrets(

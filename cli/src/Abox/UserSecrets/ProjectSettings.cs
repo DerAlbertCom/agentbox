@@ -8,13 +8,20 @@ using Abox.Naming;
 namespace Abox.UserSecrets;
 
 // Static, workspace-local configuration only. Never invoke MSBuild or application startup.
-internal sealed class ProjectSettings(string project, UserSecretSnapshot settings, bool hasSource)
+internal sealed class ProjectSettings(
+    string project,
+    UserSecretSnapshot settings,
+    bool hasAppSettingsSource
+)
 {
     internal string Project { get; } = project;
     internal UserSecretSnapshot Settings { get; } = settings;
-    internal bool HasSource { get; } = hasSource;
+    internal bool HasAppSettingsSource { get; } = hasAppSettingsSource;
 
-    internal static async Task<IReadOnlyList<ProjectSettings>> ReadAsync(
+    internal static async Task<(
+        IReadOnlyList<ProjectSettings> Projects,
+        IReadOnlyList<string> UnresolvedProjects
+    )> ReadAsync(
         string workspace,
         IReadOnlyList<UserSecretSelection> selections,
         CancellationToken cancellationToken,
@@ -22,8 +29,9 @@ internal sealed class ProjectSettings(string project, UserSecretSnapshot setting
     )
     {
         var result = new List<ProjectSettings>();
+        var unresolved = new List<string>();
         if (selections.Count == 0)
-            return result;
+            return (result, unresolved);
         string root;
         string[] projects;
         try
@@ -47,116 +55,172 @@ internal sealed class ProjectSettings(string project, UserSecretSnapshot setting
         {
             cancellationToken.ThrowIfCancellationRequested();
             var display = JsonSerializer.Serialize(Path.GetRelativePath(root, project));
-            XDocument document;
+            UserSecretSelection? selection;
             try
             {
-                EnsureOrdinaryFile(project);
-                using var reader = XmlReader.Create(
-                    project,
-                    new XmlReaderSettings
-                    {
-                        DtdProcessing = DtdProcessing.Prohibit,
-                        XmlResolver = null,
-                    }
-                );
-                document = XDocument.Load(reader);
+                selection = SelectStore(root, project, selections, diagnose);
             }
             catch (Exception exception)
                 when (exception is XmlException or IOException or UnauthorizedAccessException)
             {
-                throw new AboxException(
-                    $"Cannot read project {display} while associating selected stores. Use an ordinary file with readable XML without DTDs, not a file link/reparse point; no stores were copied."
-                );
-            }
-            var declarations = document
-                .Descendants()
-                .Where(element => element.Name.LocalName == "UserSecretsId")
-                .ToArray();
-            if (
-                declarations.Length == 0
-                && !document.Descendants().Any(element => element.Name.LocalName == "Import")
-            )
-                continue;
-            var declaration = declarations.Length == 1 ? declarations[0] : null;
-            var id = declaration?.Value.Trim();
-            if (
-                declaration is null
-                || declaration.HasElements
-                || !UserSecretId.IsValid(id ?? "")
-                || document.Root?.Name.LocalName != "Project"
-                || declaration.HasAttributes
-                || declaration.Parent?.Name.LocalName != "PropertyGroup"
-                || declaration.Parent.Parent != document.Root
-                || declaration
-                    .AncestorsAndSelf()
-                    .Any(element => element.Attribute("Condition") is not null)
-            )
-            {
+                unresolved.Add(Path.GetRelativePath(root, project));
                 diagnose?.Invoke(
-                    $"Warning: project {display}: UserSecretsId is computed, imported, conditional, invalid or unresolved. Declare one unconditional literal ID in the project to enable appsettings overrides; MSBuild is never evaluated. Copy-only selections are unchanged."
+                    $"Warning: cannot read project {display} while associating selected stores. Use an ordinary file with readable XML without DTDs, not a file link/reparse point. Its consumers are unknown: validated host copy-only selections remain available, but generated overrides require complete project discovery."
                 );
                 continue;
             }
-            var selection = selections.FirstOrDefault(selection =>
-                selection.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
-            );
             if (selection is null)
                 continue;
-            var directory = Path.GetDirectoryName(project)!;
-            var merged = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
-            var hasSource = false;
-            foreach (var name in new[] { "appsettings.json", "appsettings.development.json" })
-            {
-                UserSecretSnapshot snapshot;
-                try
-                {
-                    // Use the actual spelling even on case-insensitive hosts: Linux development uses lowercase.
-                    var path = Directory
-                        .EnumerateFiles(directory)
-                        .FirstOrDefault(path => Path.GetFileName(path) == name);
-                    if (path is null)
-                        continue;
-                    EnsureOrdinaryFile(path);
-                    var json = await File.ReadAllTextAsync(
-                        path,
-                        new UTF8Encoding(false, true),
-                        cancellationToken
-                    );
-                    snapshot = UserSecretSnapshot.Parse(selection, json);
-                }
-                catch (Exception exception)
-                    when (exception
-                            is AboxException
-                                or IOException
-                                or UnauthorizedAccessException
-                                or DecoderFallbackException
-                    )
-                {
-                    throw new AboxException(
-                        $"Project {display}, store '{selection.Id}': cannot read {name} as a UTF-8 JSON object with unique effective .NET configuration keys (case-insensitive). Check file permissions and use an ordinary file, not a file link/reparse point; no stores were copied."
-                    );
-                }
-                hasSource = true;
-                foreach (var (key, value) in snapshot.Leaves)
-                {
-                    merged.Remove(key);
-                    merged.Add(key, value);
-                }
-            }
-            result.Add(
-                new ProjectSettings(
-                    Path.GetRelativePath(root, project),
-                    UserSecretSnapshot.Parse(selection, JsonSerializer.Serialize(merged)),
-                    hasSource
-                )
-            );
+            result.Add(await ReadSettingsAsync(root, project, selection, cancellationToken));
         }
-        return result;
+        return (result, unresolved);
+    }
+
+    private static UserSecretSelection? SelectStore(
+        string root,
+        string project,
+        IReadOnlyList<UserSecretSelection> selections,
+        Action<string>? diagnose
+    )
+    {
+        EnsureOrdinaryFile(project);
+        using var reader = XmlReader.Create(
+            project,
+            new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit, XmlResolver = null }
+        );
+        var document = XDocument.Load(reader);
+        var declarations = document
+            .Descendants()
+            .Where(element => element.Name.LocalName == "UserSecretsId")
+            .ToArray();
+        var hasImports =
+            document.Descendants().Any(element => element.Name.LocalName == "Import")
+            || HasWorkspaceImports(root, project, document);
+        if (
+            !hasImports
+            && declarations.All(declaration =>
+                !declaration.HasElements
+                && !new[] { "$(", "@(", "%(" }.Any(declaration.Value.Contains)
+                && !selections.Any(selection =>
+                    selection.Id.Equals(
+                        declaration.Value.Trim(),
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                )
+            )
+        )
+            return null;
+        var declaration = declarations.Length == 1 ? declarations[0] : null;
+        var id = declaration?.Value.Trim();
+        if (
+            declaration is null
+            || declaration.HasElements
+            || !UserSecretId.IsValid(id ?? "")
+            || document.Root?.Name.LocalName != "Project"
+            || declaration.HasAttributes
+            || declaration.Parent?.Name.LocalName != "PropertyGroup"
+            || declaration.Parent.Parent != document.Root
+            || declaration
+                .AncestorsAndSelf()
+                .Any(element => element.Attribute("Condition") is not null)
+        )
+        {
+            diagnose?.Invoke(
+                $"Warning: project {JsonSerializer.Serialize(Path.GetRelativePath(root, project))}: UserSecretsId is computed, imported, conditional, invalid or unresolved and may affect the selected stores. Declare one unconditional literal ID in the project to enable appsettings overrides; MSBuild is never evaluated. Copy-only selections are unchanged."
+            );
+            return null;
+        }
+        return selections.FirstOrDefault(selection =>
+            selection.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+        );
+    }
+
+    private static async Task<ProjectSettings> ReadSettingsAsync(
+        string root,
+        string project,
+        UserSecretSelection selection,
+        CancellationToken cancellationToken
+    )
+    {
+        var directory = Path.GetDirectoryName(project)!;
+        var merged = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        var hasSource = false;
+        foreach (var name in new[] { "appsettings.json", "appsettings.development.json" })
+        {
+            UserSecretSnapshot snapshot;
+            try
+            {
+                // Use the actual spelling even on case-insensitive hosts: Linux development uses lowercase.
+                var path = Directory
+                    .EnumerateFiles(directory)
+                    .FirstOrDefault(path => Path.GetFileName(path) == name);
+                if (path is null)
+                    continue;
+                EnsureOrdinaryFile(path);
+                var json = await File.ReadAllTextAsync(
+                    path,
+                    new UTF8Encoding(false, true),
+                    cancellationToken
+                );
+                snapshot = UserSecretSnapshot.Parse(selection, json);
+            }
+            catch (Exception exception)
+                when (exception
+                        is AboxException
+                            or IOException
+                            or UnauthorizedAccessException
+                            or DecoderFallbackException
+                )
+            {
+                throw new AboxException(
+                    $"Project {JsonSerializer.Serialize(Path.GetRelativePath(root, project))}, store '{selection.Id}': cannot read {name} as a UTF-8 JSON object with unique effective .NET configuration keys (case-insensitive). Check file permissions and use an ordinary file, not a file link/reparse point; no stores were copied."
+                );
+            }
+            hasSource = true;
+            foreach (var (key, value) in snapshot.EffectiveLeaves)
+            {
+                merged.Remove(key);
+                merged.Add(key, value);
+            }
+        }
+        return new ProjectSettings(
+            Path.GetRelativePath(root, project),
+            UserSecretSnapshot.Parse(selection, JsonSerializer.Serialize(merged)),
+            hasSource
+        );
     }
 
     private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
         ? StringComparer.OrdinalIgnoreCase
         : StringComparer.Ordinal;
+
+    private static bool HasWorkspaceImports(string root, string project, XDocument document)
+    {
+        if (
+            document.Root?.Attribute("Sdk") is null
+            && !document.Descendants().Any(element => element.Name.LocalName == "Sdk")
+        )
+            return false;
+        for (
+            var directory = Path.GetDirectoryName(project)!;
+            ;
+            directory = Path.GetDirectoryName(directory)!
+        )
+        {
+            // Detect only the presence of implicit workspace imports, never read/evaluate them.
+            if (
+                Directory
+                    .EnumerateFiles(directory)
+                    .Any(path =>
+                        PathComparer.Equals(Path.GetFileName(path), "Directory.Build.props")
+                        || PathComparer.Equals(Path.GetFileName(path), "Directory.Build.targets")
+                    )
+            )
+                return true;
+            if (PathComparer.Equals(directory, root))
+                return false;
+        }
+    }
 
     private static void EnsureOrdinaryFile(string path)
     {

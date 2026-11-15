@@ -44,6 +44,11 @@ public sealed partial class UserSecretsCopy
         foreach (var store in prepared.Stores)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            var projects = prepared
+                .Projects.Where(project =>
+                    project.Settings.Id.Equals(store.Id, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToArray();
             var rewritten = new List<string>();
             var values = new Dictionary<string, string?>(
                 store.Values,
@@ -58,7 +63,7 @@ public sealed partial class UserSecretsCopy
                     writer.WritePropertyName(property.Name);
                     WriteTarget(writer, property.Value, ports, rewritten, store.Id, property.Name);
                 }
-                foreach (var project in store.Projects)
+                foreach (var project in projects)
                 foreach (var (key, original) in project.Settings.Values)
                 {
                     if (store.Values.ContainsKey(key) || original is null)
@@ -66,9 +71,13 @@ public sealed partial class UserSecretsCopy
                     var target = RewriteEndpoint(original, ports, store.Id, key, project.Project);
                     if (target == original)
                         continue;
-                    if (store.Projects.Count > 1)
+                    if (prepared.UnresolvedProjects.Count > 0)
                         throw new AboxException(
-                            $"User-secret store '{store.Id}', key {JsonSerializer.Serialize(key)}, has multiple discovered consumers ({string.Join(", ", store.Projects.Select(consumer => JsonSerializer.Serialize(consumer.Project)))}). Generating overrides for a shared store is a temporary unsupported case. Supply an authoritative selected host-secret value or use separate stores; no stores were copied."
+                            $"{DescribeSetting(store.Id, key, project.Project)}: cannot generate overrides because consumers could not be determined for unreadable projects ({string.Join(", ", prepared.UnresolvedProjects.Select(path => JsonSerializer.Serialize(path)))}). Fix their XML/permissions and ordinary-file status, or supply authoritative selected host-secret values for copy-only behavior; no stores were copied."
+                        );
+                    if (projects.Length > 1)
+                        throw new AboxException(
+                            $"User-secret store '{store.Id}', key {JsonSerializer.Serialize(key)}, has multiple discovered consumers ({string.Join(", ", projects.Select(consumer => JsonSerializer.Serialize(consumer.Project)))}). Generating overrides for a shared store is a temporary unsupported case. Supply an authoritative selected host-secret value or use separate stores; no stores were copied."
                         );
                     safetyOverride |= CheckOriginal(
                         store.Id,
@@ -178,8 +187,14 @@ public sealed partial class UserSecretsCopy
     {
         AboxException Unsupported() =>
             new(
-                $"User-secret store '{id}', key {JsonSerializer.Serialize(key)}{(project is null ? "" : $", project {JsonSerializer.Serialize(project)}")}: recognized mapped-local endpoint has an unsupported or ambiguous format. Use a well-formed absolute URL or single-host PostgreSQL connection string with one port; no stores were copied."
+                $"{DescribeSetting(id, key, project)}: recognized mapped-local endpoint has an unsupported or ambiguous format. Use a well-formed absolute URL or single-host PostgreSQL connection string with one port; no stores were copied."
             );
+        if (IsUnsupportedPostgresUrl(value, ports, out var hasMappedLocalEndpoint))
+        {
+            if (hasMappedLocalEndpoint)
+                throw Unsupported();
+            return value;
+        }
         var match = UrlEndpoint().Match(value);
         if (match.Success)
         {
@@ -216,11 +231,12 @@ public sealed partial class UserSecretsCopy
                 throw Unsupported();
             return ReplaceHost(value, host.Index, host.Length);
         }
-        var fields = ConnectionFields(value, out var complete);
+        var fields = ConnectionFields(value, out var fullyParsedAndUnique);
         var hosts = fields.Where(field => HostFields.Contains(field.Key)).ToArray();
         var separatePorts = fields
             .Where(field => field.Key.Equals("Port", StringComparison.OrdinalIgnoreCase))
             .ToArray();
+        var hasSingleUnambiguousHost = fullyParsedAndUnique && hosts.Length == 1;
         string Text(ConnectionField field) => value.Substring(field.Start, field.Length);
         foreach (var endpoint in hosts)
         {
@@ -232,8 +248,7 @@ public sealed partial class UserSecretsCopy
             )
             {
                 if (
-                    !complete
-                    || hosts.Length != 1
+                    !hasSingleUnambiguousHost
                     || separatePorts.Length != 0
                     || endpoint.Key.Equals("Host", StringComparison.OrdinalIgnoreCase)
                 )
@@ -268,8 +283,7 @@ public sealed partial class UserSecretsCopy
                     )
                         continue;
                     if (
-                        !complete
-                        || hosts.Length != 1
+                        !hasSingleUnambiguousHost
                         || hostParts.Length != 1
                         || separatePorts.Length != 0
                     )
@@ -295,8 +309,7 @@ public sealed partial class UserSecretsCopy
             if (!hostParts.Any(part => IsLoopback(part.Trim())) || !mappedPort)
                 continue;
             if (
-                !complete
-                || hosts.Length != 1
+                !hasSingleUnambiguousHost
                 || hostParts.Length != 1
                 || separatePorts.Length > 1
                 || portParts.Length > 1
@@ -306,6 +319,69 @@ public sealed partial class UserSecretsCopy
             return ReplaceHost(value, endpoint.Start + hostStart, text.Trim().Length);
         }
         return value;
+    }
+
+    private static bool IsUnsupportedPostgresUrl(
+        string value,
+        HashSet<int> ports,
+        out bool hasMappedLocalEndpoint
+    )
+    {
+        hasMappedLocalEndpoint = false;
+        var url = PostgresUrl().Match(value);
+        if (!url.Success)
+            return false;
+        var authority = url.Groups["authority"].Value;
+        var hosts = authority[(authority.LastIndexOf('@') + 1)..].Split(',');
+        var query = url.Groups["query"]
+            .Value.Split('&')
+            .Select(part => part.Split('=', 2))
+            .Where(part => part.Length == 2)
+            .Select(part =>
+                (Key: Uri.UnescapeDataString(part[0]), Value: Uri.UnescapeDataString(part[1]))
+            )
+            .ToArray();
+        var queryHosts = query
+            .Where(part => part.Key.Equals("host", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(part => part.Value.Split(','))
+            .ToArray();
+        var queryPorts = query
+            .Where(part => part.Key.Equals("port", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(part => part.Value.Split(','))
+            .ToArray();
+        if (hosts.Length == 1 && queryHosts.Length == 0 && queryPorts.Length == 0)
+            return false;
+        bool IsMappedPort(string text) =>
+            int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
+            && ports.Contains(port);
+        var endpoints = hosts.Select(host => PostgresEndpoint().Match(host)).ToArray();
+        // Query host/port options override the authority; never combine an overridden port
+        // with a local host or adapt an authority whose effective endpoint is unmapped.
+        if (queryPorts.Length > 0)
+        {
+            var localHost =
+                queryHosts.Length > 0
+                    ? queryHosts.Any(IsLoopback)
+                    : hosts.Any(IsLoopback)
+                        || endpoints.Any(endpoint =>
+                            endpoint.Success && IsLoopback(endpoint.Groups["host"].Value)
+                        );
+            hasMappedLocalEndpoint = localHost && queryPorts.Any(IsMappedPort);
+        }
+        else if (queryHosts.Length > 0)
+            hasMappedLocalEndpoint =
+                queryHosts.Any(IsLoopback)
+                && endpoints.Any(endpoint =>
+                    endpoint.Success && IsMappedPort(endpoint.Groups["port"].Value)
+                );
+        else
+            hasMappedLocalEndpoint = endpoints.Any(endpoint =>
+                endpoint.Success
+                && IsLoopback(endpoint.Groups["host"].Value)
+                && IsMappedPort(endpoint.Groups["port"].Value)
+            );
+        // Hostless PostgreSQL URLs have no assumed default port in this bounded model.
+        return true;
     }
 
     private static string ReplaceHost(string value, int start, int length) =>
@@ -337,9 +413,12 @@ public sealed partial class UserSecretsCopy
     private sealed record ConnectionField(string Key, int Start, int Length);
 
     // Keep source spans rather than rebuilding connection strings (quoting/order/credentials matter).
-    private static List<ConnectionField> ConnectionFields(string value, out bool complete)
+    private static List<ConnectionField> ConnectionFields(
+        string value,
+        out bool fullyParsedAndUnique
+    )
     {
-        complete = false;
+        fullyParsedAndUnique = false;
         var fields = new List<ConnectionField>();
         var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var duplicate = false;
@@ -411,7 +490,7 @@ public sealed partial class UserSecretsCopy
             }
             fields.Add(new ConnectionField(key, start, end - start));
         }
-        complete = !duplicate;
+        fullyParsedAndUnique = !duplicate;
         return fields;
     }
 
@@ -420,6 +499,12 @@ public sealed partial class UserSecretsCopy
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
     )]
     private static partial Regex UrlEndpoint();
+
+    [GeneratedRegex(
+        @"\Apostgres(?:ql)?://(?<authority>[^/?#]*)(?:[^?#]*)(?:\?(?<query>[^#]*))?(?:#.*)?\z",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant
+    )]
+    private static partial Regex PostgresUrl();
 
     [GeneratedRegex(
         @"\A(?<host>\[[^\]]+\]|[^:,]+):(?<port>[0-9]+)\z",
