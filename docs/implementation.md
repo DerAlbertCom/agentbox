@@ -474,7 +474,9 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   consumers beneath the `FolderConfig` location, excluding artifacts, escaping
   directory links and cycles. It never evaluates MSBuild. Selected project-local
   base/lowercase-development JSON is validated and merged case-insensitively;
-  only selected keys are retained. `PreparedUserSecrets` owns project originals
+  only selected keys are eligible for emission. Unfiltered appsettings metadata
+  is retained for recognized split-setting resolution; only selected secrets can
+  override it. `PreparedUserSecrets` owns project originals
   and association metadata in memory, separately from host snapshots, allowing
   project-only generation without a host secrets file.
   Unmatched stores remain copy-only. Unreadable project XML warns without blocking
@@ -558,8 +560,10 @@ first-name selection. See [supported forms, preservation and verification](user-
   justify rewriting `localhost:5432` to port 8004.
   Recognized mapped-local endpoints with unsafe/ambiguous supported syntax now
   fail actionably before writes, without values. Arbitrary/unmapped localhost
-  strings do not fail merely for mentioning localhost. Oracle/split settings are
-  separate follow-ups.
+  strings do not fail merely for mentioning localhost. The explicit
+  `Database_Config:Host` + `Database_Config:Port` pair uses resolved effective
+  metadata and changes only the host; see [split settings](user-secrets-split-settings.md).
+  Oracle remains a separate follow-up.
 - No host kit sources, staged descriptors, `/etc/hosts`, `host-port@1` or `sbx ports`
   are used. `sbx inspect` is insufficient for this inventory. Authorization is not
   proof of service availability or protection against later policy changes.
@@ -569,8 +573,10 @@ first-name selection. See [supported forms, preservation and verification](user-
 Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
 rewriting (#8), creation/replacement integration (#9) and URL/PostgreSQL
 appsettings-derived overrides (#13) are implemented through the shared copy flow.
-Shared-store generation is temporarily rejected; compatible merging/conflicts,
-Oracle and recognized split-setting support remain follow-ups under #12.
+Shared-store generation is temporarily rejected; compatible merging/conflicts
+and Oracle remain follow-ups under #12. Recognized `Database_Config` split-setting
+support (#16) is implemented through the same flow, with selected-key output and
+unfiltered appsettings-only metadata for eligibility.
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force

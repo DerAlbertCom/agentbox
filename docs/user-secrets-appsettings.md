@@ -130,8 +130,12 @@ a local host at an unmapped port. Remote/unmapped overrides are preserved rather
 than adapting the overridden authority. Hostless forms such as
 `postgresql:///db?host=localhost` or `postgresql:///db?hostaddr=127.0.0.1` without an
 explicit port remain unchanged: no default port is inferred for them.
-Oracle Easy Connect/descriptors and recognized split host/port settings are
-separate follow-ups, not supported by this generation feature.
+The explicit `Database_Config:Host` + `Database_Config:Port` pair is also supported:
+resolve both keys before eligibility and generate only the host override. Unselected
+appsettings port metadata can establish eligibility; filtered-out secrets never
+participate. See [recognized split settings](user-secrets-split-settings.md) for the
+exact supported shape, filters and safe-failure rules. Oracle Easy Connect/descriptors
+remain a separate follow-up.
 
 **Temporary fail-closed restriction:** if a store has multiple discovered project
 consumers, any generated override is rejected, even when both projects would

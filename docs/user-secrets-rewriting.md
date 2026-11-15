@@ -71,6 +71,10 @@ not arbitrary substring occurrences:
 - Connection-string field order, spacing, single/double quoting and doubled quote
   escapes in other fields are preserved. Semicolons inside quoted values do not
   split fields. Credentials and unrelated fields are never recursively rewritten.
+- The explicit structured `Database_Config:Host` + `Database_Config:Port` configuration
+  pair resolves base/development/selected secrets before eligibility and changes
+  only the Host key. This is not generic pairing of neighboring properties. See
+  [recognized split settings](user-secrets-split-settings.md).
 
 Recognized mapped-local endpoints that cannot be adapted unambiguously now fail
 before **any** destination write: malformed mapped-local URLs, multiple connection
@@ -79,9 +83,9 @@ unsupported brace syntax. Diagnostics name the store/key and, for generated
 values, project, but never include the value. `--force` does not bypass this.
 Named endpoints, undeclared ports and arbitrary strings always stay unchanged;
 merely containing `localhost` is not an error. Host aliases, nonliteral/shorthand
-loopback spellings, SQL named instances, Oracle descriptors/Easy Connect, split
-host/port settings, embedded prose/JSON and relative URLs are outside the supported
-shapes. Oracle and explicitly recognized split settings are separate follow-ups.
+loopback spellings, SQL named instances, Oracle descriptors/Easy Connect, arbitrary
+split host/port properties, embedded prose/JSON and relative URLs are outside the
+supported shapes. Oracle is a separate follow-up.
 This is deliberately not a generic connection-string normalizer. JSON whitespace,
 comments and escape spelling are not a preservation contract; transfer serializes
 the selected JSON tree and excludes skipped comments. Unchanged string contents

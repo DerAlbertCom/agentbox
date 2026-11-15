@@ -24,7 +24,11 @@ internal sealed class UserSecretSnapshot
     internal IReadOnlyDictionary<string, JsonElement> EffectiveLeaves { get; init; } =
         new Dictionary<string, JsonElement>();
 
-    internal static UserSecretSnapshot Parse(UserSecretSelection selection, string json)
+    internal static UserSecretSnapshot Parse(
+        UserSecretSelection selection,
+        string json,
+        bool applyFilters = true
+    )
     {
         var id = selection.Id;
         try
@@ -42,7 +46,7 @@ internal sealed class UserSecretSnapshot
             var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             var leaves = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
             ReadValues(document.RootElement, null, values, leaves, id);
-            if (selection.IsFiltered)
+            if (applyFilters && selection.IsFiltered)
             {
                 // Flat effective keys preserve array indices when earlier items are omitted.
                 var selected = leaves.Where(leaf => selection.Includes(leaf.Key)).ToDictionary();
