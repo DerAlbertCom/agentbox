@@ -52,7 +52,7 @@ public sealed class CreateCommand : Command
         var root = new Option<string>("--root")
         {
             Description =
-                "The directory of the project that holds the teams folder for --local. Defaults to the resolved location.",
+                "The directory to start searching for team sources with --local. Defaults to the resolved location.",
         };
 
         var local = new Option<bool>("--local")
@@ -91,12 +91,7 @@ public sealed class CreateCommand : Command
                         var settings = config.Value;
                         var selectedTag = parseResult.GetValue(tag) ?? settings.DefaultTag;
                         RegistryImageName.ValidateTag(selectedTag);
-                        var teamName =
-                            parseResult.GetValue(team)
-                            ?? settings.DefaultTeam
-                            ?? throw new AboxException(
-                                "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
-                            );
+                        var teamName = settings.ResolveTeam(parseResult.GetValue(team));
 
                         var resolvedLocation = settings.ResolveLocation(
                             parseResult.GetValue(location)

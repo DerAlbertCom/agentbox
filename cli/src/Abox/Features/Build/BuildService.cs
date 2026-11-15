@@ -8,7 +8,7 @@ namespace Abox.Features.Build;
 
 /// <summary>What to build.</summary>
 /// <param name="Teams">The teams to build, each with the squads a team build makes.</param>
-/// <param name="RootDirectory">The directory of the project that holds its teams folder.</param>
+/// <param name="RootDirectory">The discovery start directory, used when a team has no recorded owning project root.</param>
 /// <param name="Tag">The tag the builds are stored under.</param>
 /// <param name="Verify">Whether additional local kit declarations are checked with sbx.</param>
 /// <param name="IncludePersonalConfigurations">Whether personal .abox files are merged into this local build.</param>
@@ -46,7 +46,7 @@ public sealed class BuildService(
         {
             foreach (var squad in team.Squads)
             {
-                await BuildSquadAsync(team.Name, squad, request, cancellationToken);
+                await BuildSquadAsync(team, squad, request, cancellationToken);
             }
         }
 
@@ -54,7 +54,7 @@ public sealed class BuildService(
     }
 
     private async Task BuildSquadAsync(
-        string teamName,
+        SquadResolver.ResolvedTeam team,
         string squadName,
         BuildRequest request,
         CancellationToken cancellationToken
@@ -63,8 +63,13 @@ public sealed class BuildService(
         var personalFiles = request.IncludePersonalConfigurations
             ? personalConfigurations.Files
             : [];
-        var squad = resolver.Resolve(request.RootDirectory, teamName, squadName, personalFiles);
-        var buildDirectory = store.DirectoryFor(teamName, squad.Name, request.Tag);
+        var squad = resolver.Resolve(
+            team.RootDirectory ?? request.RootDirectory,
+            team.Name,
+            squadName,
+            personalFiles
+        );
+        var buildDirectory = store.DirectoryFor(team.Name, squad.Name, request.Tag);
 
         var workloadDirectory = Path.Combine(buildDirectory, WorkloadKitGenerator.KitName);
         workloadGenerator.Generate(squad.Workload, workloadDirectory);
@@ -79,7 +84,7 @@ public sealed class BuildService(
             stateGenerator.Generate(squad.State, stateDirectory);
         }
 
-        var manifest = Manifest(teamName, squad, request, workloadDirectory, stateDirectory);
+        var manifest = Manifest(team.Name, squad, request, workloadDirectory, stateDirectory);
         manifest.IncludesPersonalConfigurations = personalFiles.Count > 0;
         if (!request.IncludePersonalConfigurations)
         {
@@ -124,7 +129,7 @@ public sealed class BuildService(
             console.WriteLine($"Squad '{squad.Name}' built as '{request.Tag}'.");
         }
         console.WriteLine(
-            $"Create a sandbox from {(request.MetadataOnly ? "the matching published set" : "it")} with: abox create --team {teamName} --squad {squad.Name} --tag {request.Tag}{(request.MetadataOnly ? "" : " --local")}"
+            $"Create a sandbox from {(request.MetadataOnly ? "the matching published set" : "it")} with: abox create --team {team.Name} --squad {squad.Name} --tag {request.Tag}{(request.MetadataOnly ? "" : " --local")}"
         );
     }
 

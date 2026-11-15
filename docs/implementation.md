@@ -352,6 +352,18 @@ The same user configuration also accepts:
 - `teamsDirectory`: the project's teams directory, `teams` by default.
 - `kitsDirectory`: the kits directory relative to the project root, `kits` by default.
 
+Source discovery searches the start directory and its parents. `build`, `publish`
+and `secrets` start at the current directory; local `create` starts at its resolved
+location. An explicit `--root` overrides that start (local create only), with
+relative paths made absolute before parent search. The discovered team carries
+its owning project root into local kit/shared-workload lookup and build metadata;
+nested invocation directories never become accidental kit roots. Configured nested
+teams/kits directories, own-team-first base lookup, cross-team ambiguity checks
+and personal additions retain the same resolution rules. Team/default selection
+is shared in `AboxConfig`, preserving repeated teams for build/publish and single
+teams for create/secrets. Settings are still loaded only by command actions, not
+for help or internal exec/pipe commands.
+
 `--tag` chooses the published set or local build tag, `latest` by default.
 `--local` opts into local kits and includes their local/personal customizations.
 Pull failures are reported without a silent local fallback.
@@ -376,6 +388,16 @@ from this path, but the first thin build/layer transfer can still take time.
 Frontend resolution, registry-kit metadata and custom mixin recipes can still
 need network/build work; `--local` does not promise fully offline creation or
 prebuild arbitrary mixin recipes. The repository's mixins are declaration-only.
+
+`Kits/StateEntry` owns the shared portable state-path and overlap rules for `.abox`
+resolution, consumed local manifests and bundled published metadata. Creation
+validates the entire stored state list before MCP lookup/registration, state
+directory preparation or sandbox replacement, then mounts only those validated
+entries. Stored paths must be canonical and retain their original derived host
+mapping; they are not repaired on consumption. Sandbox overlap and portable
+host-mapping overlap (including case and Unicode-normalization aliases) are both
+rejected. Valid home-relative, absolute and whole-home mappings retain their
+existing persistence layout. See [the state input rules and mapping examples](authoring.md#state).
 
 Remote create instead consumes the published set's already built/processed
 workload and mixin layers and their merged v3 declarations. It does not pass
