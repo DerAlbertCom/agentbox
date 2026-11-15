@@ -6,6 +6,7 @@ using Abox.Kits;
 using Abox.LocalState;
 using Abox.Sandboxes;
 using Abox.Sbx;
+using Abox.UserSecrets;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -47,6 +48,9 @@ public sealed class CreateCommandTests
         (await InvokeAsync(command, ["--team", "mti-ca"])).Should().Be(1);
 
         _console.AllText.Should().Contain("requires --squad").And.NotContain("There is no team");
+        _sbx.ReceivedCalls()
+            .Should()
+            .BeEmpty("missing selection must fail before preflight as before");
         await _sbx.DidNotReceive()
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
     }
@@ -273,7 +277,8 @@ public sealed class CreateCommandTests
                     _sbx,
                     _console,
                     new LocalSquadSource(store, LocalWorkloadTest.Images(), _console),
-                    new RemoteSquadSource(config, _sbx, PublishedSquadTest.Source())
+                    new RemoteSquadSource(config, _sbx, PublishedSquadTest.Source()),
+                    new UserSecretsCopy(config, new UserSecretsHost(null, null), _sbx)
                 )
             ),
             _console

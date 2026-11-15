@@ -16,6 +16,30 @@ public sealed class FolderConfig
     public string? Squad { get; }
     public IReadOnlyList<UserSecretSelection> UserSecrets { get; }
 
+    /// <summary>The folder selects the squad; an explicit matching selection is allowed.</summary>
+    public string? SelectSquad(string? explicitSquad)
+    {
+        if (
+            Squad is not null
+            && explicitSquad is not null
+            && !Squad.Equals(explicitSquad, StringComparison.OrdinalIgnoreCase)
+        )
+            throw new AboxException(
+                "The selected squad conflicts with 'squad' in abox.json. Use the folder's squad or update abox.json before creating or replacing its sandbox."
+            );
+        return Squad ?? explicitSquad;
+    }
+
+    /// <summary>Do not open or copy to a sandbox whose recorded squad differs or is unknown.</summary>
+    public void EnsureSandboxSquad(string? recordedSquad)
+    {
+        if (Squad is not null && string.IsNullOrWhiteSpace(recordedSquad))
+            throw new AboxException(
+                "Cannot verify the sandbox's squad against abox.json. Create it with abox create for this folder before opening it or copying user secrets."
+            );
+        SelectSquad(recordedSquad);
+    }
+
     /// <summary>Missing configuration is a no-op for lifecycle callers.</summary>
     public static async Task<FolderConfig?> LoadAsync(
         string location,

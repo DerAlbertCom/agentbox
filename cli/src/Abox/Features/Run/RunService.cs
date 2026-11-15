@@ -51,15 +51,17 @@ public sealed class RunService(
 
         var location = Path.GetFullPath(request.Location);
         var name = SandboxName.For(location);
+        var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
 
         var sandbox = await sbx.FindSandboxAsync(name, cancellationToken);
         if (sandbox is null)
         {
             console.WriteError($"There is no sandbox for '{location}'.");
-            console.WriteError($"Create it with: {CreateCommandFor(name, location)}");
+            console.WriteError($"Create it with: {CreateCommandFor(name, location, folderConfig)}");
             return 1;
         }
 
+        folderConfig?.EnsureSandboxSquad(records.Load(name)?.Squad);
         if (!await ReplaceWithANewerBuildAsync(name, location, cancellationToken))
         {
             return 1;
@@ -76,7 +78,7 @@ public sealed class RunService(
                 $"The image of '{name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
             );
             console.WriteError(
-                $"Create the sandbox again for this folder: {CreateCommandFor(name, location)}"
+                $"Create the sandbox again for this folder: {CreateCommandFor(name, location, folderConfig)}"
             );
             return 1;
         }
@@ -93,10 +95,11 @@ public sealed class RunService(
         return await launcher.RunAsync(context, cancellationToken);
     }
 
-    private string CreateCommandFor(string name, string location)
+    private string CreateCommandFor(string name, string location, FolderConfig? folderConfig)
     {
         var record = records.Load(name);
-        var squad = string.IsNullOrWhiteSpace(record?.Squad) ? null : record.Squad;
+        var squad =
+            folderConfig?.Squad ?? (string.IsNullOrWhiteSpace(record?.Squad) ? null : record.Squad);
         var tag = string.IsNullOrWhiteSpace(record?.Tag) ? config.DefaultTag : record.Tag;
         var manifest =
             record is { KitReference: null } && squad is not null ? store.Load(squad, tag) : null;
