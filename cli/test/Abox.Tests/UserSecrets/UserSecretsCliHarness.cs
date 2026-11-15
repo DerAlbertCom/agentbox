@@ -74,6 +74,15 @@ internal sealed class UserSecretsCliHarness : IDisposable
                 Arg.Any<CancellationToken>()
             );
 
+    public string Written(string id) =>
+        (string)
+            Sbx.ReceivedCalls()
+                .Single(call =>
+                    call.GetMethodInfo().Name == nameof(ISbxClient.WriteUserSecretsAsync)
+                    && (string)call.GetArguments()[1]! == id
+                )
+                .GetArguments()[2]!;
+
     public void Dispose()
     {
         provider?.Dispose();
