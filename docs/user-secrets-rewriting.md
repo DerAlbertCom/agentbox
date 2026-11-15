@@ -136,8 +136,10 @@ rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac@sha256:ae9c32114207
 ```
 
 Verified 2026-11-15 with sbx v0.51.0 in task-owned
-`abox-issue8-8648cd68` (local/nonempty) and `abox-issue8-b8d658ce`
-(digest-pinned published/empty). The production `RewriteProbe` passed exact
+`abox-issue8-8648cd68` / `abox-issue8-f965ae54` (local/nonempty) and
+`abox-issue8-b8d658ce` / `abox-issue8-b405fad7` (digest-pinned published/empty).
+The second pair included the integrated filtering/lifecycle/security fixes and
+checked rewritten-key reporting. The production `RewriteProbe` passed exact
 inventory/effective-authorization checks, original-value denial, expected copied
 bytes, SQL/URI rewriting or empty-inventory preservation, named/unmapped endpoint
 preservation, unchanged host bytes and application-user 0700/0600 modes in both.
@@ -145,3 +147,8 @@ Verbose was enabled; no values or raw child diagnostics were printed. Both
 sandboxes were removed in `finally`. No actual host secret stores, existing user
 sandboxes, publications or global settings were touched. This proves metadata and
 copy behavior, not service connectivity or an untested published/nonempty policy.
+
+Repository verification uses **Debug tests only** for #8 (per the user's current
+instruction), plus the Release solution build, Debug probe build, CSharpier and
+`git diff --check`. Native Windows symlink regression tests explicitly skip when
+this host lacks link-creation privileges; they are not reported as passing.

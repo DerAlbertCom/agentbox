@@ -129,9 +129,15 @@ public sealed class SandboxCreator(
                 var report = await userSecrets.CopyAsync(preparedSecrets, name, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
                 foreach (var store in report.Stores)
+                {
                     console.WriteLine(
                         $"Copied user-secret store '{store.Id}': {store.KeyCount} keys."
                     );
+                    if (store.RewrittenKeyCount > 0)
+                        console.WriteLine(
+                            $"Rewrote user-secret store '{store.Id}': {store.RewrittenKeyCount} keys ({string.Join(", ", store.RewrittenKeys.Select(key => System.Text.Json.JsonSerializer.Serialize(key)))})."
+                        );
+                }
             }
             catch (OperationCanceledException)
             {

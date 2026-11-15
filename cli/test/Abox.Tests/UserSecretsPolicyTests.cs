@@ -192,6 +192,19 @@ public sealed class UserSecretsPolicyTests
         await fixture.Read.Should().ThrowAsync<OperationCanceledException>();
     }
 
+    [Fact]
+    public async Task PreCancelledDiscoveryDoesNotStartAChildProcess()
+    {
+        using var fixture = new PolicyFixture();
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+
+        var action = () => fixture.ReadAsync(cancelled.Token);
+
+        await action.Should().ThrowAsync<OperationCanceledException>();
+        fixture.Requests.Should().BeEmpty();
+    }
+
     private sealed class PolicyFixture : IDisposable
     {
         private readonly TempDirectory root = new();
@@ -254,10 +267,10 @@ public sealed class UserSecretsPolicyTests
         internal string? InventoryOverride { get; init; }
         internal string? Failure { get; init; }
         internal List<ProcessRequest> Requests { get; } = [];
-        internal Func<Task<IReadOnlyList<int>>> Read => ReadAsync;
+        internal Func<Task<IReadOnlyList<int>>> Read => () => ReadAsync();
 
-        internal Task<IReadOnlyList<int>> ReadAsync() =>
-            client.GetUserSecretsHostPortsAsync("synthetic-sandbox", CancellationToken.None);
+        internal Task<IReadOnlyList<int>> ReadAsync(CancellationToken token = default) =>
+            client.GetUserSecretsHostPortsAsync("synthetic-sandbox", token);
 
         public void Dispose() => root.Dispose();
     }

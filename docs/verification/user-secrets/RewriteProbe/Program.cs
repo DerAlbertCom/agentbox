@@ -76,6 +76,12 @@ try
     var prepared = await copy.PrepareAsync(folder, false, token);
     var report = await copy.CopyAsync(prepared, sandbox, token);
     Require(report.Stores.Count == 1 && report.Stores[0].KeyCount == 5);
+    Require(
+        report
+            .Stores[0]
+            .RewrittenKeys.SequenceEqual(nonempty ? ["Sql", "Url"] : Array.Empty<string>())
+    );
+    Require(report.Stores[0].RewrittenKeyCount == (nonempty ? 2 : 0) && !report.SafetyOverride);
     var expected = JsonSerializer.Serialize(
         new
         {

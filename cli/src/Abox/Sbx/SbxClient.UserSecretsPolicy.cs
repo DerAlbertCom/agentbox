@@ -58,6 +58,7 @@ public sealed partial class SbxClient
         CancellationToken cancellationToken
     )
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var result = await runner.RunAsync(
             new ProcessRequest(
                 ExecutableName,
@@ -66,6 +67,7 @@ public sealed partial class SbxClient
             ),
             cancellationToken
         );
+        cancellationToken.ThrowIfCancellationRequested();
         if (!result.Succeeded)
             throw new InvalidOperationException();
         return JsonDocument.Parse(result.StandardOutput);

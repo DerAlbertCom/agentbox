@@ -153,7 +153,9 @@ public sealed class UserSecretsRewriteTests
         fixture.Value("first", "Url").Should().Be("http://localhost:8004");
         fixture.Value("last", "Url").Should().Be("http://host.docker.internal:8006");
         fixture.CheckedPorts.Should().Equal(8004, 8006);
-        var firstWrite = fixture.Requests.FindIndex(request => request.StandardInput is not null);
+        var firstWrite = fixture.Requests.FindIndex(request =>
+            !string.IsNullOrEmpty(request.StandardInput)
+        );
         fixture
             .Requests.Take(firstWrite)
             .Count(request => request.Arguments[0] == "policy")
@@ -214,8 +216,12 @@ public sealed class UserSecretsRewriteTests
         var copy = () => fixture.CopyAsync(force: true);
         var exception = (await copy.Should().ThrowAsync<AboxException>()).Which;
 
-        fixture.Requests.Should().NotContain(request => request.StandardInput != null);
+        fixture
+            .Requests.Should()
+            .NotContain(request => !string.IsNullOrEmpty(request.StandardInput));
         exception.ToString().Should().NotContain("synthetic-password").And.NotContain("123456789");
+        if (!destination)
+            exception.Message.Should().Contain("policy ls").And.Contain("policy check");
     }
 
     [Fact]
@@ -301,6 +307,47 @@ public sealed class UserSecretsRewriteTests
         report.Stores.Select(store => store.KeyCount).Should().Equal(2, 2, 0);
     }
 
+    [Fact]
+    public async Task ReportsContainOnlyChangedEffectiveKeysAndKeepOriginalForceAccounting()
+    {
+        using var fixture = new CopyFixture(
+            config: new AboxConfig { UserSecretsDenyList = ["localhost"] }
+        );
+        fixture.UsePorts(8004);
+        fixture.Store(
+            "full",
+            """
+            {"Nested":{"Url":"http://localhost:8004/secret-path"},
+             "Nodes":["Server=127.0.0.1,8004;Password=synthetic-password"],
+             "Unmapped":"http://localhost:5432"}
+            """
+        );
+        fixture.Store(
+            "flat",
+            """{"Nested":{"Url":"http://localhost:8004"},"Named":"http://named.internal:8004"}"""
+        );
+        fixture.KeyPatterns["flat"] = ["Nested:*"];
+        fixture.Store("unchanged", """{"Url":"https://named.internal:8004"}""");
+
+        var report = await fixture.CopyAsync(force: true);
+
+        report
+            .SafetyOverride.Should()
+            .BeTrue(
+                "the original selected localhost values matched, even after rewriting hides them"
+            );
+        report.Stores[0].RewrittenKeys.Should().Equal("Nested:Url", "Nodes:0");
+        report.Stores[0].RewrittenKeyCount.Should().Be(2);
+        report.Stores[0].KeyCount.Should().Be(3);
+        report.Stores[1].RewrittenKeys.Should().Equal("Nested:Url");
+        report.Stores[2].RewrittenKeys.Should().BeEmpty();
+        report.ToString().Should().NotContain("secret-path").And.NotContain("synthetic-password");
+        string.Join(" ", report.Stores)
+            .Should()
+            .NotContain("secret-path")
+            .And.NotContain("synthetic-password");
+    }
+
     private static string RepositoryFile(string name)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -353,7 +400,7 @@ public sealed class UserSecretsRewriteTests
                             ""
                         );
                     }
-                    if (args[0] == "exec" && request.StandardInput is { } frame)
+                    if (args[0] == "exec" && request.StandardInput is { Length: > 0 } frame)
                     {
                         var payload = frame.IndexOf('\n', frame.IndexOf('\n') + 1) + 1;
                         written[args[^1]] = frame[payload..];

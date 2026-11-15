@@ -8,7 +8,12 @@ public sealed partial class UserSecretsCopy
 {
     // Target-specific discovery/rewriting belongs here, after original-value validation.
     // Prepare all target payloads before CopyAsync starts its first write.
-    private async Task<IReadOnlyList<UserSecretSnapshot>> PrepareTargetAsync(
+    private sealed record UserSecretsTargetStore(
+        UserSecretSnapshot Snapshot,
+        IReadOnlyList<string> RewrittenKeys
+    );
+
+    private async Task<IReadOnlyList<UserSecretsTargetStore>> PrepareTargetAsync(
         PreparedUserSecrets prepared,
         string sandbox,
         CancellationToken cancellationToken
@@ -17,7 +22,7 @@ public sealed partial class UserSecretsCopy
         var ports = (
             await sbx.GetUserSecretsHostPortsAsync(sandbox, cancellationToken)
         ).ToHashSet();
-        var targets = new List<UserSecretSnapshot>();
+        var targets = new List<UserSecretsTargetStore>();
         foreach (var store in prepared.Stores)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -26,11 +31,11 @@ public sealed partial class UserSecretsCopy
             using (var writer = new Utf8JsonWriter(stream))
                 WriteTarget(writer, store.Root, ports, rewritten);
             using var document = JsonDocument.Parse(stream.ToArray());
-            targets.Add(
+            var snapshot =
                 rewritten.Count == 0
                     ? store
-                    : new UserSecretSnapshot(store.Id, document.RootElement, store.Values)
-            );
+                    : new UserSecretSnapshot(store.Id, document.RootElement, store.Values);
+            targets.Add(new UserSecretsTargetStore(snapshot, rewritten.AsReadOnly()));
         }
         await sbx.ValidateUserSecretsDestinationAsync(
             sandbox,
