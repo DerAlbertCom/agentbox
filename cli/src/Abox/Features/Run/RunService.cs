@@ -54,9 +54,9 @@ public sealed class RunService(
         var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
 
         var sandbox = await sandboxes.FindAsync(location, cancellationToken);
-        var name = sandbox?.Name ?? SandboxName.For(location);
         if (sandbox is null)
         {
+            var name = SandboxName.For(location);
             console.WriteError($"There is no sandbox for '{location}'.");
             console.WriteError($"Create it with: {CreateCommandFor(name, location, folderConfig)}");
             return 1;
@@ -69,24 +69,24 @@ public sealed class RunService(
 
         foreach (var program in launcher.SandboxRequirements)
         {
-            if (await sbx.HasProgramAsync(name, program, cancellationToken))
+            if (await sbx.HasProgramAsync(sandbox.Name, program, cancellationToken))
             {
                 continue;
             }
 
             console.WriteError(
-                $"The image of '{name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
+                $"The image of '{sandbox.Name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
             );
             console.WriteError(
-                $"Create the sandbox again for this folder: {CreateCommandFor(name, location, folderConfig)}"
+                $"Create the sandbox again for this folder: {CreateCommandFor(sandbox.Name, location, folderConfig)}"
             );
             return 1;
         }
 
         var context = new LauncherContext(
             location,
-            name,
-            await WorkspaceOfAsync(name, location, cancellationToken),
+            sandbox.Name,
+            await WorkspaceOfAsync(sandbox.Name, location, cancellationToken),
             request.Argv,
             sbx,
             console

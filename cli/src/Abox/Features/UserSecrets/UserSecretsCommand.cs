@@ -45,14 +45,17 @@ public sealed class UserSecretsCommand : Command
                             ?? throw new AboxException(
                                 "No abox.json in this folder. Declare 'userSecrets' explicitly before copying."
                             );
-                        // Squad-qualified reads need the selected identity's trusted record first.
-                        // Otherwise retain host-only validation before contacting the runtime.
-                        var prepared = folderConfig.Squad is null
-                            ? await copy.Value.PrepareAsync(
+                        Task<PreparedUserSecrets> PrepareHostSecretsAsync() =>
+                            copy.Value.PrepareAsync(
                                 folderConfig,
                                 parseResult.GetValue(force),
                                 cancellationToken
-                            )
+                            );
+
+                        // Squad-qualified reads need the selected identity's trusted record first.
+                        // Otherwise retain host-only validation before contacting the runtime.
+                        var prepared = folderConfig.Squad is null
+                            ? await PrepareHostSecretsAsync()
                             : null;
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                             return 1;
@@ -63,11 +66,7 @@ public sealed class UserSecretsCommand : Command
                             );
                         if (folderConfig.Squad is not null)
                             folderConfig.EnsureSandboxSquad(records.Value.Load(sandbox)?.Squad);
-                        prepared ??= await copy.Value.PrepareAsync(
-                            folderConfig,
-                            parseResult.GetValue(force),
-                            cancellationToken
-                        );
+                        prepared ??= await PrepareHostSecretsAsync();
                         UserSecretsReport report;
                         try
                         {

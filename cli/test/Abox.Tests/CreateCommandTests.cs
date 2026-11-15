@@ -274,7 +274,7 @@ public sealed class CreateCommandTests
                 new SandboxCreator(
                     new SandboxRecordStore(paths),
                     paths,
-                    new SandboxResolver(_sbx, new ProcessRunner()),
+                    SandboxTest.Resolver(_sbx),
                     _sbx,
                     _console,
                     new LocalSquadSource(store, LocalWorkloadTest.Images(), _console),

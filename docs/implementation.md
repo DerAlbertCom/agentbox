@@ -200,7 +200,9 @@ Current naming and effective-location precedence are unchanged. No fuzzy/prefix 
 workspace-metadata matching is used; both-present inventories select the current
 candidate without touching the legacy one.
 
-`Naming/LegacySandboxName` isolates the historical contract, verified against
+`Naming/LegacySandboxName` keeps sanitization and hashing pure; `SandboxResolver`
+privately resolves the historical real path before calling it. The contract is
+verified against
 cape-agent-sandbox `1512ff71c31c6bfa7e923a43683c6d80624c40d0`:
 
 - Sanitize the original leaf before case conversion: non-ASCII-letter/digit/underscore/

@@ -397,12 +397,8 @@ public sealed class LegacySandboxCompatibilityTests
     public async Task RunReusesTheExactLegacySandboxWithoutCreatingOrAdoptingIt(string status)
     {
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
-        var location = OperatingSystem.IsWindows()
-            ? @"C:\__agentbox_legacy_fixtures__\Case_Name"
-            : "/__agentbox_legacy_fixtures__/Case_Name";
-        var name = OperatingSystem.IsWindows()
-            ? "case_name-ai-sbx-cca0eb"
-            : "case_name-ai-sbx-e479dd";
+        var location = LegacySandboxFixture.Location;
+        var name = LegacySandboxFixture.Name;
         cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, status, null));
         cli.Sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>())

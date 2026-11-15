@@ -19,7 +19,7 @@ public sealed class LegacySandboxInventoryTests
     )
     {
         using var cli = new UserSecretsCliHarness(
-            new AboxConfig { DefaultLocation = Location },
+            new AboxConfig { DefaultLocation = LegacySandboxFixture.Location },
             existingSandbox: false
         );
         var other = OperatingSystem.IsWindows()
@@ -28,8 +28,8 @@ public sealed class LegacySandboxInventoryTests
         var otherName = OperatingSystem.IsWindows()
             ? "case_name-ai-sbx-0c1bf5"
             : "case_name-ai-sbx-e14841";
-        cli.Sbx.FindSandboxAsync(LegacyName, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(LegacyName, "running", null));
+        cli.Sbx.FindSandboxAsync(LegacySandboxFixture.Name, Arg.Any<CancellationToken>())
+            .Returns(new SandboxInfo(LegacySandboxFixture.Name, "running", null));
         cli.Sbx.FindSandboxAsync(otherName, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(otherName, "running", null));
 
@@ -41,7 +41,7 @@ public sealed class LegacySandboxInventoryTests
             .Sbx.Received(1)
             .ExecAsync(
                 Arg.Is<SbxExecRequest>(request =>
-                    request.Sandbox == (explicitLocation ? otherName : LegacyName)
+                    request.Sandbox == (explicitLocation ? otherName : LegacySandboxFixture.Name)
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -51,7 +51,7 @@ public sealed class LegacySandboxInventoryTests
     public async Task PruneStillUsesActualInventoryNamesWithoutLocationResolution()
     {
         using var cli = new UserSecretsCliHarness();
-        string[] names = [cli.Name, LegacyName, "unrelated-running-sandbox"];
+        string[] names = [cli.Name, LegacySandboxFixture.Name, "unrelated-running-sandbox"];
         cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
             .Returns(names.Select(name => new SandboxInfo(name, "running", null)).ToList());
         cli.Sbx.ListTemplatesAsync(Arg.Any<CancellationToken>())
@@ -71,13 +71,6 @@ public sealed class LegacySandboxInventoryTests
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    private static string Location =>
-        OperatingSystem.IsWindows()
-            ? @"C:\__agentbox_legacy_fixtures__\Case_Name"
-            : "/__agentbox_legacy_fixtures__/Case_Name";
-    private static string LegacyName =>
-        OperatingSystem.IsWindows() ? "case_name-ai-sbx-cca0eb" : "case_name-ai-sbx-e479dd";
-
     [Theory]
     [InlineData(true, false)]
     [InlineData(false, true)]
@@ -89,15 +82,15 @@ public sealed class LegacySandboxInventoryTests
     )
     {
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
-        var preferred = SandboxName.For(Location);
+        var preferred = SandboxName.For(LegacySandboxFixture.Location);
         var names = new List<string>
         {
-            LegacyName + "-other",
+            LegacySandboxFixture.Name + "-other",
             "Case_Name",
             "custom-workspace-name",
         };
         if (legacy)
-            names.Add(LegacyName);
+            names.Add(LegacySandboxFixture.Name);
         if (current)
             names.Add(preferred);
         var inventory = JsonSerializer.Serialize(
@@ -105,12 +98,14 @@ public sealed class LegacySandboxInventoryTests
             {
                 name,
                 status = "running",
-                workspaces = new[] { Location },
+                workspaces = new[] { LegacySandboxFixture.Location },
             })
         );
         var requests = UseRealSbx(cli, _ => new ProcessResult(0, inventory, ""));
 
-        (await cli.Invoke("run", "--location", Location)).Should().Be(current || legacy ? 0 : 1);
+        (await cli.Invoke("run", "--location", LegacySandboxFixture.Location))
+            .Should()
+            .Be(current || legacy ? 0 : 1);
 
         var executions = requests
             .Where(request => request.FileName == "sbx" && request.Arguments[0] == "exec")
@@ -119,7 +114,7 @@ public sealed class LegacySandboxInventoryTests
             executions
                 .Should()
                 .OnlyContain(request =>
-                    request.Arguments.Contains(current ? preferred : LegacyName)
+                    request.Arguments.Contains(current ? preferred : LegacySandboxFixture.Name)
                 );
         else
         {
@@ -158,7 +153,7 @@ public sealed class LegacySandboxInventoryTests
                     : new ProcessResult(exit, output, error)
         );
 
-        (await cli.Invoke("run", "--location", Location)).Should().Be(1);
+        (await cli.Invoke("run", "--location", LegacySandboxFixture.Location)).Should().Be(1);
 
         count.Should().Be(legacyLookup ? 2 : 1);
         cli.Console.AllText.Should().Contain("sbx ls").And.NotContain("Create it with");
@@ -179,13 +174,13 @@ public sealed class LegacySandboxInventoryTests
         cli.Provider.GetRequiredService<TrailingArguments>().Values = ["echo", "hello"];
         cli.Sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(23);
 
-        (await cli.Invoke(command, LegacyName)).Should().Be(23);
+        (await cli.Invoke(command, LegacySandboxFixture.Name)).Should().Be(23);
 
         await cli
             .Sbx.Received(1)
             .ExecAsync(
                 Arg.Is<SbxExecRequest>(request =>
-                    request.Sandbox == LegacyName
+                    request.Sandbox == LegacySandboxFixture.Name
                     && request.KeepStandardInputOpen == (command == "pipe")
                 ),
                 Arg.Any<CancellationToken>()

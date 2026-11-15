@@ -67,6 +67,30 @@ including `--yes`, retained name/state and post-create copying.
 
 ## Commands and execution limits
 
+### Review-stage standards cleanup
+
+The four minor standards suggestions were addressed without changing the approved
+CLI seam or adding behavior:
+
+- On-demand copying names its shared host-preparation phase once. Unqualified
+  validation remains before runtime access; squad-qualified host reads still wait
+  for the selected identity's trusted record. Missing `abox.json` still fails first.
+- Run computes a current-name suggestion only in its missing-sandbox branch, then
+  uses `sandbox.Name` throughout the existing-sandbox path. No creator change is
+  needed: `existing?.Name ?? SandboxName.For(location)` already short-circuits,
+  deriving a new name only when no existing sandbox was selected.
+- Historical real-path I/O now lives privately in `SandboxResolver`; naming retains
+  only pure sanitization/hash logic. Windows final-link and Unix physical/fallback
+  behavior is unchanged, with no new public interface or general path abstraction.
+- `SandboxTest.Resolver` shares existing service-test construction, and
+  `LegacySandboxFixture` shares the independently sourced literal identity across
+  the three compatibility suites. No command coverage or historical fixture case
+  was removed, and expected legacy identities never call the production helper.
+
+This is review-stage refactoring, not a new red/green feature slice. The focused
+run covering compatibility, on-demand command/filtering/lifecycle, create command/
+service and run service tests passed **260 tests** both before and after the edits.
+
 Use the Microsoft.Testing.Platform/xUnit syntax configured by this repository:
 
 ```sh
@@ -78,9 +102,9 @@ dotnet csharpier check cli
 git diff --check
 ```
 
-Final Debug suite: **796 passed, 4 explicit native-Windows-symlink-privilege skips,
+Final post-review Debug suite: **796 passed, 4 explicit native-Windows-symlink-privilege skips,
 800 total, zero failures**. Debug and Release solution builds both completed with
-**zero warnings/errors**. CSharpier checked all 157 C# files; `git diff --check`
+**zero warnings/errors**. CSharpier checked all 159 C# files; `git diff --check`
 passed. The focused compatibility suite contains 43 Windows-host cases.
 
 Execution is on a native Windows host. The Windows junction case needs no symlink
@@ -90,3 +114,7 @@ definitions and implementation are not independent Unix-host execution evidence.
 No live sbx sandbox, real host secret, registry, persistent global setting or Herdr
 registration was changed. Port-command acceptance remains with #3; compatibility
 does not implement forwarding or broaden discovery to arbitrary custom names.
+Current and fallback lookups can read separate inventory snapshots; discovery is
+not atomic against concurrent runtime changes. Lookup derives one exact historical
+candidate from the effective path spelling, not every alternative historical
+trailing-separator spelling.

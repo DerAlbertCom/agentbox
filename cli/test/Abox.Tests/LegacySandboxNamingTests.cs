@@ -12,9 +12,9 @@ public sealed class LegacySandboxNamingTests
         OperatingSystem.IsWindows()
             ?
             [
-                [@"C:\__agentbox_legacy_fixtures__\Case_Name", "case_name-ai-sbx-cca0eb"],
+                [LegacySandboxFixture.Location, LegacySandboxFixture.Name],
                 [@"c:\__agentbox_legacy_fixtures__\case_name", "case_name-ai-sbx-0c1bf5"],
-                ["C:/__agentbox_legacy_fixtures__/Case_Name", "case_name-ai-sbx-cca0eb"],
+                ["C:/__agentbox_legacy_fixtures__/Case_Name", LegacySandboxFixture.Name],
                 [@"C:\__agentbox_legacy_fixtures__\Case_Name\", "case_name-ai-sbx-c1b1cb"],
                 [@"C:\__agentbox_legacy_fixtures__\--Dot.Name!--", "dot-name-ai-sbx-3fbc82"],
                 [@"C:\__agentbox_legacy_fixtures__\!!!", "root-ai-sbx-6a57d6"],
@@ -23,7 +23,7 @@ public sealed class LegacySandboxNamingTests
             ]
             :
             [
-                ["/__agentbox_legacy_fixtures__/Case_Name", "case_name-ai-sbx-e479dd"],
+                [LegacySandboxFixture.Location, LegacySandboxFixture.Name],
                 ["/__agentbox_legacy_fixtures__/case_name", "case_name-ai-sbx-e14841"],
                 ["/__agentbox_legacy_fixtures__/Case_Name/", "case_name-ai-sbx-7c41da"],
                 ["/__agentbox_legacy_fixtures__/--Dot.Name!--", "dot-name-ai-sbx-99b218"],
