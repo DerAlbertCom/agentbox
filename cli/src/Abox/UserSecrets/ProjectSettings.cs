@@ -223,7 +223,8 @@ internal sealed class ProjectSettings(
         CancellationToken cancellationToken
     )
     {
-        directory = ResolveDirectory(directory);
+        cancellationToken.ThrowIfCancellationRequested();
+        // The root and each parent are already resolved; ordinary children reuse that ancestry.
         var relative = Path.GetRelativePath(root, directory);
         if (
             Path.IsPathRooted(relative)
@@ -254,7 +255,10 @@ internal sealed class ProjectSettings(
             cancellationToken.ThrowIfCancellationRequested();
             if (IsExcludedDirectory(Path.GetFileName(child)))
                 continue;
-            foreach (var path in ProjectFiles(root, child, visited, cancellationToken))
+            var target = new DirectoryInfo(child).ResolveLinkTarget(true);
+            // Link targets can contain linked ancestors; resolve those before containment checks.
+            var resolvedChild = target is null ? child : ResolveDirectory(target.FullName);
+            foreach (var path in ProjectFiles(root, resolvedChild, visited, cancellationToken))
                 yield return path;
         }
     }
