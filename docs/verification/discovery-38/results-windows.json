@@ -1,0 +1,25 @@
+{
+  "baseline": "7e37db305f96b75494802e30b9dfc4aa42a260d8",
+  "candidate": "6145ab0a2f85c3a19482956e4c4e8ef6b8bf8769",
+  "sdk": "11.0.100",
+  "runtime": ".NET 10.0.15",
+  "platform": "Microsoft Windows 10.0.26200",
+  "architecture": "X64",
+  "directories": 12776,
+  "projects": 430,
+  "fingerprint": "1C9490DFA9FBD80AC9526C1F1B3537C7C2013C1FD5CA228286A043639478D892",
+  "exclusions": [".git", "bin", "obj"],
+  "sameProjectSetEveryRun": true,
+  "timings": [
+    { "iteration": 1, "implementation": "baseline", "milliseconds": 13218.5069 },
+    { "iteration": 1, "implementation": "candidate", "milliseconds": 2841.9689 },
+    { "iteration": 2, "implementation": "candidate", "milliseconds": 3308.4946 },
+    { "iteration": 2, "implementation": "baseline", "milliseconds": 16025.8223 },
+    { "iteration": 3, "implementation": "baseline", "milliseconds": 17868.1906 },
+    { "iteration": 3, "implementation": "candidate", "milliseconds": 3888.9907 },
+    { "iteration": 4, "implementation": "candidate", "milliseconds": 3266.43 },
+    { "iteration": 4, "implementation": "baseline", "milliseconds": 16854.7708 },
+    { "iteration": 5, "implementation": "baseline", "milliseconds": 16383.0383 },
+    { "iteration": 5, "implementation": "candidate", "milliseconds": 3493.6935 }
+  ]
+}

@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$ScratchRoot,
     [string]$BaselineRevision = '7e37db305f96b75494802e30b9dfc4aa42a260d8',
-    [string]$CandidateRevision = 'HEAD'
+    [string]$CandidateRevision = '6145ab0a2f85c3a19482956e4c4e8ef6b8bf8769'
 )
 
 $ErrorActionPreference = 'Stop'

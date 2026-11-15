@@ -28,10 +28,10 @@ try
         Directory.CreateDirectory(path);
         File.WriteAllText(Path.Combine(path, $"Project{project:D3}.csproj"), "<Project />");
     }
-    for (var branch = 0; branch < 400; branch++)
+    for (var branch = 0; branch < 100; branch++)
     {
         var path = Path.Combine(snapshot, "node_modules", $"package-{branch:D3}");
-        for (var depth = 0; depth < 10; depth++)
+        for (var depth = 0; depth < 8; depth++)
         {
             path = Path.Combine(path, $"level-{depth}");
             for (var leaf = 0; leaf < 10; leaf++)
@@ -54,6 +54,7 @@ try
         );
 
     // Warm both implementations on the very same snapshot before alternating measured order.
+    Console.Error.WriteLine("Synthetic snapshot created; warming both discovery implementations.");
     var expected = baseline.Run(snapshot);
     CheckEquivalent(expected, candidate.Run(snapshot));
     var timings = new List<object>();
@@ -68,6 +69,9 @@ try
             var watch = Stopwatch.StartNew();
             var projects = discovery.Run(snapshot);
             watch.Stop();
+            Console.Error.WriteLine(
+                $"{name} discovery sample {iteration + 1}: {watch.Elapsed.TotalMilliseconds:F3} ms"
+            );
             CheckEquivalent(expected, projects);
             timings.Add(
                 new

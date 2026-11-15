@@ -30,7 +30,8 @@ aggregate JSON results there. The generated synthetic snapshot is deleted by the
 probe in `finally`. Nothing under an existing snapshot path is accepted or deleted.
 The script exports committed Git revisions (uncommitted edits are not measured).
 `-BaselineRevision` defaults to integration base
-`7e37db305f96b75494802e30b9dfc4aa42a260d8`; `-CandidateRevision` defaults to `HEAD`.
+`7e37db305f96b75494802e30b9dfc4aa42a260d8`; `-CandidateRevision` defaults to the
+isolated #38 implementation `6145ab0a2f85c3a19482956e4c4e8ef6b8bf8769`.
 When later testing a branch with #39's independent exclusion change, choose the
 isolated #38 implementation commit recorded in the results rather than attributing
 that exclusion gain to ancestry reuse. The probe fails if the exclusion policies
@@ -47,7 +48,7 @@ authorization and transfers. Path normalization/sorting is included identically 
 both timings. Only counts, relative-project-set SHA-256 and timings are emitted.
 
 The deterministic synthetic broad workspace has 430 ordinary projects under eight
-nested directory levels, 400 dependency branches under `node_modules` (ten levels,
+nested directory levels, 100 dependency branches under `node_modules` (eight levels,
 ten leaf directories per level), and excluded `.git`/`bin`/`obj` sentinel projects.
 Both implementations include the dependency directories in the traversal. Both use
 the very same snapshot in the same process, each with a fresh visited set each run.
