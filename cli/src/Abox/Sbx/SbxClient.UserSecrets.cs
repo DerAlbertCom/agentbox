@@ -42,23 +42,23 @@ public sealed partial class SbxClient
         ProcessResult result;
         try
         {
-            var arguments = new List<string>
-            {
-                "exec",
-                "-i",
+            var arguments = new List<string> { "exec" };
+            if (frame is not null)
+                arguments.Add("-i");
+            arguments.AddRange([
                 sandbox,
                 "sh",
                 "-c",
                 UserSecretsReceiver,
                 "abox-user-secrets",
                 mode,
-            };
+            ]);
             arguments.AddRange(ids);
             result = await runner.RunAsync(
                 new ProcessRequest(
                     ExecutableName,
                     arguments,
-                    StandardInput: frame,
+                    StandardInput: frame ?? string.Empty,
                     OutputPolicy: ProcessOutputPolicy.Sensitive
                 ),
                 cancellationToken

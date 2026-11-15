@@ -226,11 +226,13 @@ public sealed class UserSecretsTransportTests
 
     // The approved process seam executes the actual captured receiver against a
     // disposable application-user filesystem, not a second implementation of it.
-    private sealed class ShellSandbox : IProcessRunner, IDisposable
+    internal sealed class ShellSandbox : IProcessRunner, IDisposable
     {
-        private readonly TempDirectory root = new();
+        private static readonly Lazy<string?> Shell = new(FindShell);
+        private readonly TempDirectory root;
         private readonly bool appData;
         public SbxClient Client { get; }
+        public string RootPath => root.Path;
         public string SecretsRoot { get; }
         public string StorePath => Path.Combine(SecretsRoot, "synthetic", "secrets.json");
         public Func<string, string>? Frame { get; set; }
@@ -238,6 +240,12 @@ public sealed class UserSecretsTransportTests
 
         public ShellSandbox(bool appData)
         {
+            if (Shell.Value is null)
+                throw new InvalidOperationException(
+                    Xunit.v3.DynamicSkipToken.Value
+                        + "Receiver tests require a non-root POSIX shell with GNU coreutils (Git Bash on Windows, discovered from git on PATH)."
+                );
+            root = new TempDirectory();
             this.appData = appData;
             root.Directory_("appdata");
             root.Directory_("home");
@@ -253,20 +261,14 @@ public sealed class UserSecretsTransportTests
             CancellationToken cancellationToken
         )
         {
-            var shell = OperatingSystem.IsWindows() ? @"C:\Program Files\Git\bin\bash.exe" : "sh";
             var start = request.Arguments.ToList().IndexOf("-c");
             var script =
                 BeforeReceiver + (appData ? "" : "unset APPDATA\n") + request.Arguments[start + 1];
-            var environment = new Dictionary<string, string>
-            {
-                ["HOME"] = UnixPath(Path.Combine(root.Path, "home")),
-                ["APPDATA"] = UnixPath(Path.Combine(root.Path, "appdata")),
-            };
             return new ProcessRunner().RunAsync(
                 new ProcessRequest(
-                    shell,
+                    Shell.Value!,
                     ["-c", script, .. request.Arguments.Skip(start + 2)],
-                    Environment: environment,
+                    Environment: ShellEnvironment,
                     StandardInput: request.StandardInput is { } frame
                         ? Frame?.Invoke(frame) ?? frame
                         : null,
@@ -274,6 +276,79 @@ public sealed class UserSecretsTransportTests
                 ),
                 cancellationToken
             );
+        }
+
+        public Task<ProcessResult> RunShellAsync(string script) =>
+            new ProcessRunner().RunAsync(
+                new ProcessRequest(
+                    Shell.Value!,
+                    ["-c", script],
+                    WorkingDirectory: root.Path,
+                    Environment: ShellEnvironment,
+                    StandardInput: ""
+                ),
+                CancellationToken.None
+            );
+
+        private Dictionary<string, string> ShellEnvironment =>
+            new()
+            {
+                ["HOME"] = UnixPath(Path.Combine(root.Path, "home")),
+                ["APPDATA"] = UnixPath(Path.Combine(root.Path, "appdata")),
+            };
+
+        private static string? FindShell()
+        {
+            IEnumerable<string> candidates = ["sh"];
+            if (OperatingSystem.IsWindows())
+                candidates = (Environment.GetEnvironmentVariable("PATH") ?? "")
+                    .Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries)
+                    .Where(directory => File.Exists(Path.Combine(directory, "git.exe")))
+                    .SelectMany(directory =>
+                        new[]
+                        {
+                            directory,
+                            Path.Combine(directory, ".."),
+                            Path.Combine(directory, "../.."),
+                        }
+                    )
+                    .SelectMany(directory =>
+                        new[]
+                        {
+                            Path.Combine(directory, "bin/bash.exe"),
+                            Path.Combine(directory, "usr/bin/bash.exe"),
+                        }
+                    )
+                    .Select(Path.GetFullPath)
+                    .Where(File.Exists)
+                    .Distinct(StringComparer.OrdinalIgnoreCase);
+            foreach (var candidate in candidates)
+                try
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                    var result = new ProcessRunner()
+                        .RunAsync(
+                            new ProcessRequest(
+                                candidate,
+                                [
+                                    "-c",
+                                    "command -v stat mktemp sha256sum mv wc tr cut grep id chmod cat mkdir rm >/dev/null && [ \"$(id -u)\" -ne 0 ] && stat -c %u . >/dev/null 2>&1",
+                                ],
+                                StandardInput: ""
+                            ),
+                            timeout.Token
+                        )
+                        .GetAwaiter()
+                        .GetResult();
+                    if (result.Succeeded)
+                        return candidate;
+                }
+                catch (Exception exception)
+                    when (exception is AboxException or OperationCanceledException)
+                {
+                    // Report an explicit test skip if no compatible application-user shell is available.
+                }
+            return null;
         }
 
         private static string UnixPath(string path) =>

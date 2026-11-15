@@ -354,10 +354,16 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   effective case-insensitive .NET keys, then checks all selected **original**
   values. It makes no sandbox calls/writes. The returned `PreparedUserSecrets` is
   opaque, in-memory and has a value-free `ToString`; reports contain IDs/counts only.
+  `SafetyOverride` on the prepared snapshot/report means at least one selected
+  original value actually matched the deny list and was allowed by `--force`, not
+  merely that the flag was supplied. The on-demand warning uses the successful
+  copy report; lifecycle callers should retain those semantics.
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
   before writing. `UserSecretsCopy.Target.cs` is the location for #8's supported
   policy discovery and transformation, returning target snapshots without changing
-  originals or the deny decision. No hook framework or alternate pipeline is needed.
+  originals or the deny decision. Only parsed JSON data is serialized for transfer:
+  skipped comments and trailing commas must not survive as unscanned payload text.
+  No hook framework or alternate pipeline is needed.
   The internal snapshot constructor clones the supplied JSON root; #8 can retain
   `store.Values` as the selected original values alongside a transformed root.
 - `SbxClient.UserSecrets.cs` owns captured default-user exec, environment/path checks
@@ -367,6 +373,8 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   required. Secret root/store directories are 0700, files 0600. It does not assume
   `/home/agent` or run as root. The host adapter and receiver both prefer APPDATA
   over HOME, even on Unix, and reject unusable environment roots rather than guess.
+  Destination checks omit `exec -i` and explicitly close an empty redirected stdin;
+  they cannot consume or forward host stdin.
 
 Validation atomicity is all-store; transport atomicity is per-file. Failures report
 completed counts and safe retry, never promise rollback or confirmation after lost

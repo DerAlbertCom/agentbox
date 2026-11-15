@@ -55,10 +55,6 @@ public sealed class UserSecretsCommand : Command
                             parseResult.GetValue(force),
                             cancellationToken
                         );
-                        if (prepared.SafetyOverride)
-                            console.WriteLine(
-                                "Safety override used (--force): only the value deny list was bypassed."
-                            );
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                             return 1;
                         var sandbox = SandboxName.For(folder);
@@ -82,6 +78,10 @@ public sealed class UserSecretsCommand : Command
                             );
                             throw;
                         }
+                        if (report.SafetyOverride)
+                            console.WriteLine(
+                                "Warning: Safety override used (--force): selected original values matched the global deny list; copy completed."
+                            );
                         foreach (var store in report.Stores)
                             console.WriteLine(
                                 $"Copied user-secret store '{store.Id}': {store.KeyCount} keys."
