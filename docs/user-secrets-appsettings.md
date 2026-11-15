@@ -137,7 +137,12 @@ descriptor structure and unrelated options retain their exact string spelling.
 The Oracle Easy Connect default 1521 is eligible only when mapped. Unsupported or
 ambiguous known mapped-local Oracle forms fail before any store is written, with
 the same value-free diagnostics. See [Oracle forms and limits](user-secrets-rewriting.md#oracle-easy-connect-and-descriptors-15).
-Recognized split host/port settings remain a separate follow-up.
+
+The explicit `Database_Config:Host` + `Database_Config:Port` pair is also supported:
+resolve both keys before eligibility and generate only the host override. Unselected
+appsettings port metadata can establish eligibility; filtered-out secrets never
+participate. See [recognized split settings](user-secrets-split-settings.md) for the
+exact supported shape, filters and safe-failure rules.
 
 ## Shared stores
 

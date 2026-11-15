@@ -50,6 +50,12 @@ public sealed partial class UserSecretsCopy
                 )
                 .ToArray();
             var rewritten = new List<string>();
+            var splitSettings = SelectedSplitSettings(
+                store,
+                projects,
+                ports,
+                prepared.UnresolvedProjects
+            );
             var values = new Dictionary<string, string?>(
                 store.Values,
                 StringComparer.OrdinalIgnoreCase
@@ -61,15 +67,21 @@ public sealed partial class UserSecretsCopy
                 foreach (var property in store.Root.EnumerateObject())
                 {
                     writer.WritePropertyName(property.Name);
-                    WriteTarget(writer, property.Value, ports, rewritten, store.Id, property.Name);
+                    WriteTarget(
+                        writer,
+                        property.Value,
+                        ports,
+                        rewritten,
+                        store.Id,
+                        splitSettings,
+                        property.Name
+                    );
                 }
                 var projectOverrides = new List<ProjectOverrides>();
                 foreach (var project in projects)
                 {
-                    var effective = new Dictionary<string, string?>(
-                        project.Settings.Values,
-                        StringComparer.OrdinalIgnoreCase
-                    );
+                    // Resolve split ports before deriving desired hosts for shared-store checks.
+                    var effective = EffectiveSettings(project, store);
                     var generated = new Dictionary<string, string>(
                         StringComparer.OrdinalIgnoreCase
                     );
@@ -77,11 +89,12 @@ public sealed partial class UserSecretsCopy
                     {
                         if (store.Values.ContainsKey(key) || original is null)
                             continue;
-                        var target = RewriteEndpoint(
+                        var target = RewriteSetting(
                             original,
                             ports,
                             store.Id,
                             key,
+                            effective,
                             project.Project
                         );
                         if (target == original)
@@ -151,6 +164,7 @@ public sealed partial class UserSecretsCopy
         HashSet<int> ports,
         List<string> rewritten,
         string id,
+        IReadOnlyDictionary<string, string> splitSettings,
         string? path = null
     )
     {
@@ -167,6 +181,7 @@ public sealed partial class UserSecretsCopy
                         ports,
                         rewritten,
                         id,
+                        splitSettings,
                         path is null ? property.Name : path + ":" + property.Name
                     );
                 }
@@ -182,13 +197,16 @@ public sealed partial class UserSecretsCopy
                         ports,
                         rewritten,
                         id,
+                        splitSettings,
                         path + ":" + (index++).ToString(CultureInfo.InvariantCulture)
                     );
                 writer.WriteEndArray();
                 break;
             case JsonValueKind.String:
                 var original = value.GetString()!;
-                var target = RewriteEndpoint(original, ports, id, path!);
+                var target = splitSettings.TryGetValue(path!, out var splitValue)
+                    ? splitValue
+                    : RewriteEndpoint(original, ports, id, path!);
                 if (target != original)
                     rewritten.Add(path!);
                 writer.WriteStringValue(target);

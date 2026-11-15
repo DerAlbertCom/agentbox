@@ -474,7 +474,9 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   consumers beneath the `FolderConfig` location, excluding artifacts, escaping
   directory links and cycles. It never evaluates MSBuild. Selected project-local
   base/lowercase-development JSON is validated and merged case-insensitively;
-  only selected keys are retained. `PreparedUserSecrets` owns project originals
+  only selected keys are eligible for emission. Unfiltered appsettings metadata
+  is retained for recognized split-setting resolution; only selected secrets can
+  override it. `PreparedUserSecrets` owns project originals
   and association metadata in memory, separately from host snapshots, allowing
   project-only generation without a host secrets file.
   Unmatched stores remain copy-only. Unreadable project XML warns without blocking
@@ -567,8 +569,9 @@ first-name selection. See [supported forms, preservation and verification](user-
   justify rewriting `localhost:5432` to port 8004.
   Recognized mapped-local endpoints with unsafe/ambiguous supported syntax now
   fail actionably before writes, without values. Arbitrary/unmapped localhost
-  strings do not fail merely for mentioning localhost. Recognized split settings
-  remain a separate follow-up.
+  strings do not fail merely for mentioning localhost. The explicit
+  `Database_Config:Host` + `Database_Config:Port` pair uses resolved effective
+  metadata and changes only the host; see [split settings](user-secrets-split-settings.md).
 - No host kit sources, staged descriptors, `/etc/hosts`, `host-port@1` or `sbx ports`
   are used. `sbx inspect` is insufficient for this inventory. Authorization is not
   proof of service availability or protection against later policy changes.
@@ -578,12 +581,14 @@ first-name selection. See [supported forms, preservation and verification](user-
 Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
 rewriting (#8), creation/replacement integration (#9) and URL/PostgreSQL
 appsettings-derived overrides (#13), and compatible shared-store merging with
-all-consumer conflict protection (#14), and Oracle Easy Connect/descriptor support
-(#15) are implemented through the shared copy flow. Oracle feeds the same
-format-independent generated-candidate/effective-value safeguards; recognized
-split-setting support remains a follow-up under #12.
+all-consumer conflict protection (#14), Oracle Easy Connect/descriptor support
+(#15), and recognized `Database_Config` split-setting support (#16) are implemented
+through the shared copy flow. Oracle and split settings feed the same
+format-independent generated-candidate/effective-value safeguards. Selected keys
+govern output; unfiltered appsettings-only metadata supplies split-port eligibility.
 See [shared-store verification](verification/user-secrets-shared-stores.md).
 See [Oracle command-level verification](verification/user-secrets-oracle.md).
+See [split-setting command-level verification](verification/user-secrets-split-settings.md).
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force

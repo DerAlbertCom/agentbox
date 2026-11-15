@@ -329,6 +329,10 @@ Selected host keys always win, but still receive eligible endpoint adaptation.
 Existing exact/wildcard/empty key filters apply to copied **and generated** keys.
 Only eligible URL/PostgreSQL/Oracle values needing a host change are generated, not the
 whole appsettings file. A store with no matching project remains copy-only.
+The explicit `Database_Config:Host` + `Database_Config:Port` pair is also supported:
+resolve both keys first and emit only the necessary host override. Unselected
+appsettings port metadata can establish eligibility; filtered-out secrets cannot.
+See [recognized split settings](docs/user-secrets-split-settings.md).
 
 Each create/replacement/explicit copy rebuilds the complete destination, removing
 stale generated entries. Ordinary `run` still performs no copy. Projects sharing a
@@ -337,7 +341,9 @@ discovered consumer's required effective value, including remote/unmapped values
 that need no rewrite; conflicts stop all selected stores before any write, with
 value-free store/key/project diagnostics. Supply an authoritative selected host
 key, exclude the key, or use separate stores to resolve a conflict. Unknown
-consumers still block generation. Recognized split settings remain a follow-up.
+consumers still block generation. Split hosts depending on project port metadata
+also require compatible consumer contexts; an authoritative selected host/port pair
+retains copy-only behavior.
 This bounded discovery does not simulate
 custom providers, environment/CLI overrides or service readiness. See
 [precedence, discovery, refresh and safety details](docs/user-secrets-appsettings.md).
