@@ -40,6 +40,27 @@ public interface ISbxClient
     /// <summary>Where the runtime put the workspace of the sandbox, when it says.</summary>
     Task<string?> GetWorkspaceDirectoryAsync(string sandbox, CancellationToken cancellationToken);
 
+    /// <summary>Checks effective application-user paths for all stores without creating files.</summary>
+    Task ValidateUserSecretsDestinationAsync(
+        string sandbox,
+        IReadOnlyList<string> ids,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary>Exact kit-provisioned TCP host ports currently authorized in this sandbox.</summary>
+    Task<IReadOnlyList<int>> GetUserSecretsHostPortsAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary>Replaces one store atomically; payload and frame travel only over sensitive UTF-8 stdin.</summary>
+    Task WriteUserSecretsAsync(
+        string sandbox,
+        string id,
+        string json,
+        CancellationToken cancellationToken
+    );
+
     Task<SbxOutcome> InspectKitAsync(
         string kitDirectory,
         CancellationToken cancellationToken,

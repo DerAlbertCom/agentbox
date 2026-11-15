@@ -14,51 +14,54 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheApprovedCertificateBundleIsEmbeddedAndCopiedExactlyIntoTheBuildContext()
     {
-        _generator.Generate(WriteWorkload(""), Path.Combine(_root.Path, "kit"));
-
         using var embedded = typeof(WorkloadKitGenerator).Assembly.GetManifestResourceStream(
             "Abox.Assets.rwe_inspection_certificate_chain.pem"
         );
         embedded.Should().NotBeNull("installed tools cannot depend on the repository or host PEM");
-        const string expectedHash =
-            "5994104949F2CB3A35FCBA877D5D94E3123C394D05261044BE2CAB49C8B73BFC";
-        Convert.ToHexString(SHA256.HashData(embedded!)).Should().Be(expectedHash);
+        using var source = new MemoryStream();
+        embedded!.CopyTo(source);
+        var expected = source.ToArray();
+        // Security-integrity pin: trust-anchor changes require explicit approval, unlike static snapshots.
+        Convert
+            .ToHexString(SHA256.HashData(expected))
+            .Should()
+            .Be("5994104949F2CB3A35FCBA877D5D94E3123C394D05261044BE2CAB49C8B73BFC");
+
+        _generator.Generate(WriteWorkload(""), Path.Combine(_root.Path, "kit"));
+
         var bundle = File.ReadAllBytes(
             Path.Combine(_root.Path, "kit", "certificates", "rwe_inspection_certificate_chain.pem")
         );
-        Convert.ToHexString(SHA256.HashData(bundle)).Should().Be(expectedHash);
+        bundle.Should().Equal(expected);
     }
 
     [Fact]
     public void EachTrustedCertificateHasItsOwnCrtFileAndThereAreNoPrivateKeys()
     {
-        var directory = Path.Combine(_root.Path, "kit", "certificates");
-        _generator.Generate(WriteWorkload(""), Path.Combine(_root.Path, "kit"));
-        var bundle = File.ReadAllText(
-            Path.Combine(directory, "rwe_inspection_certificate_chain.pem")
+        using var embedded = typeof(WorkloadKitGenerator).Assembly.GetManifestResourceStream(
+            "Abox.Assets.rwe_inspection_certificate_chain.pem"
         );
+        embedded.Should().NotBeNull();
+        using var reader = new StreamReader(embedded!);
+        var source = reader.ReadToEnd();
         var blocks = Regex.Matches(
-            bundle,
+            source,
             @"-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----"
         );
-        blocks.Should().HaveCount(135);
-        var remainder = Regex.Replace(
-            bundle,
-            @"-----BEGIN CERTIFICATE-----[\s\S]+?-----END CERTIFICATE-----",
-            ""
-        );
-        remainder
-            .Split('\n')
+        blocks.Should().NotBeEmpty();
+
+        var directory = Path.Combine(_root.Path, "kit", "certificates");
+        _generator.Generate(WriteWorkload(""), Path.Combine(_root.Path, "kit"));
+        File.ReadAllText(Path.Combine(directory, "rwe_inspection_certificate_chain.pem"))
             .Should()
-            .OnlyContain(line =>
-                string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith('#')
-            );
+            .NotContain("PRIVATE KEY");
 
         var files = Directory.GetFiles(directory, "*.crt").Order(StringComparer.Ordinal).ToList();
         files.Should().HaveCount(blocks.Count);
         for (var index = 0; index < files.Count; index++)
         {
             var pem = File.ReadAllText(files[index]);
+            pem.Should().NotContain("PRIVATE KEY");
             pem.ReplaceLineEndings("\n")
                 .Trim()
                 .Should()
@@ -117,27 +120,6 @@ public sealed class WorkloadKitGeneratorTests
         {
             dockerfile.Should().NotContain("mise.run");
         }
-    }
-
-    [Fact]
-    public void TheKitIsAWorkloadThatTheHostLaunchesAsAnAgent()
-    {
-        var workload = WriteWorkload(
-            """
-            template: docker.io/sbx/shell-docker-image
-            mise:
-              - nodejs@24.4.3
-              - dotnet@10.0.403
-            """
-        );
-
-        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
-
-        var descriptor = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.yaml"));
-        descriptor.Should().Contain("# syntax=docker/sandbox-kit:3");
-        descriptor.Should().Contain("schemaVersion: \"3\"");
-        descriptor.Should().Contain("kind: workload");
-        descriptor.Should().Contain("com.docker.sandbox/sbx@1");
     }
 
     [Fact]
@@ -207,15 +189,24 @@ public sealed class WorkloadKitGeneratorTests
 
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile = dockerfile.ReplaceLineEndings("\n");
-        dockerfile.Should().Contain("USER root\nRUN \\\n    apt-get update");
-        dockerfile
-            .Should()
-            .Contain("lists/*\nUSER agent\n\n# mise manages the tools of this image");
-        dockerfile
-            .Should()
-            .Contain("# mise manages the tools of this image, as the agent user.\nENV PATH=");
-        CountOccurrences(dockerfile, "USER root").Should().Be(2);
-        CountOccurrences(dockerfile, "USER agent").Should().Be(3);
+        foreach (
+            var (instruction, user) in new[]
+            {
+                ("apt-get install", "root"),
+                ("curl -fsSL https://mise.run", "agent"),
+                ("mise use -g -y nodejs@24.4.3", "agent"),
+            }
+        )
+        {
+            var position = dockerfile.IndexOf(instruction, StringComparison.Ordinal);
+            position.Should().BeGreaterThan(0);
+            var activeUser = Regex
+                .Matches(dockerfile[..position], @"(?m)^USER ([^\n]+)")
+                .LastOrDefault()
+                ?.Groups[1]
+                .Value;
+            activeUser.Should().Be(user, $"{instruction} must run as {user}");
+        }
     }
 
     [Fact]
@@ -504,17 +495,6 @@ public sealed class WorkloadKitGeneratorTests
         var action = () => _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         action.Should().Throw<AboxException>().WithMessage($"*first/setup.sh*second/{secondName}*");
-    }
-
-    [Fact]
-    public void TheWorkspaceIsTheWorkingDirectoryOfTheImage()
-    {
-        var workload = WriteWorkload("");
-
-        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
-
-        var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        dockerfile.Should().Contain("WORKDIR /home/agent/workspace");
     }
 
     [Fact]

@@ -1,0 +1,9 @@
+# syntax=docker.io/docker/sandbox-kit:3@sha256:adbc0d1ea63451871d5d78111120bb29f2fd2b265e63d39c664ae2c3d722c805
+schemaVersion: "3"
+kind: workload
+displayName: User-secrets verification workload
+version: "1.0.0"
+capabilities:
+  - type: com.docker.sandbox/sbx@1
+build: |
+  FROM docker.io/docker/sbx-kit-shell@sha256:15bdd0110a79518f4abba2eb1332f020eec6f4b66a9c808d69a8aebf0e8ee176

@@ -9,6 +9,7 @@ using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sandboxes;
 using Abox.Sbx;
+using Abox.UserSecrets;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -38,7 +39,8 @@ public sealed class CreateServiceTests
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(new AboxConfig(), _sbx, _published)
+            new RemoteSquadSource(new AboxConfig(), _sbx, _published),
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
 
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
@@ -153,7 +155,8 @@ public sealed class CreateServiceTests
                 PublishedSquadTest.Source([
                     new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
                 ])
-            )
+            ),
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
 
         var exitCode = await service.CreateAsync(
@@ -227,13 +230,15 @@ public sealed class CreateServiceTests
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(new AboxConfig { PullRepository = repository }, _sbx, _published)
+            new RemoteSquadSource(new AboxConfig { PullRepository = repository }, _sbx, _published),
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
         var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam(team, "teams/sample", [squad]),
             squad,
             _root.Path,
-            tag
+            tag,
+            FolderConfig: null
         );
 
         var action = () => service.CreateAsync(request, CancellationToken.None);
@@ -274,6 +279,7 @@ public sealed class CreateServiceTests
             null,
             _root.Path,
             "latest",
+            FolderConfig: null,
             Local: true
         );
 
@@ -294,6 +300,7 @@ public sealed class CreateServiceTests
             null,
             _root.Path,
             "latest",
+            FolderConfig: null,
             Local: true
         );
 
@@ -365,7 +372,8 @@ public sealed class CreateServiceTests
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(new AboxConfig(), _sbx, PublishedSquadTest.Source(mcp))
+            new RemoteSquadSource(new AboxConfig(), _sbx, PublishedSquadTest.Source(mcp)),
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
         _console.Answer = false;
         var name = SandboxName.For(_root.Path);
@@ -500,6 +508,7 @@ public sealed class CreateServiceTests
             "ac",
             _root.Path,
             "latest",
+            FolderConfig: null,
             Local: true
         );
 
@@ -557,7 +566,8 @@ public sealed class CreateServiceTests
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(runner), _console),
-            new RemoteSquadSource(new AboxConfig(), _sbx, _published)
+            new RemoteSquadSource(new AboxConfig(), _sbx, _published),
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
 
         var exitCode = await service.CreateAsync(
@@ -629,7 +639,8 @@ public sealed class CreateServiceTests
                 new AboxConfig(),
                 _sbx,
                 PublishedSquadTest.Source([new ManifestMcp { Name = "elastic" }])
-            )
+            ),
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
 
         var exitCode = await service.CreateAsync(

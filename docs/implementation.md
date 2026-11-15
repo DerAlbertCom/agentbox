@@ -15,6 +15,11 @@ raw arguments, environment settings or stdin, and redacts known credential value
 echoed in captured diagnostics. Attached-console processes keep their existing
 interactive output without duplicate diagnostics. See [the usage example](../README.md#seeing-tool-output).
 
+An opt-in `ProcessOutputPolicy.Sensitive` instead discards child output (including
+raw errors and scalar fragments), prohibits attached streams and writes explicit
+UTF-8/no-BOM stdin. It is used by user-secrets transfers even with `--verbose`;
+ordinary process diagnostics and `abox secrets` keep their existing behavior.
+
 ### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal] [--metadata-only]`
 
 Normal builds run the following full image-building path. The explicit
@@ -187,15 +192,21 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag>]
 [--local] [--yes]`
 
-1. Takes the team from `--team` or `defaultTeam`. Remote create requires `--squad`
-   and never resolves local team folders; it works from any directory without a
-   config file, source tree, local manifest or build. Only `--local` resolves the
-   team like `build` and asks for an omitted squad (or uses its only squad).
+1. Takes the team from `--team` or `defaultTeam`. Reads runtime-only `abox.json`
+   from the sandbox location: its optional `squad` fills an omitted `--squad`,
+   while a case-insensitive conflict fails before preparation/replacement. Remote
+   create requires a squad from one of those sources and never resolves local
+   team folders; it works without a source tree, local manifest or build. Only
+   `--local` resolves the team like `build` and asks for an otherwise omitted squad
+   (or uses its only squad).
    The sandbox location is `--location`, then `defaultLocation`, then the current
    folder. Local team discovery starts there and searches parent folders; `--root`
     overrides that starting directory when the sources live in another project.
     `--root` requires `--local`; remote create rejects it rather than ignoring it.
-2. Before registry preparation, remote create reads
+2. Prepares all selected host user secrets and checks original selected values
+   against the global deny list before any destructive replacement, without
+   sandbox destination/policy access. Missing folder configuration skips this
+   work. Then, before registry preparation, remote create reads
    `sbx settings get kit.allowedSources --json` and automatically appends the
    validated `rwest.jfrog.io/<pullRepository>/` prefix using `sbx settings set`
    only when no existing prefix (or existing `*`) covers it. It preserves all
@@ -241,6 +252,18 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
     `--mount <host>:<path>... --static-mcp <names>`.
 8. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the team
    and the squad it comes from, the build metadata and the pulled reference (if any).
+9. After successful creation and record save, copies prepared user secrets through
+   the shared on-demand flow, before full-success/open output or returning to a
+   launcher. A post-create copy failure retains the actual sandbox/new record,
+   returns failure (1, or 130 for cancellation) and gives a folder-qualified
+   `abox user-secrets --location "<folder>"` retry, without recreating. Creation
+   failure, declined replacement or cancellation never starts a subsequent copy.
+
+Automatic copying never forces deny-list matches: neither `--yes` nor replacement
+consent is a safety override. Missing `abox.json` retains the old create/run behavior
+with no user-secret store reads, target discovery or writes. See the
+[lifecycle contract](user-secrets-lifecycle.md) for squad checks and intentional
+on-demand override/recovery.
 
 The user setting `pullRepository` defaults to **`mtiae-docker-release`**. It accepts
 one lowercase JFrog repository path segment; an omitted or blank setting uses the
@@ -249,7 +272,7 @@ default. It is independent of the workload's `publishRepository`. See
 
 The same user configuration also accepts:
 
-- `defaultLocation`: the folder for `create` and `run` when `--location` is omitted;
+- `defaultLocation`: the folder for `create`, `run` and `user-secrets` when `--location` is omitted;
   unset by default, which means the current folder.
 - `teamsDirectory`: the project's teams directory, `teams` by default.
 - `kitsDirectory`: the kits directory relative to the project root, `kits` by default.
@@ -288,27 +311,35 @@ sets remain future work; none are applied implicitly.
 Remote create needs host Docker/Buildx with a running engine and sbx, not team
 sources or preparation. The bundled metadata format and compatibility rules are
 in [artifact-format.md](artifact-format.md). Remote squad discovery is not supported;
-give `--squad`. A pulled sandbox is not offered a local-build replacement by
-`abox run`; recreate it explicitly to refresh the published tag.
+give `--squad` or set the folder's `squad`. A pulled sandbox is not offered a
+local-build replacement by `abox run`; recreate it explicitly to refresh the
+published tag.
 
 ### `abox run [<launcher>] [--location <path>] [-- <argv>...]`
 
 1. Resolves `--location`, then `defaultLocation`, then the current folder, just like
-   `create`. Checks the programs the launcher needs on the host.
+   `create`. Checks the programs the launcher needs on the host, then loads and
+   validates folder configuration.
 2. Checks that the folder has a sandbox. Without one, the command prints the
    `abox create` command to run, including `--team`, `--squad` and `--tag` from its
    sandbox record, build metadata or configured default team when available. Local
    records retain `--local` and their build's `--root`; unknown team/squad names are marked `<name>` placeholders
    to replace. The same complete hint is used when launcher programs are missing.
-3. Asks the runtime where the workspace of the sandbox is (`WORKSPACE_DIR`).
+3. Ordinary run can open the existing sandbox even with a different or unknown
+   recorded squad; it copies no secrets and changes no squad. When replacement is
+   accepted and the folder config has `squad`, requires a known matching sandbox
+   record before preparation/replacement. A conflict never silently switches squads.
 4. For a locally created sandbox, offers to replace it when the build of its squad is newer than the one the
    sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
    the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local,
    resolving team sources from the newer build's recorded root (or the sandbox
    location for legacy metadata), so a separate `create --root` project stays usable.
+   Accepted replacement uses `SandboxCreator`, including shared user-secret
+   preparation/copying. Failed required copying prevents launch. Ordinary run or
+   declining the newer build never reads selected host stores or resyncs secrets.
 5. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
-6. Starts the launcher.
+6. Asks the runtime where the workspace is (`WORKSPACE_DIR`) and starts the launcher.
 
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.
@@ -329,6 +360,158 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
   are used only for service secrets. `list` uses the same custom-secret identity.
   sbx 0.51 requires destination hosts for credential substitution; environment-only
   legacy mappings remain removable, but need a `host` to supply credentials.
+
+### `abox user-secrets [--location <path>] [--force]`
+
+The on-demand path copies explicitly named .NET stores/selected keys into an
+existing local or published sandbox, with no kit-source or build dependency. It
+never creates or replaces a sandbox. See the
+[configuration, safety and recovery contract](../README.md#copying-net-user-secrets).
+The global YAML `userSecretsDenyList` matches case-insensitive literal substrings
+in selected original scalar values; it defaults to empty. It is a policy safeguard,
+not an arbitrary staging/production-secret detector. Mixed plain IDs and objects
+with optional `keys` use [the same key-selection contract](user-secrets-filtering.md)
+on demand and during [creation/replacement](user-secrets-lifecycle.md).
+
+**Trust boundary:** workspace `abox.json` is writable by the sandbox agent and
+selects host stores/keys for the next copy. Review/trust its current contents,
+including squad, IDs and patterns, before invoking create/replacement/user-secrets.
+This feature adds no separate host-side authorization/approval mechanism; neither
+an explicit store name nor the deny list makes an untrusted workspace safe.
+
+Shared orchestration is in `UserSecrets/`, outside command slices:
+
+- `FolderConfig.LoadAsync(location, token)` reads runtime-only `abox.json`,
+  returning null for absence. A missing file is an on-demand error but a lifecycle
+  no-op. Its optional `squad` selects creation and rejects conflicting explicit
+  selections; on-demand copying and accepted run replacement require a matching
+  known sandbox record if that squad is present. Ordinary run does not impose that
+  copy/replacement constraint. The team still comes from command/user settings.
+- `SandboxCreationRequest` carries the folder configuration snapshot loaded at
+  command entry, including null for absence. Creation never reloads it, including
+  after deletion; host selections are then snapshotted before destructive work.
+  The command's early squad-conflict check and shared lifecycle's pure revalidation
+  intentionally protect both public entry paths without duplicate file reads.
+- `UserSecretsCopy.PrepareAsync(folderConfig, force, token)` validates all entries,
+  snapshots every selected host file and its nested JSON tree, rejects duplicate
+  effective case-insensitive .NET keys before filtering, then checks all selected
+  **original** values before rewriting/writes. Plain IDs or objects with omitted
+  `keys` select the whole store. Full-key case-insensitive patterns support only
+  `*` (including across `:`); a union selects each key once. Empty/no-match lists
+  produce `{}`, not a skipped file or a whole-store fallback. Filtered snapshots
+  contain flat effective keys so array indices never shift. All input must still
+  be valid, even with no matches or force. This phase makes no sandbox calls/writes.
+  `PreparedUserSecrets` is opaque, in-memory and has a value-free `ToString`.
+  `SafetyOverride` on the prepared snapshot/report means at least one selected
+  original value actually matched the deny list and was allowed by `--force`, not
+  merely that the flag was supplied. The on-demand warning uses the successful
+  copy report; lifecycle callers retain those semantics.
+- `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
+  before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
+  using sbx policy discovery, retaining originals for deny/force accounting.
+  Each selected store replaces its entire destination, clearing old unmatched keys,
+  even for a zero-key `{}` result. Reports contain IDs, key names/counts, never values.
+  Only parsed JSON data is serialized for transfer:
+  skipped comments and trailing commas must not survive as unscanned payload text.
+  No hook framework or alternate pipeline is needed.
+- `UserSecretsReportWriter` formats the value-free store summaries once for both
+  automatic and on-demand output, JSON-escaping rewritten key names.
+- `SbxClient.UserSecrets.cs` owns captured default-user exec, environment/path checks
+  and the fixed receiver. All ancestor symlinks, nonregular/multiply-linked files
+  and wrong-owned secret directories/files fail. It verifies stdin byte count and
+  digest before same-directory atomic replacement. GNU-compatible coreutils are
+  required. Secret root/store directories are 0700, files 0600. It does not assume
+  `/home/agent` or run as root. The host adapter and receiver both prefer APPDATA
+  over HOME, even on Unix, and reject unusable environment roots rather than guess.
+  Destination checks omit `exec -i` and explicitly close an empty redirected stdin;
+  they cannot consume or forward host stdin.
+
+The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when APPDATA
+is set (also on Unix), otherwise `<HOME>/.microsoft/usersecrets/<id>/secrets.json`.
+The target roots are resolved independently for the non-root default exec
+application user, not copied from the host. Alternate application environments
+must use matching roots. Supported sandboxes need `sh` and GNU-compatible
+`stat`, `mktemp`, `sha256sum`, `mv -T` and the other receiver utilities. A stopped
+sandbox may start through exec. Destination validation is not a host-secret
+authorization boundary against the sandbox application user.
+
+Validation atomicity is all-store; transport atomicity is per-file. Failures report
+completed counts and safe retry, never promise rollback or confirmation after lost
+acknowledgements. Cancellation remains exit 130 and the on-demand command explains
+partial-copy/retry behavior. Host files never change; no payload becomes a build
+input, image layer or published artifact. Concurrent malicious filesystem edits by
+the sandbox user/root and crash durability are outside this contract.
+
+`--force` is available only on demand and bypasses only matched deny policy, not
+input, squad, metadata, destination or transport checks. The reporting contract is
+to warn after successful copying only when at least one selected original value
+actually matched, never merely because the flag was supplied. Automatic copying
+always prepares with `force: false`; replacement consent/`--yes` is not force.
+
+#### Supported rewrite contract (#8)
+
+The implemented rewrite flow follows the approved clarification on #2/#8,
+superseding experimental relay metadata, host/container port translation and
+first-name selection. See [supported forms, preservation and verification](user-secrets-rewriting.md).
+
+- Discover exact kit-declared TCP resources through
+  `sbx policy ls <sandbox> --source kit --type network --json`. Require active,
+  sandbox-scoped/provisioned kit network allow rules with `net:connect:tcp` and
+  literal `localhost:<integer 1..65535>` resources; deduplicate/sort ports numerically.
+  Wildcard/global/manual rules are not inferred kit intent. An empty inventory is valid.
+- Check current effective authorization with
+  `sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>`;
+  a higher-priority deny excludes the port. Missing/malformed required metadata
+  fails safely before writes. Do not invent mappings or change policy.
+- Rewrite only supported loopback endpoint fields (`localhost`/`127.0.0.1`) at an
+  inventoried, currently authorized port to `host.docker.internal`, preserving the
+  **same explicit published host port**. Supported forms include absolute URI
+  authorities, SQL Server comma-port fields (optional `tcp:`), and separate
+  Host/Server + Port database fields. Never infer default ports.
+- Preserve named endpoints, including `host.docker.internal`, and their ports
+  for TLS/SNI. Preserve undeclared ports, unsupported/ambiguous forms and unrelated
+  credentials/text/fields/paths/queries. A service published as `8004:5432` does not
+  justify rewriting `localhost:5432` to port 8004.
+- No host kit sources, staged descriptors, `/etc/hosts`, `host-port@1` or `sbx ports`
+  are used. `sbx inspect` is insufficient for this inventory. Authorization is not
+  proof of service availability or protection against later policy changes.
+
+#### User-secrets integration status
+
+Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
+rewriting (#8) and creation/replacement integration (#9) are implemented through
+the shared copy flow.
+
+The safety review fixes are integrated: normalized transfer excludes skipped
+comments/trailing commas, no-payload checks cannot consume host stdin, and force
+warnings report actual overridden matches only after successful copying. JSON
+formatting/escape spelling is not a preservation contract; unchanged string
+contents stay unchanged.
+
+Final post-review integrated Debug verification: **756 passed, zero failures, 4 explicit
+native Windows symlink-privilege skips** (760 total). The skipped receiver cases
+are not claimed as passing; see [rewrite verification](user-secrets-rewriting.md).
+The focused user-secrets/create/run regression set passed **366 tests**, with the
+same **4 skips** (370 total). The Debug solution build had zero warnings/errors;
+CSharpier and `git diff --check` passed. No Release build or tests were run for
+this final-review change.
+
+Lifecycle regression coverage now explicitly permits non-replacing runs with
+mismatched, missing or unknown squad records, while copying/accepted replacement
+still reject unintended squads. It also checks that entry-time folder snapshots,
+including absence, survive later file edits. A small composed CLI harness shares
+synthetic host/store and fake-tool setup across command, filtering, safety and
+lifecycle suites; behavior-specific helpers stay local. The null-deny-list guard
+remains intentional for directly constructed public settings, independently of
+the YAML loader; force cannot bypass that invalid configuration.
+
+The accepted [verification matrix](verification/user-secrets/README.md) is
+**local/nonempty kit policy + published/empty kit policy**. An already-published
+squad with nonempty host-access policy remains untested by explicit acceptance;
+ambient global reachability is not kit rewrite intent. Windows sbx v0.51.0 live
+transport evidence and representative Unix/automated path tests do not establish
+an independent Unix-host sbx run. No host store mutation, production-secret reads
+or new publication is needed or claimed by these synthetic checks.
 
 ### `abox prune [--full] [--sbx]`
 
@@ -482,10 +665,13 @@ cli/src/Abox/
     Create/         abox create: the command and its slice registration
     Run/            abox run: the command and the service that does its work
     Secrets/        abox secrets: the command and the service that does its work
+    UserSecrets/    abox user-secrets: on-demand command only
     Prune/          abox prune: the command and the service that does its work
     Sandbox/        the commands other programs call: abox exec and abox pipe
     CommandHandling.cs  turns an abox error into a message and an exit code
   Configuration/    the directories and the user configuration
+    FolderConfig.cs runtime-only abox.json (not squad/build configuration)
+  UserSecrets/      shared key selection, original-value policy and runtime copy flow
   Kits/             the .abox and .workload files, the chain, the kit generators
   LocalState/       local on-disk state shared by the command slices
     BuildManifest.cs
@@ -518,6 +704,13 @@ cli/src/Abox/
 - One wrapper class (`SbxClient`) makes every `sbx` call. The flags and the version
   check live in that one place. One wrapper class (`OciRegistry`) makes every `docker`
   call. The arguments are always a list, never a shell string.
+- Runtime folder selections and their parsing/matching live in `Configuration`,
+  not the shared copy orchestration. Portable store-ID validation lives in
+  low-level `Naming.UserSecretId`; both configuration parsing and the sbx adapter
+  validate with it. Thus `Configuration` and `Sbx` do not import `UserSecrets` or
+  know its orchestration, while the copy flow can consume both. Reporting remains
+  above the technical sbx wrapper. These are module responsibilities, not a rule
+  that every namespace must be a separate module.
 - Each launcher is one class behind `ILauncher`.
 - Each command is a class that the container builds and that takes its dependencies
   in its constructor; nothing looks the commands up by hand. The root command holds
@@ -564,9 +757,11 @@ cli/src/Abox/
 - **The MCP servers are registered on the host.** A server with an url is registered
   with `sbx mcp add` when it is not registered yet; a server without one has to be
   registered already.
-- **The secrets live on the host.** The kits ask for a service, the configuration says
+- **The kit/proxy secrets live on the host.** The kits ask for a service, the configuration says
   how its value is obtained, and `sbx secret` keeps it. The value never goes into a
-  sandbox and never into the arguments of a process.
+  sandbox and never into the arguments of a process. The separate opt-in .NET
+  `user-secrets` flow intentionally copies selected host values into runtime files
+  readable by the sandbox application user; those values are not proxy secrets.
 
 ## What is not built yet
 

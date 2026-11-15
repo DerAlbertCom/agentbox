@@ -1,0 +1,18 @@
+# syntax=docker.io/docker/sandbox-kit:3@sha256:adbc0d1ea63451871d5d78111120bb29f2fd2b265e63d39c664ae2c3d722c805
+schemaVersion: "3"
+kind: mixin
+displayName: Synthetic loopback relay
+version: "1.0.0"
+capabilities:
+  - type: com.docker.sandbox/host-port@1
+    config: { host: 35431, container: 35432, transport: tcp }
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      startup:
+        - user: "0"
+          command:
+            - sh
+            - -c
+            - >-
+              grep -q 'sql.first.abox.test' /etc/hosts ||
+              printf '127.0.0.1 sql.first.abox.test sql.second.abox.test\n127.0.0.1 unrelated.abox.test\n' >> /etc/hosts

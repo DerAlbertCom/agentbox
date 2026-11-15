@@ -12,11 +12,26 @@ namespace Abox.Infrastructure;
 /// <param name="WorkingDirectory">The directory to start in, or null for the current one.</param>
 /// <param name="Environment">Extra environment variables for the child.</param>
 /// <param name="StandardInput">The text the child reads from its standard input, or null.</param>
+/// <param name="OutputPolicy">Sensitive calls discard output/errors and use UTF-8/no-BOM stdin.
+/// CapturedSensitive retains metadata for parsing. Both suppress diagnostics and forbid attached streams.</param>
 public sealed record ProcessRequest(
     string FileName,
     IReadOnlyList<string> Arguments,
     bool AttachConsole = false,
     string? WorkingDirectory = null,
     IReadOnlyDictionary<string, string>? Environment = null,
-    string? StandardInput = null
-);
+    string? StandardInput = null,
+    ProcessOutputPolicy OutputPolicy = ProcessOutputPolicy.Normal
+)
+{
+    public override string ToString() => "ProcessRequest (arguments, environment and input hidden)";
+}
+
+public enum ProcessOutputPolicy
+{
+    Normal,
+    Sensitive,
+
+    // Capture trusted-command metadata for parsing, but never emit raw child diagnostics.
+    CapturedSensitive,
+}

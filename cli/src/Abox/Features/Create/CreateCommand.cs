@@ -33,7 +33,7 @@ public sealed class CreateCommand : Command
         var squad = new Option<string>("--squad")
         {
             Description =
-                "The squad the sandbox is created from. Required for remote create; --local can ask which squad to use.",
+                "The squad the sandbox is created from. Defaults to abox.json; a conflicting --squad is rejected. Without either, --local can ask which squad to use.",
         };
 
         var location = new Option<string>("--location")
@@ -95,17 +95,23 @@ public sealed class CreateCommand : Command
                                 "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
                             );
 
-                        var selectedSquad = parseResult.GetValue(squad);
-                        if (!useLocal && string.IsNullOrWhiteSpace(selectedSquad))
-                        {
-                            throw new AboxException(
-                                "Remote create requires --squad <name>; published squad discovery is not supported. No local team files are used."
-                            );
-                        }
-
                         var resolvedLocation = settings.ResolveLocation(
                             parseResult.GetValue(location)
                         );
+                        var folderConfig = await FolderConfig.LoadAsync(
+                            resolvedLocation,
+                            cancellationToken
+                        );
+                        var selectedSquad =
+                            folderConfig?.SelectSquad(parseResult.GetValue(squad))
+                            ?? parseResult.GetValue(squad);
+                        if (!useLocal && string.IsNullOrWhiteSpace(selectedSquad))
+                        {
+                            throw new AboxException(
+                                "Remote create requires --squad <name> or 'squad' in abox.json; published squad discovery is not supported. No local team files are used."
+                            );
+                        }
+
                         var resolved = useLocal
                             ? resolver.Value.ResolveTeam(
                                 Path.GetFullPath(sourceRoot ?? resolvedLocation),
@@ -118,6 +124,7 @@ public sealed class CreateCommand : Command
                             selectedSquad,
                             resolvedLocation,
                             parseResult.GetValue(tag) ?? settings.DefaultTag,
+                            folderConfig,
                             parseResult.GetValue(assumeYes),
                             Local: useLocal
                         );

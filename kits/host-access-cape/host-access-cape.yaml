@@ -1,0 +1,30 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: CAPE host service access
+description: >
+  Reaches the host-side TCP ports published by the Carmen.Shared container stack.
+  Connect to host.docker.internal with these ports, not the container ports.
+version: "1.0.0"
+
+capabilities:
+  # The sandbox proxy translates host.docker.internal to localhost for policy checks.
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow:
+          # PostgreSQL (container 5432)
+          - localhost:8004
+          # Oracle (container 1521)
+          - localhost:1521
+          # Database MCP (container 8080)
+          - localhost:8005
+          # LocalStack (container 4566)
+          - localhost:8006
+          # S3 Manager (container 8080)
+          - localhost:8007
+          # Jaeger (same host and container ports)
+          - localhost:13133
+          - localhost:16686
+          - localhost:4317
+          - localhost:4318

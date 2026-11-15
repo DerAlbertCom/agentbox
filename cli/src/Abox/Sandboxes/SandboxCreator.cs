@@ -4,6 +4,7 @@ using Abox.Kits;
 using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sbx;
+using Abox.UserSecrets;
 
 namespace Abox.Sandboxes;
 
@@ -12,6 +13,7 @@ namespace Abox.Sandboxes;
 /// <param name="Squad">The squad the sandbox is created from, or null when the command asks for one.</param>
 /// <param name="Location">The folder the sandbox works on.</param>
 /// <param name="Tag">The tag of the published kit set or local build.</param>
+/// <param name="FolderConfig">The folder configuration snapshot loaded by the caller; null means absent.</param>
 /// <param name="AssumeYes">Whether the replacement of an existing sandbox is confirmed already.</param>
 /// <param name="Local">Whether to use local kits instead of pulling the published set.</param>
 public sealed record SandboxCreationRequest(
@@ -19,6 +21,7 @@ public sealed record SandboxCreationRequest(
     string? Squad,
     string Location,
     string Tag,
+    FolderConfig? FolderConfig,
     bool AssumeYes = false,
     bool Local = false
 );
@@ -32,7 +35,8 @@ public sealed class SandboxCreator(
     ISbxClient sbx,
     IConsole console,
     LocalSquadSource local,
-    RemoteSquadSource remote
+    RemoteSquadSource remote,
+    UserSecretsCopy userSecrets
 )
 {
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
@@ -41,15 +45,24 @@ public sealed class SandboxCreator(
         CancellationToken cancellationToken
     )
     {
-        ISquadSource source = request.Local ? local : remote;
-        var selection = source.Resolve(request);
-
         var location = Path.GetFullPath(request.Location);
         if (!Directory.Exists(location))
         {
             throw new AboxException($"The folder '{location}' does not exist.");
         }
 
+        var folderConfig = request.FolderConfig;
+        request = request with
+        {
+            Squad = folderConfig?.SelectSquad(request.Squad) ?? request.Squad,
+        };
+        ISquadSource source = request.Local ? local : remote;
+        var selection = source.Resolve(request);
+        var preparedSecrets = await userSecrets.PrepareAsync(
+            folderConfig,
+            force: false,
+            cancellationToken
+        );
         var prepared = await source.LoadAsync(selection, cancellationToken);
         var manifest = prepared.Metadata;
 
@@ -61,13 +74,17 @@ public sealed class SandboxCreator(
             request.AssumeYes,
             cancellationToken
         );
+        cancellationToken.ThrowIfCancellationRequested();
         await RegisterMcpServersAsync(mcpToRegister, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var mounts = CreateStateDirectories(name, manifest);
+        cancellationToken.ThrowIfCancellationRequested();
         if (replace)
         {
             await RemoveExistingSandboxAsync(name, cancellationToken);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var outcome = await sbx.CreateAsync(
             new SbxCreateRequest(
                 prepared.KitSource,
@@ -102,6 +119,29 @@ public sealed class SandboxCreator(
                 KitReference = prepared.KitReference,
             }
         );
+
+        if (folderConfig is not null)
+        {
+            var recovery =
+                $"The sandbox was created and its record retained, but required user-secret copying did not complete. "
+                + $"Completed files may remain replaced; no cross-store rollback is attempted. "
+                + $"Fix the folder configuration or destination/runtime and retry without recreating: abox user-secrets --location \"{location}\"";
+            try
+            {
+                var report = await userSecrets.CopyAsync(preparedSecrets, name, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                UserSecretsReportWriter.WriteStores(report, console);
+            }
+            catch (OperationCanceledException)
+            {
+                console.WriteError(recovery);
+                throw;
+            }
+            catch (AboxException exception)
+            {
+                throw new AboxException($"{exception.Message}{Environment.NewLine}{recovery}");
+            }
+        }
 
         console.WriteLine($"Created sandbox '{name}' for '{location}'.");
         console.WriteLine($"Open it with: abox run --location {location}");

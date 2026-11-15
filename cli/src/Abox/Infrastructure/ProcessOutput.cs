@@ -12,7 +12,7 @@ public sealed partial class ProcessOutput(IConsole console)
 
     public void Write(ProcessRequest request, ProcessResult result)
     {
-        if (!Verbose || request.AttachConsole)
+        if (!Verbose || request.AttachConsole || request.OutputPolicy != ProcessOutputPolicy.Normal)
         {
             return;
         }

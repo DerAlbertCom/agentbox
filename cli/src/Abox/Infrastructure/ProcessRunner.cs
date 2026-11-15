@@ -19,11 +19,40 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
         CancellationToken cancellationToken
     )
     {
+        try
+        {
+            if (request.OutputPolicy != ProcessOutputPolicy.Normal && request.AttachConsole)
+                throw new AboxException("Sensitive processes cannot attach console streams.");
+            return await RunCoreAsync(request, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception) when (request.OutputPolicy != ProcessOutputPolicy.Normal)
+        {
+            // Even exceptions can contain fragments of a payload or child diagnostics.
+            throw new AboxException(
+                "Sensitive process failed. Check the runtime and destination permissions; child diagnostics were suppressed."
+            );
+        }
+    }
+
+    private async Task<ProcessResult> RunCoreAsync(
+        ProcessRequest request,
+        CancellationToken cancellationToken
+    )
+    {
         using var process = new Process { StartInfo = StartInfo(request) };
         var standardOutput = new StringBuilder();
         var standardError = new StringBuilder();
         if (!request.AttachConsole)
-            CaptureOutput(process, standardOutput, standardError);
+            CaptureOutput(
+                process,
+                standardOutput,
+                standardError,
+                request.OutputPolicy == ProcessOutputPolicy.Sensitive
+            );
 
         Start(process, request.FileName);
         await CompleteAsync(process, request, cancellationToken);
@@ -67,6 +96,11 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
         if (request.StandardInput is not null)
         {
             startInfo.RedirectStandardInput = true;
+            if (request.OutputPolicy == ProcessOutputPolicy.Sensitive)
+                startInfo.StandardInputEncoding = new UTF8Encoding(
+                    encoderShouldEmitUTF8Identifier: false,
+                    throwOnInvalidBytes: true
+                );
         }
 
         return startInfo;
@@ -75,19 +109,20 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
     private static void CaptureOutput(
         Process process,
         StringBuilder standardOutput,
-        StringBuilder standardError
+        StringBuilder standardError,
+        bool discard
     )
     {
         process.OutputDataReceived += (_, e) =>
         {
-            if (e.Data is not null)
+            if (!discard && e.Data is not null)
             {
                 standardOutput.AppendLine(e.Data);
             }
         };
         process.ErrorDataReceived += (_, e) =>
         {
-            if (e.Data is not null)
+            if (!discard && e.Data is not null)
             {
                 standardError.AppendLine(e.Data);
             }

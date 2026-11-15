@@ -2,3 +2,5 @@
 #
 # Only the root configuration declares a workload. Every squad inherits from it.
 workload: mti-ca
+kits:
+  - host-access-cape

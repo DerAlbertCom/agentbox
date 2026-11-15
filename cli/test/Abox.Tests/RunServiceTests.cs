@@ -9,6 +9,7 @@ using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sandboxes;
 using Abox.Sbx;
+using Abox.UserSecrets;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -45,7 +46,8 @@ public sealed class RunServiceTests
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(_config, _sbx, PublishedSquadTest.Source())
+            new RemoteSquadSource(_config, _sbx, PublishedSquadTest.Source()),
+            new UserSecretsCopy(_config, new UserSecretsHost(null, null), _sbx)
         );
         _service = new RunService(
             launchers,
