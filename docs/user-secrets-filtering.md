@@ -45,12 +45,16 @@ and objects such as `{"id":"Cape.*","keys":["ConnectionStrings:*"]}` support thi
   pass strict portable ID validation (including the 128-character limit and no
   trailing dots/device names). Matching unsafe IDs, linked paths or case-colliding
   actual IDs fail the entire preparation before sandbox calls; force cannot bypass
-  this. Host root ancestors and selected directories/files reject symlinks/reparse
-  points. Concurrent malicious filesystem changes remain outside the contract.
+  this. The host user-secrets root itself and selected store directories/files
+  reject symlinks/reparse points. Linked ancestors above that trusted root, such as
+  a linked profile or `/home`/`/var`, are allowed. Concurrent malicious filesystem
+  changes remain outside the contract.
 - A no-match prefix (including an absent host root) selects no stores and writes
   nothing. It does not broaden selection or clear any destination. An exact ID
-  still requires a readable host file and fails if missing. Enumeration/permission
-  errors fail, never silently become no matches.
+  still requires a readable host file and fails if missing. A matched store
+  directory without `secrets.json` is selected but incomplete: it fails all
+  preparation before sandbox calls, even with `--force`, rather than being skipped
+  as a no-match. Enumeration/permission errors fail, never silently become no matches.
 - Selection entries are processed in declaration order; each prefix expands in
   ordinal case-insensitive ID order, with actual host spelling retained. When
   prefixes are present, an exact selection also resolves to the corresponding

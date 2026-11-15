@@ -10,6 +10,88 @@ namespace Abox.Tests;
 public sealed class UserSecretsStorePatternTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MatchingDirectoryWithoutSecretsFileFailsAllPreparationRatherThanBeingANoMatch(
+        bool force
+    )
+    {
+        using var fixture = new Fixture();
+        fixture.Configure("""{"userSecrets":["Cape.*"]}""");
+        fixture.Store("Cape.A", "{}");
+        fixture.Root.Directory_("appdata/Microsoft/UserSecrets/Cape.Z");
+
+        (await fixture.Run(force ? ["--force"] : [])).Should().Be(1);
+
+        fixture
+            .Console.AllText.Should()
+            .Contain("Cape.Z")
+            .And.Contain("existence")
+            .And.NotContain("No user-secret stores selected");
+        fixture.Sbx.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task ExpansionRetainsDeclarationOrderWhenALaterOverlapUnionsAnEarlierStoresKeys()
+    {
+        using var fixture = new Fixture();
+        fixture.Configure(
+            """{"userSecrets":[{"id":"Zeta.*","keys":["A"]},"solo","Cape.*",{"id":"Zeta.A","keys":["B"]}]}"""
+        );
+        fixture.Store("Cape.A", "{}");
+        fixture.Store("solo", "{}");
+        fixture.Store("Zeta.Z", "{}");
+        fixture.Store("Zeta.A", """{"A":1,"B":2}""");
+
+        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+
+        var writes = Writes(fixture);
+        writes.Select(write => write.Id).Should().Equal("Zeta.A", "Zeta.Z", "solo", "Cape.A");
+        writes[0].Json.Should().Be("""{"A":1,"B":2}""");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LinkedProfileAncestorsAreAllowedForExactAndPrefixSelections(bool prefix)
+    {
+        using var fixture = new Fixture();
+        using var profile = new TempDirectory();
+        fixture.Configure(
+            prefix ? """{"userSecrets":["Cape.*"]}""" : """{"userSecrets":["Cape.Deals"]}"""
+        );
+        var source = profile.File(
+            "Microsoft/UserSecrets/Cape.Deals/secrets.json",
+            """{"Password":"linked-profile-synthetic"}"""
+        );
+        var link = Path.Combine(fixture.Root.Path, "appdata");
+        Directory.Delete(link);
+        if (OperatingSystem.IsWindows())
+        {
+            var result = await new ProcessRunner().RunAsync(
+                new ProcessRequest("cmd", ["/c", "mklink", "/J", link, profile.Path]),
+                CancellationToken.None
+            );
+            result.ExitCode.Should().Be(0, result.StandardError);
+        }
+        else
+            Directory.CreateSymbolicLink(link, profile.Path);
+
+        try
+        {
+            (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+
+            Writes(fixture).Select(write => write.Id).Should().Equal("Cape.Deals");
+            fixture.Console.AllText.Should().NotContain("linked-profile-synthetic");
+            File.ReadAllText(source).Should().Be("""{"Password":"linked-profile-synthetic"}""");
+        }
+        finally
+        {
+            Directory.Delete(link);
+        }
+    }
+
+    [Theory]
     [InlineData("allow")]
     [InlineData("deny")]
     [InlineData("malformed")]

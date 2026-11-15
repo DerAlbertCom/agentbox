@@ -234,7 +234,9 @@ the **whole store**. An ID ending in one `*`, such as `Cape.*`, selects every lo
 store whose ID starts with the literal prefix `Cape.` (ordinal, case-insensitive).
 Only a safe nonempty literal prefix plus one terminal `*` is supported: no bare
 `*`, paths, recursive lookup or other glob syntax. A prefix with no matches selects
-no stores; a missing exact ID still fails. Matches use actual host ID spelling and
+no stores; a missing exact ID still fails. A matched directory without a readable
+`secrets.json` fails the entire preparation, even with `--force`; it is not an
+unmatched prefix. Matches use actual host ID spelling and
 are sorted; overlapping exact/prefix selections copy each store once, unioning
 their key selections (a whole-store selection wins). Repeated identical selection
 strings are still rejected case-insensitively. Matching unsafe host directory names
@@ -314,9 +316,10 @@ The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when
 `<HOME>/.microsoft/usersecrets/<id>/secrets.json`. Empty/relative environment roots
 fail; abox does not guess another user's profile. Prefixes enumerate only direct
 store directories in that root, not project files or subdirectories. Only selected
-files are read; host files are never changed. Host root ancestors, selected store
-directories and secret files must not be symbolic links/reparse points. The sandbox
-destination is independently resolved from
+files are read; host files are never changed. The host user-secrets root itself,
+selected store directories and secret files must not be symbolic links/reparse
+points. Linked ancestors above that trusted root (for example a linked user profile)
+are allowed. The sandbox destination is independently resolved from
 the effective, non-root **default exec application user** and its `APPDATA`/`HOME`,
 using the same precedence. An application launched with a different environment
 must use matching roots. No host paths, local kits or published-source checkout

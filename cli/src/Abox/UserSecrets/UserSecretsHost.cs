@@ -14,8 +14,13 @@ public sealed class UserSecretsHost(string? appData, string? home)
     internal string StorePath(string id)
     {
         UserSecretId.Validate(id);
-        var path = Path.Combine(StoreRoot(), id, "secrets.json");
-        EnsureOrdinaryPath(path, file: true);
+        // The configured store root is trusted; profiles above it may legitimately be linked.
+        var root = StoreRoot();
+        EnsureOrdinaryEntry(root);
+        var store = Path.Combine(root, id);
+        EnsureOrdinaryEntry(store);
+        var path = Path.Combine(store, "secrets.json");
+        EnsureOrdinaryEntry(path, file: true);
         return path;
     }
 
@@ -24,7 +29,7 @@ public sealed class UserSecretsHost(string? appData, string? home)
         try
         {
             var root = StoreRoot();
-            EnsureOrdinaryPath(root);
+            EnsureOrdinaryEntry(root);
             return Directory
                 .EnumerateDirectories(root)
                 .Select(path =>
@@ -49,32 +54,21 @@ public sealed class UserSecretsHost(string? appData, string? home)
         }
     }
 
-    private static void EnsureOrdinaryPath(string path, bool file = false)
+    private static void EnsureOrdinaryEntry(string path, bool file = false)
     {
-        var fullPath = Path.GetFullPath(path);
-        var ancestors = new Stack<string>();
-        for (
-            string? current = fullPath;
-            current is not null;
-            current = Path.GetDirectoryName(current)
+        var attributes = File.GetAttributes(path);
+        if ((attributes & FileAttributes.ReparsePoint) != 0)
+            throw new AboxException(
+                "Host user-secret paths must not contain a symbolic link or reparse point at or below the user-secret root; no stores were copied."
+            );
+        var expectedDirectory = !file;
+        if (
+            (attributes & FileAttributes.Device) != 0
+            || attributes.HasFlag(FileAttributes.Directory) != expectedDirectory
         )
-            ancestors.Push(current);
-        foreach (var current in ancestors)
-        {
-            var attributes = File.GetAttributes(current);
-            if ((attributes & FileAttributes.ReparsePoint) != 0)
-                throw new AboxException(
-                    "Host user-secret paths must not contain a symbolic link or reparse point; no stores were copied."
-                );
-            var expectedDirectory = !file || current != fullPath;
-            if (
-                (attributes & FileAttributes.Device) != 0
-                || attributes.HasFlag(FileAttributes.Directory) != expectedDirectory
-            )
-                throw new AboxException(
-                    "Host user-secret paths must use ordinary directories and files; no stores were copied."
-                );
-        }
+            throw new AboxException(
+                "Host user-secret paths must use ordinary directories and files; no stores were copied."
+            );
     }
 
     private string StoreRoot()

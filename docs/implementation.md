@@ -452,8 +452,11 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   case-insensitive, deterministic within each entry, and deduplicated across
   overlapping exact/prefix entries (key unions, whole store wins). No-match prefixes
   select no stores; missing exact IDs fail. Matching unsafe/case-colliding host IDs
-  and symlinks/reparse points in host ancestors/stores/files fail before sandbox
-  access. See [store-prefix semantics and verification](verification/user-secrets-store-prefixes.md).
+  and symlinks/reparse points in the host user-secret root itself/stores/files fail
+  before sandbox access; linked profile ancestors above that trusted root are allowed.
+  A matched directory without a readable `secrets.json` fails all preparation instead
+  of being silently skipped as an unmatched prefix. See
+  [store-prefix semantics and verification](verification/user-secrets-store-prefixes.md).
   Preparation rejects duplicate
   effective case-insensitive .NET keys before filtering, then checks all selected
   **original** values before rewriting/writes. Plain IDs or objects with omitted

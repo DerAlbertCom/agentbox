@@ -99,7 +99,8 @@ public sealed class UserSecretSelection
         IReadOnlyList<string> hostIds
     )
     {
-        var result = new Dictionary<string, UserSecretSelection>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<UserSecretSelection>();
+        var indices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var selection in selections)
         {
             var matches = hostIds
@@ -114,19 +115,23 @@ public sealed class UserSecretSelection
             foreach (var id in matches)
             {
                 UserSecretId.Validate(id);
-                if (result.TryGetValue(id, out var previous))
+                if (indices.TryGetValue(id, out var index))
                 {
+                    var previous = result[index];
                     if (!previous.Id.Equals(id, StringComparison.Ordinal))
                         throw new AboxException(
                             "Host user-secret store IDs collide case-insensitively. Rename the conflicting host directories; no stores were copied."
                         );
-                    result[id] = new UserSecretSelection(id, selection, previous);
+                    result[index] = new UserSecretSelection(id, selection, previous);
                 }
                 else
-                    result.Add(id, new UserSecretSelection(id, selection, null));
+                {
+                    indices.Add(id, result.Count);
+                    result.Add(new UserSecretSelection(id, selection, null));
+                }
             }
         }
-        return result.Values.ToArray();
+        return result.ToArray();
     }
 
     private static UserSecretSelection ParseObject(JsonElement entry)
