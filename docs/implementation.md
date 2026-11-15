@@ -70,6 +70,16 @@ does not skip the workload image build.
 The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unless the
 command or the user configuration says otherwise.
 
+Normal and metadata-only builds, local/remote creation and reusable build-store
+access use the same registry-tag grammar: 1–128 ASCII letters, digits, underscores,
+periods or hyphens, starting with a letter, digit or underscore. The selected
+`--tag` or configured `defaultTag` is rejected before tag-derived filesystem access,
+generated script/certificate cleanup or external-tool/runtime operations. Paths,
+separators, whitespace and empty/overlong tags are invalid. An omitted `defaultTag`
+still means `latest`; an explicitly blank default is invalid when selected, not a
+request to fall back to `latest`. Valid explicit tags can override invalid defaults.
+Published reference naming and tag promotion are unchanged.
+
 **Metadata-only preparation:** `--metadata-only` resolves configurations, writes
 generated workload/state sources and saves the manifest, but skips sbx preflight,
 all kit inspection and all Docker/Buildx/image operations. `LocalWorkload` is

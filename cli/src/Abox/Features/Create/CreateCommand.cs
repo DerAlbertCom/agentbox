@@ -3,6 +3,7 @@ using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.Naming;
 using Abox.Sandboxes;
 
 namespace Abox.Features.Create;
@@ -88,6 +89,8 @@ public sealed class CreateCommand : Command
                         }
 
                         var settings = config.Value;
+                        var selectedTag = parseResult.GetValue(tag) ?? settings.DefaultTag;
+                        RegistryImageName.ValidateTag(selectedTag);
                         var teamName =
                             parseResult.GetValue(team)
                             ?? settings.DefaultTeam
@@ -123,7 +126,7 @@ public sealed class CreateCommand : Command
                             resolved,
                             selectedSquad,
                             resolvedLocation,
-                            parseResult.GetValue(tag) ?? settings.DefaultTag,
+                            selectedTag,
                             folderConfig,
                             parseResult.GetValue(assumeYes),
                             Local: useLocal
