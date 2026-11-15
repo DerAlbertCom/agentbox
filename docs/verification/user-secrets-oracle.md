@@ -64,3 +64,25 @@ tests. Generic TCP URL preservation retains its regression coverage.
 - Formatting was applied using `dotnet csharpier format cli`.
 
 Release verification is intentionally left to the final integration orchestrator.
+
+## After merging shared-store integration
+
+Merged `integration/issue-12-endpoint-overrides` at `32569b8` (including #14)
+into the task branch without conflicts or resets. Oracle continues to feed the
+existing `ProjectOverrides` effective/generated maps through `RewriteEndpoint`;
+no alternate compatibility implementation was introduced.
+
+Additional Oracle command cases prove compatible Easy Connect/descriptor merges,
+already-adapted consumers, conflicting remote/unmapped/service/options values,
+discovery-order independence and authoritative shared-secret precedence.
+
+- `dotnet test cli/agentbox.slnx -c Debug --filter 'FullyQualifiedName~UserSecretsOracleCommandTests|FullyQualifiedName~UserSecretsSharedStoreCommandTests'`:
+  **90 passed**, no skips/failures (**66 Oracle**, **24 shared-store**).
+- `dotnet build cli/agentbox.slnx -c Debug --no-restore`:
+  **0 warnings, 0 errors**.
+- `dotnet test cli/agentbox.slnx -c Debug --no-build`:
+  **1076 passed, 7 explicit platform skips, 0 failures** (**1083 total**).
+- `dotnet csharpier check cli` and `git diff --check`: passed.
+
+No Release build/tests or independent live Oracle/sandbox run were performed.
+The final integration orchestrator owns Release verification and PR/merge work.

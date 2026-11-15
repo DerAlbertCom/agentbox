@@ -130,8 +130,14 @@ a local host at an unmapped port. Remote/unmapped overrides are preserved rather
 than adapting the overridden authority. Hostless forms such as
 `postgresql:///db?host=localhost` or `postgresql:///db?hostaddr=127.0.0.1` without an
 explicit port remain unchanged: no default port is inferred for them.
-Oracle Easy Connect/descriptors and recognized split host/port settings are
-separate follow-ups, not supported by this generation feature.
+Oracle Easy Connect and structural descriptors are also supported, both as whole
+values and inside Oracle connection strings' `Data Source` fields. Compound
+destinations adapt only eligible hosts; ports, credentials, service/SID identifiers,
+descriptor structure and unrelated options retain their exact string spelling.
+The Oracle Easy Connect default 1521 is eligible only when mapped. Unsupported or
+ambiguous known mapped-local Oracle forms fail before any store is written, with
+the same value-free diagnostics. See [Oracle forms and limits](user-secrets-rewriting.md#oracle-easy-connect-and-descriptors-15).
+Recognized split host/port settings remain a separate follow-up.
 
 ## Shared stores
 

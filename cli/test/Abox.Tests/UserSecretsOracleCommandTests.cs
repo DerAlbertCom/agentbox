@@ -7,6 +7,118 @@ namespace Abox.Tests;
 public sealed class UserSecretsOracleCommandTests
 {
     [Theory]
+    [InlineData("//127.0.0.2:1521/synthetic-service", true)]
+    [InlineData("//host.docker.internal:1521/synthetic-service", true)]
+    [InlineData("//remote.test:1521/synthetic-service", false)]
+    [InlineData("//localhost:5000/synthetic-service", false)]
+    [InlineData("//localhost:1521/synthetic-instance", false)]
+    [InlineData("//localhost:1521/synthetic-service?retry_count=3", false)]
+    public async Task OracleOverridesUseSharedStoreCompatibilityIncludingUnchangedConsumers(
+        string second,
+        bool compatible
+    )
+    {
+        foreach (var reverse in new[] { false, true })
+        {
+            using var cli = new UserSecretsCliHarness();
+            cli.Configure("""{"userSecrets":["first","sample"]}""");
+            cli.Store("first", "{}");
+            foreach (
+                var (name, endpoint) in new[]
+                {
+                    (reverse ? "Worker" : "Api", "//localhost:1521/synthetic-service"),
+                    (reverse ? "Api" : "Worker", second),
+                }
+            )
+            {
+                cli.Root.File(
+                    $"folder/{name}/{name}.csproj",
+                    "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+                );
+                cli.Root.File(
+                    $"folder/{name}/appsettings.json",
+                    JsonSerializer.Serialize(new { Oracle = endpoint })
+                );
+            }
+            MappedPorts(cli);
+            var originals = Originals(cli);
+
+            (await cli.Run("--verbose")).Should().Be(compatible ? 0 : 1, cli.Console.AllText);
+
+            if (compatible)
+            {
+                using var written = JsonDocument.Parse(Written(cli, "sample"));
+                written.RootElement.EnumerateObject().Should().ContainSingle();
+                written
+                    .RootElement.GetProperty("Oracle")
+                    .GetString()
+                    .Should()
+                    .Be("//host.docker.internal:1521/synthetic-service");
+            }
+            else
+            {
+                await cli.NoWrites();
+                cli.Console.AllText.Should()
+                    .Contain("conflict")
+                    .And.Contain("Api.csproj")
+                    .And.Contain("Worker.csproj");
+            }
+            SafeDiagnostics(cli);
+            Unchanged(originals);
+        }
+    }
+
+    [Fact]
+    public async Task SharedOracleDescriptorsMergeAndAuthoritativeSecretsSuppressLowerPriorityConflicts()
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        const string descriptor =
+            "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SID=synthetic-service)))";
+        Project(cli, new { Oracle = descriptor });
+        cli.Root.File(
+            "folder/Worker/Worker.csproj",
+            "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+        );
+        cli.Root.File(
+            "folder/Worker/appsettings.json",
+            JsonSerializer.Serialize(
+                new
+                {
+                    Oracle = "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=::1)(PORT=1521))(CONNECT_DATA=(SID=synthetic-service)))",
+                }
+            )
+        );
+        MappedPorts(cli);
+
+        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        using (var written = JsonDocument.Parse(Written(cli, "sample")))
+            written
+                .RootElement.GetProperty("Oracle")
+                .GetString()
+                .Should()
+                .Be(
+                    "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=host.docker.internal)(PORT=1521))(CONNECT_DATA=(SID=synthetic-service)))"
+                );
+
+        cli.Root.File(
+            "folder/Worker/appsettings.json",
+            """{"Oracle":"//remote.test:1521/synthetic-instance"}"""
+        );
+        cli.Store("sample", JsonSerializer.Serialize(new { Oracle = descriptor }));
+        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        using (var written = JsonDocument.Parse(Written(cli, "sample")))
+            written
+                .RootElement.GetProperty("Oracle")
+                .GetString()
+                .Should()
+                .Be(
+                    "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=host.docker.internal)(PORT=1521))(CONNECT_DATA=(SID=synthetic-service)))"
+                );
+        SafeDiagnostics(cli);
+    }
+
+    [Theory]
     [InlineData("\"sample\"", 5)]
     [InlineData("{\"id\":\"sample\",\"keys\":[\"oracle:*\"]}", 4)]
     [InlineData("{\"id\":\"sample\",\"keys\":[\"Oracle:Primary\"]}", 1)]
