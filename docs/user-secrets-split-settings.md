@@ -76,9 +76,11 @@ even when another consumer would generate the common `host.docker.internal` text
 Different mapped ports can be compatible because each consumer retains its own
 port. A selected host without a selected port also requires compatible adaptation
 across discovered consumers; select an authoritative compatible host/port pair or
-use separate stores to resolve a conflict. Unknown consumers block adaptation that
-depends on project port metadata; an authoritative selected host/port pair keeps
-copy-only behavior. Checks never choose by discovery order.
+use separate stores to resolve a conflict. Only projects explicitly declaring the
+matching selected ID participate; unrelated computed/import-only IDs do not block
+adaptation using a matching project's port metadata. The
+[bounded association rules](user-secrets-appsettings.md#bounded-discovery-not-application-startup)
+also apply here. Checks never choose by discovery order.
 
 See the [synthetic verification record](verification/user-secrets-split-settings.md).
 These configuration tests do not establish database authentication or readiness.

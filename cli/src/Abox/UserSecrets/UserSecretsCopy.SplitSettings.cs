@@ -11,8 +11,7 @@ public sealed partial class UserSecretsCopy
     private static IReadOnlyDictionary<string, string> SelectedSplitSettings(
         UserSecretSnapshot store,
         IReadOnlyList<ProjectSettings> projects,
-        HashSet<int> ports,
-        IReadOnlyList<string> unresolvedProjects
+        HashSet<int> ports
     )
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -36,11 +35,7 @@ public sealed partial class UserSecretsCopy
             );
         }
         // A selected host alone still derives its destination from consumer-specific port metadata.
-        var adapted = MergeGeneratedOverrides(
-            store.Id,
-            consumers,
-            store.Values.ContainsKey(DatabasePortKey) ? [] : unresolvedProjects
-        );
+        var adapted = MergeGeneratedOverrides(store.Id, consumers);
         result.Add(
             DatabaseHostKey,
             adapted.TryGetValue(DatabaseHostKey, out var adaptedHost) ? adaptedHost : host

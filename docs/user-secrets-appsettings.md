@@ -39,22 +39,20 @@ modified. Settings need not be under `ConnectionStrings`.
   inputs must be ordinary files, not file links/reparse points.
 - Associate selected stores case-insensitively with one unconditional literal
   `UserSecretsId` declaration in a project's top-level `PropertyGroup`, using the
-  existing portable store-ID rules. Do not execute builds, evaluate MSBuild,
-  read imported property values, or guess computed/conditional/multiple/invalid IDs.
-  SDK projects without a literal ID also get an unresolved-association warning
-  when a `Directory.Build.props` or `Directory.Build.targets` exists between the
-  project and workspace root. Only its presence is checked: no import contents or
-  ancestors above the workspace are searched/evaluated. Explicit imports and
-  computed IDs that cannot be ruled out for the selection still produce value-free
-  project warnings. These projects are tracked as possible selected-store consumers,
-  not arbitrarily associated or merely warned about: **generation is blocked until
-  their associations are resolved**, while authoritative host-only copying remains
-  available. This is intentionally conservative when a common workspace import
-  exists: even a library without its own ID could inherit one. Import contents are
-  not inspected to infer which libraries consume a store. Unconditional literal
-  unselected IDs remain unselected; with no import evidence, definitely unselected
-  literal IDs and projects without association evidence do not block generation.
-  Missing-store errors explain the required literal association and sources.
+  existing portable store-ID rules. Project XML is inspected only to find explicit
+  matches; only matching projects' appsettings are read. Do not execute builds,
+  evaluate MSBuild, read imports (including `Directory.Build.props`/`.targets`),
+  or infer IDs from expressions, conditions or imports.
+- Projects without an explicit matching ID are ignored **without warnings or
+  blocking generation**. This includes computed/import-only/absent IDs and
+  conditional, multiple or invalid declarations whose values do not match a
+  selected ID. An import's presence does not invalidate an explicit matching
+  literal declaration, and its values are never used to override that declaration.
+- If readable XML explicitly names a selected ID but its declaration is conditional,
+  multiple or malformed (for example nested elements, attributes or incorrect
+  placement), fail before copying any stores. Declare exactly one unconditional
+  literal ID in a top-level `PropertyGroup`. Empty filters, authoritative host
+  values and `--force` do not bypass this selected-project validation.
 - Discovery never selects an additional store or authorizes network access.
   Existing store-ID prefixes still expand **only host store directories**, not
   project IDs. Use an exact selected ID for a project-only store that has no host
@@ -62,15 +60,14 @@ modified. Settings need not be under `ConnectionStrings`.
 - Only associated, selected projects' JSON is read. An unmatched selected store
   retains copy-only behavior and requires its readable host `secrets.json`.
 - Unreadable/malformed/DTD-bearing or linked project XML cannot establish an
-  association. Warn and permit validated host-only copying rather than breaking
-  copy-only selections because of an unrelated template. Do not guess its store
-  or read its appsettings. Since it could hide a literal shared-store consumer,
-  **generation is rejected while any discovered project XML is unreadable** (as
-  with possibly selected unresolved IDs above);
-  repair that project or supply authoritative selected host keys. This warning
-  does not suppress validation of selected host files or associated appsettings,
-  even with empty key filters or force. Missing host files still need an actual
-  associated appsettings source. Directory traversal failures remain fatal.
+  association and is ignored without warnings, even if its raw text mentions a
+  selected ID. Do not guess its store, follow file links or read its appsettings.
+  This explicit-association policy intentionally does not protect consumers hidden
+  in unreadable XML or supplied only by MSBuild evaluation; put their literal IDs
+  directly in readable ordinary project files to include them. Selected host files
+  and associated appsettings are still validated, even with empty key filters or
+  force. Missing host files still need an actual associated appsettings source.
+  Directory traversal failures remain fatal.
 
 This is not a reconstruction of custom/linked/generated configuration providers,
 environment or command-line overrides, other environments, launch profiles,
@@ -149,7 +146,7 @@ exact supported shape, filters and safe-failure rules.
 
 ## Shared stores
 
-All discovered consumers of a selected store participate in compatibility checks.
+All explicitly associated consumers of a selected store participate in compatibility checks.
 Compatible generated overrides are merged once per case-insensitive effective
 key. Compare complete desired configuration values, not just endpoint hosts:
 different ports, credentials, paths or connection options cannot silently win by
@@ -172,8 +169,9 @@ Selected host keys remain authoritative **before** generation or compatibility
 checks, regardless of value, and still receive eligible adaptation. Lower-priority
 appsettings differences for those keys are irrelevant. Existing key filters apply
 before generation and compatibility; they do not authorize any extra keys.
-Unreadable or unresolved potential consumers still block generation as described
-above, even when all known consumers agree. Host-only copying remains available.
+Unrelated/unresolved projects do not participate or block generation. These checks
+cover all explicit matching consumers within the bounded discovery model above,
+not consumers inferred through MSBuild or hidden in unreadable project XML.
 
 Conflicts identify the store, escaped effective key and affected project paths,
 without values. Resolve them by supplying an intentional authoritative selected

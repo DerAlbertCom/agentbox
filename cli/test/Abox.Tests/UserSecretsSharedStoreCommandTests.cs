@@ -68,6 +68,11 @@ public sealed class UserSecretsSharedStoreCommandTests
                         new Dictionary<string, string> { ["services:ENDPOINT"] = second }
                     )
             );
+            cli.Root.File(
+                "folder/Unrelated/Unrelated.csproj",
+                "<Project><PropertyGroup><UserSecretsId>$(SyntheticPrivateId)</UserSecretsId></PropertyGroup></Project>"
+            );
+            cli.Root.File("folder/Unrelated/appsettings.json", "not JSON: unrelated configuration");
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
                 .Returns(new[] { 8004, 4317 });
             var originals = Sources(cli);
@@ -84,6 +89,8 @@ public sealed class UserSecretsSharedStoreCommandTests
                 .And.Contain("ZWorker.csproj")
                 .And.Contain("conflict")
                 .And.Contain("authoritative selected host-secret")
+                .And.NotContain("Warning:")
+                .And.NotContain("Unrelated.csproj")
                 .And.NotContain("synthetic-");
             AssertUnchanged(originals);
         }
@@ -186,24 +193,11 @@ public sealed class UserSecretsSharedStoreCommandTests
             "Worker",
             """{"endpoint":"http://synthetic-remote.test:5000/synthetic-worker","Safe":"http://127.0.0.1:4317/synthetic-safe","Excluded":"http://localhost:8004/synthetic-worker"}"""
         );
-        cli.Root.File(
-            "folder/Unknown.csproj",
-            "not XML: unknown consumer must still prevent generation"
-        );
-        // The unknown consumer first blocks Safe, but cannot make the authoritative Endpoint conflict.
+        cli.Root.File("folder/Unknown.csproj", "not XML: no explicit matching association");
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004, 4317 });
         var originals = Sources(cli);
 
-        (await cli.Run("--verbose")).Should().Be(1);
-        await cli.NoWrites();
-        cli.Console.AllText.Should()
-            .Contain("Safe")
-            .And.Contain("association")
-            .And.NotContain("conflict");
-
-        File.Delete(Path.Combine(cli.Location, "Unknown.csproj"));
-        originals.Remove(Path.Combine(cli.Location, "Unknown.csproj"));
         (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
 
         using var written = JsonDocument.Parse(Written(cli, "shared"));

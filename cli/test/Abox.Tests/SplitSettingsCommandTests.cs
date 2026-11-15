@@ -656,7 +656,7 @@ public sealed class SplitSettingsCommandTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
-    public async Task UnknownConsumersCannotBeBypassedByASelectedHostThatNeedsProjectPortMetadata(
+    public async Task UnrelatedComputedIdsDoNotBlockSelectedHostsUsingMatchingProjectPortMetadata(
         bool selectedPort
     )
     {
@@ -674,27 +674,22 @@ public sealed class SplitSettingsCommandTests
             "folder/Unknown.csproj",
             "<Project><PropertyGroup><UserSecretsId>$(SyntheticPrivateId)</UserSecretsId></PropertyGroup></Project>"
         );
+        cli.Root.File(
+            "folder/appsettings.json",
+            "not JSON: unrelated project must not supply metadata"
+        );
         Mapped(cli);
 
-        (await cli.Run("--verbose", "--force"))
-            .Should()
-            .Be(selectedPort ? 0 : 1, cli.Console.AllText);
+        (await cli.Run("--verbose", "--force")).Should().Be(0, cli.Console.AllText);
 
-        if (selectedPort)
-            Written(cli)
-                .Should()
-                .Be(
-                    """{"Database_Config:Host":"host.docker.internal","Database_Config:Port":8004}"""
-                );
-        else
-        {
-            await cli.NoWrites();
-            cli.Console.AllText.Should()
-                .Contain("Database_Config:Host")
-                .And.Contain("consumer")
-                .And.Contain("association");
-        }
-        cli.Console.AllText.Should().NotContain("SyntheticPrivateId");
+        Written(cli)
+            .Should()
+            .Be(
+                selectedPort
+                    ? """{"Database_Config:Host":"host.docker.internal","Database_Config:Port":8004}"""
+                    : """{"Database_Config:Host":"host.docker.internal"}"""
+            );
+        cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("SyntheticPrivateId");
     }
 
     private static Dictionary<string, byte[]> Originals(UserSecretsCliHarness cli) =>

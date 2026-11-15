@@ -479,10 +479,12 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   override it. `PreparedUserSecrets` owns project originals
   and association metadata in memory, separately from host snapshots, allowing
   project-only generation without a host secrets file.
-  Unmatched stores remain copy-only. Unreadable project XML warns without blocking
-  validated host-only copies. Unreadable XML and possibly selected unresolved IDs
-  both prevent generation because consumers cannot be established safely. Implicit
-  workspace imports are detected, not evaluated.
+  Unmatched stores remain copy-only. Only explicit case-insensitive selected-ID
+  matches participate. Unrelated/computed/import-only IDs and unreadable/linked
+  project XML are ignored without warnings or blocking generation; imports are
+  neither detected nor evaluated. Readable XML explicitly naming a selected ID
+  with conditional, multiple or malformed declarations fails preparation before
+  any writes, even with empty filters, authoritative host values or force.
   See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
   before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
@@ -493,8 +495,8 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   against every consumer's desired effective values, including unchanged consumers.
   Only generated keys can conflict; host precedence and key filters are resolved
   first. Identical required values merge once with deterministic key spelling/order;
-  incompatible values fail without a discovery-order winner. Unknown consumers
-  still prevent generation but permit authoritative copy-only values. Parsing,
+  incompatible values fail without a discovery-order winner. All explicit matching
+  consumers participate; unrelated unresolved projects do not block generation. Parsing,
   adaptation, deny, policy and destination checks complete for all stores before
   the first write. Each new copy recalculates and removes stale generated entries.
   Each selected store replaces its entire destination, clearing old unmatched keys,
@@ -594,6 +596,11 @@ Final #12 review fixes and full integrated direct-executable verification are in
 and Release each passed **1168 tests**, with **7 platform skips**, zero failures,
 and zero-warning/error serial SDK 10 builds. Missing-port local Oracle descriptors
 now fail safely when 1521 is mapped; bare whitespace prose remains unchanged.
+The subsequent requested explicit-selected-ID discovery simplification removes
+unrelated unresolved-project warnings/blocking while retaining matching-project
+validation and shared-store conflicts. Debug and Release each passed **1173 tests**,
+with **7 platform skips** and zero failures; see
+[the regression and verification record](verification/user-secrets-selected-projects.md).
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force

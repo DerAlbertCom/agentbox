@@ -19,8 +19,7 @@ public sealed partial class UserSecretsCopy
 
     private static IReadOnlyDictionary<string, string> MergeGeneratedOverrides(
         string id,
-        IReadOnlyList<ProjectOverrides> projects,
-        IReadOnlyList<string> unresolvedProjects
+        IReadOnlyList<ProjectOverrides> projects
     )
     {
         var merged = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -34,10 +33,6 @@ public sealed partial class UserSecretsCopy
             var generators = projects
                 .Where(project => project.GeneratedValues.ContainsKey(key))
                 .ToArray();
-            if (unresolvedProjects.Count > 0)
-                throw new AboxException(
-                    $"{DescribeSetting(id, key, generators[0].Project)}: cannot generate overrides because consumers could not be determined for projects with unreadable XML or unresolved UserSecretsId associations ({string.Join(", ", unresolvedProjects.Order(StringComparer.Ordinal).Select(path => JsonSerializer.Serialize(path)))}). Resolve their associations with unconditional literal IDs or fix their XML/permissions and ordinary-file status, or supply authoritative selected host-secret values for copy-only behavior; no stores were copied."
-                );
             var target = generators[0].GeneratedValues[key];
             var incompatible = projects
                 .Where(project =>

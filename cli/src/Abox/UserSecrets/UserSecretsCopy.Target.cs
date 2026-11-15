@@ -50,12 +50,7 @@ public sealed partial class UserSecretsCopy
                 )
                 .ToArray();
             var rewritten = new List<string>();
-            var selectedTargets = SelectedSettingTargets(
-                store,
-                projects,
-                ports,
-                prepared.UnresolvedProjects
-            );
+            var selectedTargets = SelectedSettingTargets(store, projects, ports);
             var values = new Dictionary<string, string?>(
                 store.Values,
                 StringComparer.OrdinalIgnoreCase
@@ -94,13 +89,7 @@ public sealed partial class UserSecretsCopy
                     }
                     projectOverrides.Add(overrides);
                 }
-                foreach (
-                    var (key, target) in MergeGeneratedOverrides(
-                        store.Id,
-                        projectOverrides,
-                        prepared.UnresolvedProjects
-                    )
-                )
+                foreach (var (key, target) in MergeGeneratedOverrides(store.Id, projectOverrides))
                 {
                     writer.WriteString(key, target);
                     values.Add(key, target);
@@ -142,12 +131,11 @@ public sealed partial class UserSecretsCopy
     private static IReadOnlyDictionary<string, string> SelectedSettingTargets(
         UserSecretSnapshot store,
         IReadOnlyList<ProjectSettings> projects,
-        HashSet<int> ports,
-        IReadOnlyList<string> unresolvedProjects
+        HashSet<int> ports
     )
     {
         var targets = new Dictionary<string, string>(
-            SelectedSplitSettings(store, projects, ports, unresolvedProjects),
+            SelectedSplitSettings(store, projects, ports),
             StringComparer.OrdinalIgnoreCase
         );
         foreach (var (key, value) in store.Values)

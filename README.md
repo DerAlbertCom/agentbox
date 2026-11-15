@@ -319,6 +319,10 @@ Selected stores can also receive sandbox-only endpoint overrides from associated
 projects' appsettings, **without editing project files or requiring a host secrets
 file**. Discovery searches only beneath the selected `abox.json` workspace and
 associates literal `UserSecretsId` declarations without running/evaluating MSBuild.
+Only explicit case-insensitive matches to selected IDs participate. Unrelated,
+computed or import-only IDs do not warn or block generation; their appsettings
+are not read. Explicit matching but conditional, multiple or malformed declarations
+fail safely; see [the association rules](docs/user-secrets-appsettings.md#bounded-discovery-not-application-startup).
 It excludes `.git`, `bin`, `obj`, nCrunch artifacts, escaping directory links and
 cycles. Discovery never selects additional stores; store prefixes still expand
 only existing host directories.
@@ -337,11 +341,11 @@ See [recognized split settings](docs/user-secrets-split-settings.md).
 Each create/replacement/explicit copy rebuilds the complete destination, removing
 stale generated entries. Ordinary `run` still performs no copy. Projects sharing a
 store merge compatible generated overrides. A generated key must agree with every
-discovered consumer's required effective value, including remote/unmapped values
+explicitly associated consumer's required effective value, including remote/unmapped values
 that need no rewrite; conflicts stop all selected stores before any write, with
 value-free store/key/project diagnostics. Supply an authoritative selected host
-key, exclude the key, or use separate stores to resolve a conflict. Unknown
-consumers still block generation. Split hosts depending on project port metadata
+key, exclude the key, or use separate stores to resolve a conflict. Unreadable XML
+and unresolved IDs establish no association and do not block generation. Split hosts depending on project port metadata
 also require compatible consumer contexts; an authoritative selected host/port pair
 retains copy-only behavior.
 This bounded discovery does not simulate

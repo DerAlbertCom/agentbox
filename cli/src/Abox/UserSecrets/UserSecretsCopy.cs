@@ -1,18 +1,12 @@
 using System.Text;
 using System.Text.Json;
 using Abox.Configuration;
-using Abox.Infrastructure;
 using Abox.Sbx;
 
 namespace Abox.UserSecrets;
 
 /// <summary>Shared on-demand/lifecycle flow. Preparation never contacts or writes a sandbox.</summary>
-public sealed partial class UserSecretsCopy(
-    AboxConfig config,
-    UserSecretsHost host,
-    ISbxClient sbx,
-    IConsole? console = null
-)
+public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost host, ISbxClient sbx)
 {
     public async Task<PreparedUserSecrets> PrepareAsync(
         FolderConfig? folderConfig,
@@ -22,7 +16,7 @@ public sealed partial class UserSecretsCopy(
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (folderConfig is null)
-            return new PreparedUserSecrets([], false, force, [], []);
+            return new PreparedUserSecrets([], false, force, []);
         // Callers can construct settings directly, without the YAML loader's validation.
         if (
             config.UserSecretsDenyList is null
@@ -35,17 +29,16 @@ public sealed partial class UserSecretsCopy(
         var selections = folderConfig.UserSecrets.Any(selection => selection.IsPrefixPattern)
             ? UserSecretSelection.Expand(folderConfig.UserSecrets, host.StoreIds(cancellationToken))
             : folderConfig.UserSecrets;
-        var discovery = await ProjectSettings.ReadAsync(
+        var projects = await ProjectSettings.ReadAsync(
             folderConfig.Location,
             selections,
-            cancellationToken,
-            console is null ? null : console.WriteError
+            cancellationToken
         );
         foreach (var selection in selections)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var consumers = discovery
-                .Projects.Where(project =>
+            var consumers = projects
+                .Where(project =>
                     project.SelectedSettings.Id.Equals(
                         selection.Id,
                         StringComparison.OrdinalIgnoreCase
@@ -87,13 +80,7 @@ public sealed partial class UserSecretsCopy(
         foreach (var store in stores)
         foreach (var (key, value) in store.Values)
             safetyOverride |= CheckOriginal(store.Id, key, value, force);
-        return new PreparedUserSecrets(
-            stores,
-            safetyOverride,
-            force,
-            discovery.Projects,
-            discovery.UnresolvedProjects
-        );
+        return new PreparedUserSecrets(stores, safetyOverride, force, projects);
     }
 
     private bool CheckOriginal(
@@ -178,21 +165,18 @@ public sealed class PreparedUserSecrets
         IReadOnlyList<UserSecretSnapshot> stores,
         bool safetyOverride,
         bool force,
-        IReadOnlyList<ProjectSettings> projects,
-        IReadOnlyList<string> unresolvedProjects
+        IReadOnlyList<ProjectSettings> projects
     )
     {
         Stores = stores;
         SafetyOverride = safetyOverride;
         Force = force;
         Projects = projects;
-        UnresolvedProjects = unresolvedProjects;
     }
 
     internal IReadOnlyList<UserSecretSnapshot> Stores { get; }
     internal bool Force { get; }
     internal IReadOnlyList<ProjectSettings> Projects { get; }
-    internal IReadOnlyList<string> UnresolvedProjects { get; }
 
     /// <summary>At least one selected original value matched the deny list and was allowed by --force.</summary>
     public bool SafetyOverride { get; }

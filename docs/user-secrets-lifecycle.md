@@ -55,9 +55,11 @@ accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
    snapshot **all** selected host stores and associated projects' standard
    appsettings, and check selected host originals against the global deny list.
    Missing sources, unreadable/malformed selected files or denied host originals
-   fail before any existing sandbox is removed. Unreadable project XML or possibly
-   selected unresolved IDs warn and permit validated host-only copying, but block
-   generation at target preparation because consumers cannot be established safely.
+   fail before any existing sandbox is removed. Only explicit matching literal
+   project IDs establish appsettings consumers; unrelated/computed/import-only IDs
+   and unreadable project XML are ignored without warnings or blocking generation.
+   Explicit matching but conditional, multiple or malformed declarations fail
+   preparation; see [bounded discovery](user-secrets-appsettings.md#bounded-discovery-not-application-startup).
    A missing host file is allowed when an associated project's appsettings supplies
    configuration. No sandbox metadata or destination access is needed for preparation.
 3. Validate squad/build/state/MCP inputs and obtain replacement consent. Prepare
