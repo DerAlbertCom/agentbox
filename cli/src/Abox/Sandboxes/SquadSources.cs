@@ -58,22 +58,11 @@ public sealed class LocalSquadSource(BuildStore store, LocalWorkloadImages image
     )
     {
         var manifest =
-            store.Load(selection.Squad, selection.Tag)
+            store.Load(selection.Team, selection.Squad, selection.Tag)
             ?? throw new AboxException(
                 $"There is no local build of '{selection.Squad}' with the tag '{selection.Tag}'. "
                     + $"Prepare it first: abox build --team {selection.Team} --tag {selection.Tag}"
             );
-        if (
-            manifest.Reference != ImageName.OfTeam(selection.Team, selection.Tag)
-            || manifest.Squad != selection.Squad
-            || manifest.Tag != selection.Tag
-        )
-        {
-            throw new AboxException(
-                $"The local build metadata of '{selection.Squad}' is not for team '{selection.Team}'. "
-                    + $"Prepare it again: abox build --team {selection.Team} --tag {selection.Tag}"
-            );
-        }
         var image =
             manifest.LocalWorkload
             ?? throw new AboxException(

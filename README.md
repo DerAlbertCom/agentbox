@@ -524,7 +524,7 @@ is never substituted. `abox run` does not replace pulled sandboxes with local bu
 The optional `build --metadata-only --no-personal` mode remains for maintainers;
 it is not part of this workflow. It performs no Docker/Buildx or sbx calls.
 
-`--metadata-only` **replaces the manifest for the selected squad/tag** and clears
+`--metadata-only` **replaces the manifest for the selected team/squad/tag** and clears
 its previous local image selection, even if inputs are unchanged. Existing
 Docker images, thin runtime kits and sandboxes are not deleted. Use a separate
 tag if you need to keep a local build selected; otherwise a normal `abox build`

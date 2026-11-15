@@ -14,7 +14,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class CreateServiceTests
+public sealed partial class CreateServiceTests
 {
     private readonly TempDirectory _root = new();
     private readonly TestConsole _console = new();
@@ -68,7 +68,7 @@ public sealed class CreateServiceTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == _store.Load("ac", "latest")!.LocalWorkload!.RuntimeKitDirectory
+                        == _store.Load("sample", "ac", "latest")!.LocalWorkload!.RuntimeKitDirectory
                     && request.HostDockerContext == "test-context"
                     && request.PullPolicy == "never"
                     && request.Name == SandboxName.For(_root.Path)
@@ -103,7 +103,7 @@ public sealed class CreateServiceTests
     public async Task SharedKitArgumentsMustHaveTheSameValue(string value)
     {
         SaveBuild();
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
         manifest.Kits.Add(
             new ManifestKit
             {
@@ -263,11 +263,24 @@ public sealed class CreateServiceTests
     [InlineData("")]
     public async Task PullingIgnoresLocalMetadataEvenWhenItBelongsToAnotherTeam(string team)
     {
-        SaveBuild(reference: team == "" ? "" : ImageName.OfTeam(team, "latest"));
+        // Arrange
+        _root.File(
+            "state/builds/ac/latest/build.json",
+            System.Text.Json.JsonSerializer.Serialize(
+                new BuildManifest
+                {
+                    Squad = "ac",
+                    Tag = "latest",
+                    Reference = team == "" ? "" : ImageName.OfTeam(team, "latest"),
+                }
+            )
+        );
 
+        // Act
         (await _service.CreateAsync(Request() with { Local = false }, CancellationToken.None))
             .Should()
             .Be(0);
+        // Assert
         await _published
             .Received(1)
             .LoadAsync(Arg.Any<string>(), "sample", "ac", "latest", Arg.Any<CancellationToken>());
@@ -520,7 +533,7 @@ public sealed class CreateServiceTests
     public async Task OldLocalManifestsAreRejectedWithoutTouchingAnExistingSandbox()
     {
         SaveBuild();
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.LocalWorkload = null;
         _store.Save(build);
 
@@ -539,7 +552,7 @@ public sealed class CreateServiceTests
     public async Task ChangedThinKitFailsBeforeReplacementRatherThanBuildingSources()
     {
         SaveBuild();
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         File.AppendAllText(
             Path.Combine(build.LocalWorkload!.RuntimeKitDirectory, "workload.dockerfile"),
             "RUN install-again\n"
@@ -559,7 +572,7 @@ public sealed class CreateServiceTests
     public async Task RemoteCreationConsumesOnlyThePublishedSetEvenWithoutALocalImage()
     {
         SaveBuild();
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         Directory.Delete(build.LocalWorkload!.RuntimeKitDirectory, recursive: true);
         build.LocalWorkload = null;
         _store.Save(build);
@@ -631,7 +644,7 @@ public sealed class CreateServiceTests
             new BuildRequest([team], _root.Path, "latest", MetadataOnly: true),
             CancellationToken.None
         );
-        _store.Load("ac", "latest")!.LocalWorkload.Should().BeNull();
+        _store.Load("sample", "ac", "latest")!.LocalWorkload.Should().BeNull();
         _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<string>)["elastic"]);
         var service = new SandboxCreator(

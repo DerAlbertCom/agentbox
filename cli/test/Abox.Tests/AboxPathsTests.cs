@@ -49,8 +49,8 @@ public sealed class AboxPathsTests
         var paths = AboxPaths.For("/config", "/state");
 
         paths
-            .BuildDirectory("ac", "latest")
+            .BuildDirectory("sample", "ac", "latest")
             .Should()
-            .Be(Path.Combine("/state", "builds", "ac", "latest"));
+            .Be(Path.Combine("/state", "builds", "sample", "ac", "latest"));
     }
 }
