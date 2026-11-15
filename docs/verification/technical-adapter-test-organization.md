@@ -155,3 +155,65 @@ missing phase markers (S2) are reported rather than silently claimed compliant
 or changed outside this ticket's agreed scope. They still execute and retain
 their shared lifecycle fixture/partial compatibility. Whole-program Release and
 final reviews remain parent-level verification work.
+
+## Integration verification after #35
+
+On 2026-11-15, reread #36 and #21 and their empty comment lists through
+`gh issue view`. Both worktrees were clean at their expected commits. Merged only
+ticket `0a82785633100b79445775e9fd2bea47e2f42c97` into integration baseline
+`475fc7b984e3802650819270dc49f82edbe2c9d3` with `--no-ff --no-commit`, inspected
+the staged result, then committed the conflict-free merge as
+`5f376599101b8a0c93f453270d948200f5728a59`.
+
+- The inspected merge tree exactly equals the ticket tip. Changes are confined to
+  the agreed test files and this evidence document; no production files changed.
+  The other 74 test-project files remain byte-for-byte identical to the integration
+  baseline, preserving #32–35's organization, namespaces, partials and fixtures.
+- A fresh whole-test-project Roslyn comparison preserves all **953** method,
+  constructor, property and field identities. **923** members have identical
+  nontrivia tokens. All 30 differences were inspected: 29 introduce named locals
+  to separate phases without removing assertions, and one makes an already
+  required successful call explicit with `NotThrowAsync`. Theory data, helpers,
+  process-byte/cancellation checks, skip branches and the shared `ShellSandbox`
+  remain intact. No constructor, property or field tokens changed.
+- Fresh pre-enumerated executable discovery before/after the merge is exactly
+  equal across every JSON field and entry order: **1,653 unique cases**, including
+  all **41 `SandboxCreatorTests` cases**, with no added, removed or changed entries.
+- Full-run XML matches the completed integration baseline
+  (`audit21-merge35/after-full.xml`) as a multiset of name/type/method/result rows.
+  All seven skipped identities and nonempty reasons match exactly; focused results
+  and their four skips match the corresponding baseline subset too.
+
+| Check | Post-merge result |
+| --- | --- |
+| SDK 10 restore and Debug builds before/after merge | Passed; zero warnings/errors |
+| Focused technical-adapter executable, same 24 classes listed above | 389 passed, 4 skipped, zero failures/errors/not-run; 27.528 seconds |
+| Full Debug executable | 1,646 passed, 7 skipped, zero failures/errors/not-run; 100.478 seconds |
+| CSharpier | Passed; 209 C# files checked |
+| Working/staged/baseline diff whitespace checks | Passed |
+
+Restore/build used `dotnet 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'`
+with `restore cli/agentbox.slnx --disable-parallel` and
+`build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal`.
+Discovery was captured as raw stdout bytes with
+`-preEnumerateTheories -list full/json -noColor`. Tests used the Debug
+`Abox.Tests.exe` directly with `-noLogo -noColor -maxThreads 2 -longRunning 120
+-result-xml <path>` and a 30-minute subprocess timeout per run, not `dotnet test`.
+Raw discovery, logs, XML and source/discovery/runtime comparison artifacts are
+under `C:/Users/UI520628/AppData/Local/Temp/11/opencode/audit21-merge36/`.
+
+The before/after fingerprint using the normalization procedure above is:
+
+```text
+Integration full discovery (1,653): 04e49791d1b7105878535a7fa24ba3d797a9d094ffa919e10e575e9e9424c135
+```
+
+This is a same-worktree comparison: discovery IDs depend on the assembly path,
+so this hash is not expected to match the ticket-worktree hash above. The existing
+four receiver-link, two file-link and one case-distinct-directory skips remain
+platform limitations, not passing coverage. The two root endpoint-generation
+lifecycle methods reported above remain untouched for the final reviewer/fixer.
+All 15 implementation tickets are now integrated; formal review and whole-program
+Release verification remain next. No other branch was merged, no ticket worktree
+was edited, and no live runtime, registry, real secret store or issue/PR mutation
+was used. The original user-modified `run-abox.ps1` retains its pre-merge SHA-256.
