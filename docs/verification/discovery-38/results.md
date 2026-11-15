@@ -78,4 +78,26 @@ The full suite also retains sensitive process-output and all-store-before-write
 coverage. The initial `dotnet test` attempt failed with the known runner handshake
 error and zero tests; the counts above are actual direct-xUnit executions.
 
-Integration verification is recorded below after merging the latest integration tip.
+## Integration verification
+
+Merged integration tip `5b48ba6b60ae6d41251ea1985dbd3d96d6fb5054` into
+`implement/performance-38` as `e2ab471`, preserving #39's `node_modules` exclusion,
+tests, documentation and benchmark artifacts. The production merge was automatic.
+The isolated comparison above deliberately remains pinned before that independent
+coverage change.
+
+Reran the resolved combination:
+
+- Debug solution build: passed with zero warnings/errors.
+- Windows focused #38 + existing appsettings/shared-store + #39 suites: **191
+  passed, 9 skips, 0 failures** (200 total).
+- Windows complete Debug suite: **1673 passed, 14 skips, 0 failures** (1687 total).
+- Ubuntu WSL focused same suites: **199 passed, 1 Windows-only skip, 0 failures**
+  (200 total). Native Unix directory/file symlink cases executed successfully.
+- `dotnet csharpier check cli`, `dotnet csharpier check
+  docs/verification/discovery-38` and `git diff --check`: passed.
+
+No real secret payload was read, no sandbox transfer was run, and no issue/PR action
+was taken. The private diagnostic reflection binding is a maintenance caveat; native
+Windows symlink privilege skips and the scope of the deterministic cancellation
+check are stated above rather than treated as executed coverage.
