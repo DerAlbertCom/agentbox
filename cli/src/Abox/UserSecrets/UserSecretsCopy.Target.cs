@@ -100,7 +100,8 @@ public sealed partial class UserSecretsCopy
                 value.Any(character =>
                     char.IsWhiteSpace(character) || char.IsControl(character) || character == '\\'
                 )
-                || !Uri.TryCreate(value, UriKind.Absolute, out _)
+                || !Uri.TryCreate(value, UriKind.Absolute, out var uri)
+                || !uri.IsWellFormedOriginalString()
                 || !ports.Contains(
                     int.Parse(match.Groups["port"].Value, CultureInfo.InvariantCulture)
                 )

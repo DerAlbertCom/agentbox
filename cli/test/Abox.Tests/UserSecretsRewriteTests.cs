@@ -79,6 +79,9 @@ public sealed class UserSecretsRewriteTests
     [InlineData("https://127.1:8004/path")]
     [InlineData("https://localhost:8004/path with spaces")]
     [InlineData("https://localhost:8004/\\windows")]
+    [InlineData("https://localhost:8004/path%ZZ")]
+    [InlineData("https://localhost:8004/path%")]
+    [InlineData("https://localhost:8004/path\u0000")]
     [InlineData("prefix http://localhost:8004")]
     [InlineData("Server=sql.internal,8004;Password=localhost,8004")]
     [InlineData("Server=localhost,5432")]
@@ -260,6 +263,44 @@ public sealed class UserSecretsRewriteTests
         fixture.Written("sample").Should().NotContain("synthetic-hidden-comment");
     }
 
+    [Fact]
+    public async Task MixedFullNestedAndFilteredFlatSnapshotsUseOnlySelectedOriginalValues()
+    {
+        using var fixture = new CopyFixture(
+            config: new AboxConfig { UserSecretsDenyList = ["synthetic-production"] }
+        );
+        fixture.UsePorts(8004);
+        fixture.Store("full", """{"Nested":{"Url":"http://localhost:8004"},"Flag":true}""");
+        fixture.Store(
+            "filtered",
+            """
+            {"Nodes":[{"Url":"http://localhost:5432"},{"Url":"http://localhost:8004"}],
+             "Password":"synthetic-production", "Named":"http://named.internal:8004"}
+            """
+        );
+        fixture.KeyPatterns["filtered"] = ["Nodes:1:*", "Named"];
+        fixture.Store("empty", """{"Password":"synthetic-production"}""");
+        fixture.KeyPatterns["empty"] = [];
+
+        var report = await fixture.CopyAsync();
+
+        using var full = JsonDocument.Parse(fixture.Written("full"));
+        full.RootElement.GetProperty("Nested")
+            .GetProperty("Url")
+            .GetString()
+            .Should()
+            .Be("http://host.docker.internal:8004");
+        fixture.Value("filtered", "Nodes:1:Url").Should().Be("http://host.docker.internal:8004");
+        fixture.Value("filtered", "Named").Should().Be("http://named.internal:8004");
+        fixture
+            .Written("filtered")
+            .Should()
+            .NotContain("synthetic-production")
+            .And.NotContain("5432");
+        fixture.Written("empty").Should().Be("{}");
+        report.Stores.Select(store => store.KeyCount).Should().Equal(2, 2, 0);
+    }
+
     private static string RepositoryFile(string name)
     {
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
@@ -332,6 +373,7 @@ public sealed class UserSecretsRewriteTests
         internal List<int> CheckedPorts { get; } = [];
         internal HashSet<int> DeniedPorts { get; } = [];
         internal Func<ProcessRequest, ProcessResult?>? ResultOverride { get; set; }
+        internal Dictionary<string, string[]> KeyPatterns { get; } = [];
 
         internal string Written(string id) => written[id];
 
@@ -372,7 +414,20 @@ public sealed class UserSecretsRewriteTests
 
         internal async Task<PreparedUserSecrets> PrepareAsync(bool force = false)
         {
-            root.File("abox.json", JsonSerializer.Serialize(new { userSecrets = ids }));
+            root.File(
+                "abox.json",
+                JsonSerializer.Serialize(
+                    new
+                    {
+                        userSecrets = ids.Select(id =>
+                                KeyPatterns.TryGetValue(id, out var keys)
+                                    ? (object)new { id, keys }
+                                    : id
+                            )
+                            .ToArray(),
+                    }
+                )
+            );
             return await copy.PrepareAsync(
                 await FolderConfig.LoadAsync(root.Path, CancellationToken.None),
                 force,
