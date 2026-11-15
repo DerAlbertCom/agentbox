@@ -100,7 +100,7 @@ destination with `{}`. Missing host secrets are allowed only when an associated
 project has at least one standard appsettings source. If neither source exists,
 preparation fails actionably rather than silently clearing a missing store.
 
-## Endpoints and the temporary shared-store restriction
+## Endpoints
 
 Supported new shapes are absolute endpoint URLs and PostgreSQL connection strings
 with one host and one port, including `localhost`, dotted IPv4 loopback and IPv6
@@ -133,13 +133,38 @@ explicit port remain unchanged: no default port is inferred for them.
 Oracle Easy Connect/descriptors and recognized split host/port settings are
 separate follow-ups, not supported by this generation feature.
 
-**Temporary fail-closed restriction:** if a store has multiple discovered project
-consumers, any generated override is rejected, even when both projects would
-generate the same value or another consumer needs no rewrite. Enumeration order
-never chooses a winner. Copy-only authoritative-secret behavior is still allowed:
-provide the selected host key explicitly, filter out the generated key, or use
-separate stores. This restriction does not implement compatible shared-store
-merging or conflict resolution.
+## Shared stores
+
+All discovered consumers of a selected store participate in compatibility checks.
+Compatible generated overrides are merged once per case-insensitive effective
+key. Compare complete desired configuration values, not just endpoint hosts:
+different ports, credentials, paths or connection options cannot silently win by
+project/filesystem discovery order. Key spelling and generated output order are
+also deterministic.
+
+Only keys actually needing generated overrides are checked. For each such key,
+every consumer that defines it must require the same value after eligible
+adaptation. A consumer with an already-adapted `host.docker.internal` value can
+agree without generating its own override. A consumer without that key contributes
+no competing value, allowing compatible disjoint overrides to merge. Unrelated
+appsettings differences are not conflicts.
+
+In particular, adapting `http://localhost:8004/path` must not replace another
+consumer's remote endpoint or its unmapped `http://localhost:5000/api` through
+the shared store. Such unchanged values still conflict with the generated value.
+Null values for the targeted key also cannot be silently replaced.
+
+Selected host keys remain authoritative **before** generation or compatibility
+checks, regardless of value, and still receive eligible adaptation. Lower-priority
+appsettings differences for those keys are irrelevant. Existing key filters apply
+before generation and compatibility; they do not authorize any extra keys.
+Unreadable or unresolved potential consumers still block generation as described
+above, even when all known consumers agree. Host-only copying remains available.
+
+Conflicts identify the store, escaped effective key and affected project paths,
+without values. Resolve them by supplying an intentional authoritative selected
+host-secret key, excluding the key, or assigning separate stores; abox never
+chooses a winner or splits stores automatically.
 
 ## Refresh, safety and failures
 
@@ -149,7 +174,7 @@ stop being generated, clearing stale entries. Manual destination-only edits are
 not preserved. An ordinary run never performs this refresh.
 
 All selected inputs are parsed before copying. Policy authorization, adaptation,
-applicable deny-list checks, temporary shared-store checks and destination checks
+applicable deny-list checks, shared-store compatibility and destination checks
 for **all stores** finish before the first destination replacement. Thus a
 configuration/adaptation failure writes zero destination stores. Unexpected
 write-time failures can still leave earlier files replaced; no cross-file rollback
