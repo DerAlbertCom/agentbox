@@ -477,6 +477,226 @@ public sealed class SplitSettingsCommandTests
         Written(cli).Should().Be("{}");
     }
 
+    [Theory]
+    [InlineData("remote.test", 8004)]
+    [InlineData("127.0.0.1", 8004)]
+    public async Task FilteredOutSecretHostsNeverInfluenceGeneratedHostEligibility(
+        string secretHost,
+        int port
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":[{"id":"sample","keys":["Database_Config:Port"]}]}""");
+        Project(cli, """{"Database_Config":{"Host":"localhost","Port":5000}}""");
+        cli.Store(
+            "sample",
+            JsonSerializer.Serialize(
+                new { Database_Config = new { Host = secretHost, Port = port } }
+            )
+        );
+        Mapped(cli);
+
+        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        Written(cli).Should().Be("""{"Database_Config:Port":8004}""");
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task SelectedHostCannotRedirectASharedConsumerWhoseEffectivePortIsUnmapped(
+        bool reverseProjects,
+        bool selectedPort
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["first","sample"]}""");
+        cli.Store("first", "{}");
+        cli.Store(
+            "sample",
+            selectedPort
+                ? """{"Database_Config:Host":"localhost","Database_Config:Port":8004}"""
+                : """{"Database_Config:Host":"localhost"}"""
+        );
+        Project(
+            cli,
+            """{"Database_Config":{"Host":"remote-ignored.test","Port":8004}}""",
+            reverseProjects ? "Worker" : "Api"
+        );
+        Project(
+            cli,
+            """{"Database_Config":{"Host":"other-ignored.test","Port":5000}}""",
+            reverseProjects ? "Api" : "Worker"
+        );
+        Mapped(cli);
+
+        (await cli.Run("--verbose")).Should().Be(selectedPort ? 0 : 1, cli.Console.AllText);
+
+        if (selectedPort)
+            Written(cli)
+                .Should()
+                .Be(
+                    """{"Database_Config:Host":"host.docker.internal","Database_Config:Port":8004}"""
+                );
+        else
+        {
+            await cli.NoWrites();
+            cli.Console.AllText.Should()
+                .Contain("conflict")
+                .And.Contain("Database_Config:Host")
+                .And.Contain("Api.csproj")
+                .And.Contain("Worker.csproj");
+        }
+        cli.Console.AllText.Should().NotContain("ignored.test").And.NotContain("localhost");
+    }
+
+    [Theory]
+    [InlineData("localhost", 8004, false, false, true)]
+    [InlineData("127.0.0.2", 8006, false, false, true)]
+    [InlineData("remote.test", 8004, false, false, false)]
+    [InlineData("localhost", 5000, false, false, false)]
+    [InlineData("localhost", 5000, true, false, true)]
+    [InlineData("localhost", 5000, true, true, false)]
+    [InlineData("host.docker.internal", 5000, false, false, true)]
+    public async Task SharedGeneratedHostsRespectEveryConsumersResolvedPortContext(
+        string secondHost,
+        int secondPort,
+        bool secretPort,
+        bool filterPort,
+        bool compatible
+    )
+    {
+        foreach (var reverse in new[] { false, true })
+        {
+            using var cli = new UserSecretsCliHarness();
+            cli.Configure(
+                filterPort
+                    ? """{"userSecrets":["first",{"id":"sample","keys":["Database_Config:Host"]}]}"""
+                    : """{"userSecrets":["first","sample"]}"""
+            );
+            cli.Store("first", "{}");
+            if (secretPort)
+                cli.Store("sample", """{"Database_Config:Port":8004}""");
+            Project(
+                cli,
+                """{"Database_Config":{"Host":"localhost","Port":8004}}""",
+                reverse ? "Worker" : "Api"
+            );
+            Project(
+                cli,
+                JsonSerializer.Serialize(
+                    new { Database_Config = new { Host = secondHost, Port = secondPort } }
+                ),
+                reverse ? "Api" : "Worker"
+            );
+            cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+                .Returns(new[] { 8004, 8006 });
+            var originals = Originals(cli);
+
+            (await cli.Run("--verbose", "--force"))
+                .Should()
+                .Be(compatible ? 0 : 1, cli.Console.AllText);
+
+            if (compatible)
+                Written(cli)
+                    .Should()
+                    .Be(
+                        secretPort && !filterPort
+                            ? """{"Database_Config:Port":8004,"Database_Config:Host":"host.docker.internal"}"""
+                            : """{"Database_Config:Host":"host.docker.internal"}"""
+                    );
+            else
+            {
+                await cli.NoWrites();
+                cli.Console.AllText.Should()
+                    .Contain("conflict")
+                    .And.Contain("Database_Config:Host")
+                    .And.Contain("Api.csproj")
+                    .And.Contain("Worker.csproj");
+            }
+            cli.Console.AllText.Should().NotContain("remote.test");
+            AssertOriginals(originals);
+        }
+    }
+
+    [Theory]
+    [InlineData("http://localhost:8004/synthetic-private")]
+    [InlineData("Host=localhost;Port=8004;Password=synthetic-password")]
+    public async Task InvalidStructuredPortValuesAreNotReinterpretedAsStandaloneEndpoints(
+        string port
+    )
+    {
+        foreach (var selected in new[] { false, true })
+        {
+            using var cli = new UserSecretsCliHarness();
+            cli.Configure("""{"userSecrets":["sample"]}""");
+            var pair = JsonSerializer.Serialize(
+                new Dictionary<string, string>
+                {
+                    ["Database_Config:Host"] = "localhost",
+                    ["Database_Config:Port"] = port,
+                }
+            );
+            Project(cli, pair);
+            if (selected)
+                cli.Store("sample", pair);
+            Mapped(cli);
+
+            (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+            Written(cli).Should().Be(selected ? pair : "{}");
+            cli.Console.AllText.Should()
+                .NotContain("synthetic-private")
+                .And.NotContain("synthetic-password");
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnknownConsumersCannotBeBypassedByASelectedHostThatNeedsProjectPortMetadata(
+        bool selectedPort
+    )
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["first","sample"]}""");
+        cli.Store("first", "{}");
+        cli.Store(
+            "sample",
+            selectedPort
+                ? """{"Database_Config:Host":"localhost","Database_Config:Port":8004}"""
+                : """{"Database_Config:Host":"localhost"}"""
+        );
+        Project(cli, """{"Database_Config:Port":8004}""");
+        cli.Root.File(
+            "folder/Unknown.csproj",
+            "<Project><PropertyGroup><UserSecretsId>$(SyntheticPrivateId)</UserSecretsId></PropertyGroup></Project>"
+        );
+        Mapped(cli);
+
+        (await cli.Run("--verbose", "--force"))
+            .Should()
+            .Be(selectedPort ? 0 : 1, cli.Console.AllText);
+
+        if (selectedPort)
+            Written(cli)
+                .Should()
+                .Be(
+                    """{"Database_Config:Host":"host.docker.internal","Database_Config:Port":8004}"""
+                );
+        else
+        {
+            await cli.NoWrites();
+            cli.Console.AllText.Should()
+                .Contain("Database_Config:Host")
+                .And.Contain("consumer")
+                .And.Contain("association");
+        }
+        cli.Console.AllText.Should().NotContain("SyntheticPrivateId");
+    }
+
     private static Dictionary<string, byte[]> Originals(UserSecretsCliHarness cli) =>
         Directory
             .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)

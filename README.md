@@ -331,10 +331,14 @@ Only eligible URL/PostgreSQL values needing a host change are generated, not the
 whole appsettings file. A store with no matching project remains copy-only.
 
 Each create/replacement/explicit copy rebuilds the complete destination, removing
-stale generated entries. Ordinary `run` still performs no copy. As a temporary
-fail-closed restriction, generation for a store with multiple discovered consumers
-is rejected; authoritative copy-only secrets are allowed. Oracle, split settings
-and shared-store merging are follow-ups. This bounded discovery does not simulate
+stale generated entries. Ordinary `run` still performs no copy. Projects sharing a
+store merge compatible generated overrides. A generated key must agree with every
+discovered consumer's required effective value, including remote/unmapped values
+that need no rewrite; conflicts stop all selected stores before any write, with
+value-free store/key/project diagnostics. Supply an authoritative selected host
+key, exclude the key, or use separate stores to resolve a conflict. Unknown
+consumers still block generation. Oracle and split settings are follow-ups.
+This bounded discovery does not simulate
 custom providers, environment/CLI overrides or service readiness. See
 [precedence, discovery, refresh and safety details](docs/user-secrets-appsettings.md).
 

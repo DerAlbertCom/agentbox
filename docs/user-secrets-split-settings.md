@@ -69,8 +69,16 @@ Empty/no-match filters retain the existing `{}` destination replacement behavior
 Shared-store compatibility must consider each consumer's resolved host **and** port,
 not just the identical generated host text. A consumer with a remote or unmapped
 destination must not be redirected by another consumer's generated host override.
-Until compatible shared-store merging is integrated, the existing temporary
-multi-consumer generation restriction remains fail-closed.
+Compatible generated hosts merge through the same format-independent
+shared-store safeguards as other endpoints. Each consumer's desired host is
+resolved with its effective port first: a still-local unmapped consumer conflicts
+even when another consumer would generate the common `host.docker.internal` text.
+Different mapped ports can be compatible because each consumer retains its own
+port. A selected host without a selected port also requires compatible adaptation
+across discovered consumers; select an authoritative compatible host/port pair or
+use separate stores to resolve a conflict. Unknown consumers block adaptation that
+depends on project port metadata; an authoritative selected host/port pair keeps
+copy-only behavior. Checks never choose by discovery order.
 
 See the [synthetic verification record](verification/user-secrets-split-settings.md).
 These configuration tests do not establish database authentication or readiness.

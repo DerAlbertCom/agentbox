@@ -489,8 +489,12 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   using sbx policy discovery, retaining originals for deny/force accounting.
   Selected host keys block generated replacements. Eligible appsettings-only
   values produce flat effective-key overrides subject to the same deny/filter
-  checks. A temporary fail-closed check rejects any generation for multiple
-  discovered consumers, but permits authoritative copy-only values. Parsing,
+  checks. `UserSecretsCopy.SharedStores.cs` merges generic generated-key candidates
+  against every consumer's desired effective values, including unchanged consumers.
+  Only generated keys can conflict; host precedence and key filters are resolved
+  first. Identical required values merge once with deterministic key spelling/order;
+  incompatible values fail without a discovery-order winner. Unknown consumers
+  still prevent generation but permit authoritative copy-only values. Parsing,
   adaptation, deny, policy and destination checks complete for all stores before
   the first write. Each new copy recalculates and removes stale generated entries.
   Each selected store replaces its entire destination, clearing old unmatched keys,
@@ -572,11 +576,13 @@ first-name selection. See [supported forms, preservation and verification](user-
 
 Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
 rewriting (#8), creation/replacement integration (#9) and URL/PostgreSQL
-appsettings-derived overrides (#13) are implemented through the shared copy flow.
-Shared-store generation is temporarily rejected; compatible merging/conflicts
-and Oracle remain follow-ups under #12. Recognized `Database_Config` split-setting
-support (#16) is implemented through the same flow, with selected-key output and
-unfiltered appsettings-only metadata for eligibility.
+appsettings-derived overrides (#13), and compatible shared-store merging with
+all-consumer conflict protection (#14) are implemented through the shared copy flow.
+Recognized `Database_Config` split-setting support (#16) uses the same flow and
+format-independent generated-candidate/effective-value safeguards. Selected keys
+govern output; unfiltered appsettings-only metadata supplies port eligibility.
+Oracle remains a follow-up under #12.
+See [shared-store verification](verification/user-secrets-shared-stores.md).
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force

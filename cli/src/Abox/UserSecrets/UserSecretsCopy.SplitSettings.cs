@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
-using System.Text.Json;
 
 namespace Abox.UserSecrets;
 
@@ -10,40 +9,58 @@ public sealed partial class UserSecretsCopy
     private const string DatabaseHostKey = "Database_Config:Host";
     private const string DatabasePortKey = "Database_Config:Port";
 
-    private static IReadOnlyDictionary<string, string> SelectedSplitHosts(
+    private static IReadOnlyDictionary<string, string> SelectedSplitSettings(
         UserSecretSnapshot store,
         IReadOnlyList<ProjectSettings> projects,
-        HashSet<int> ports
+        HashSet<int> ports,
+        IReadOnlyList<string> unresolvedProjects
     )
     {
         var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (store.Values.TryGetValue(DatabasePortKey, out var port) && port is not null)
+            result.Add(DatabasePortKey, port);
         if (!store.Values.TryGetValue(DatabaseHostKey, out var host) || host is null)
             return result;
-        var targets =
-            projects.Count == 0
-                ? new[] { RewriteSetting(host, ports, store.Id, DatabaseHostKey, store.Values) }
-                : projects
-                    .Select(project =>
-                        RewriteSetting(
-                            host,
-                            ports,
-                            store.Id,
-                            DatabaseHostKey,
-                            EffectiveSettings(project, store),
-                            project.Project
-                        )
-                    )
-                    .Distinct(StringComparer.Ordinal)
-                    .ToArray();
-        if (targets.Length != 1)
-            throw new AboxException(
-                $"{DescribeSetting(store.Id, DatabaseHostKey, null)}: split host adaptation conflicts between discovered consumers ({string.Join(", ", projects.Select(project => JsonSerializer.Serialize(project.Project)))}). Select an authoritative host and port compatible with every consumer, or use separate stores; no stores were copied."
+        if (projects.Count == 0)
+        {
+            result.Add(
+                DatabaseHostKey,
+                RewriteSetting(host, ports, store.Id, DatabaseHostKey, store.Values)
             );
-        result.Add(DatabaseHostKey, targets[0]);
+            return result;
+        }
+        var consumers = new List<ProjectOverrides>();
+        foreach (var project in projects)
+        {
+            var effective = EffectiveSettings(project, store);
+            var target = RewriteSetting(
+                host,
+                ports,
+                store.Id,
+                DatabaseHostKey,
+                effective,
+                project.Project
+            );
+            effective[DatabaseHostKey] = target;
+            var generated = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (target != host)
+                generated.Add(DatabaseHostKey, target);
+            consumers.Add(new ProjectOverrides(project.Project, effective, generated));
+        }
+        // A selected host alone still derives its destination from consumer-specific port metadata.
+        var adapted = MergeGeneratedOverrides(
+            store.Id,
+            consumers,
+            store.Values.ContainsKey(DatabasePortKey) ? [] : unresolvedProjects
+        );
+        result.Add(
+            DatabaseHostKey,
+            adapted.TryGetValue(DatabaseHostKey, out var adaptedHost) ? adaptedHost : host
+        );
         return result;
     }
 
-    private static IReadOnlyDictionary<string, string?> EffectiveSettings(
+    private static Dictionary<string, string?> EffectiveSettings(
         ProjectSettings project,
         UserSecretSnapshot store
     )
@@ -66,6 +83,8 @@ public sealed partial class UserSecretsCopy
         string? project = null
     )
     {
+        if (key.Equals(DatabasePortKey, StringComparison.OrdinalIgnoreCase))
+            return value;
         if (!key.Equals(DatabaseHostKey, StringComparison.OrdinalIgnoreCase))
             return RewriteEndpoint(value, ports, id, key, project);
         if (!effective.TryGetValue(DatabasePortKey, out var portText) || portText is null)
