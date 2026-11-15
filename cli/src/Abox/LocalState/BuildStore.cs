@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Abox.Configuration;
+using Abox.Naming;
 
 namespace Abox.LocalState;
 
@@ -17,7 +18,11 @@ public sealed class BuildStore(AboxPaths paths)
     };
 
     /// <summary>The directory of one build.</summary>
-    public string DirectoryFor(string squad, string tag) => paths.BuildDirectory(squad, tag);
+    public string DirectoryFor(string squad, string tag)
+    {
+        RegistryImageName.ValidateTag(tag);
+        return paths.BuildDirectory(squad, tag);
+    }
 
     /// <summary>The manifest of a build, or null when there is no such build.</summary>
     public BuildManifest? Load(string squad, string tag)

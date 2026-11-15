@@ -39,6 +39,8 @@ public sealed class LocalSquadSource(BuildStore store, LocalWorkloadImages image
 {
     public SquadSelection Resolve(SandboxCreationRequest request)
     {
+        RegistryImageName.ValidateTag(request.Tag);
+
         var squad = request.Squad ?? PickSquad(request.Team);
         squad =
             request.Team.Squads.FirstOrDefault(name =>

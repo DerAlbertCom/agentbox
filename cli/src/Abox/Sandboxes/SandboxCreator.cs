@@ -48,6 +48,8 @@ public sealed class SandboxCreator(
         CancellationToken cancellationToken
     )
     {
+        RegistryImageName.ValidateTag(request.Tag);
+
         var location = Path.GetFullPath(request.Location);
         if (!Directory.Exists(location))
         {
