@@ -38,12 +38,16 @@ abox run --location <folder>                 # open the sandbox of the folder
 - `build` makes the kits of the team: the workload and every squad of it that no other
   squad of the team names as its `base`. A squad that others build on comes with the
   squad that inherits from it. The kits go into the build directory
-  (`<state dir>/builds/`). A normal build checks additional local kit declarations
+  (`<state dir>/builds/<team>/<squad>/<tag>/`). Team and squad names are lowercased
+  in this layout, so teams sharing a squad name keep independent sources and images.
+  A normal build checks additional local kit declarations
   with `sbx kit inspect`, passing their resolved arguments, unless `--no-verify` is
   given. Inspection does not build images; sbx 0.51.0 cannot inspect recipe-based
   local kits, which require `--no-verify` and are processed by sbx at creation.
   A normal build always builds the workload image, even with `--no-verify`.
-  `--tag` stores the build under another name than `latest`.
+  `--tag` stores the build under another name than `latest`. Older squad/tag-only
+  manifests remain usable only when their explicit ownership matches the selected
+  team; otherwise rebuild. Old artifacts are not automatically migrated or removed.
 - `create` names the sandbox after the folder it works on and asks before it replaces
   an existing one. Remote create requires `--squad`; only `--local` asks which squad
   of the team to use when it is omitted, and uses the only one without asking.

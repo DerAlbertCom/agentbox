@@ -70,7 +70,7 @@ public sealed class BuildCommandTests
         var exitCode = await command.Parse(arguments.ToArray()).InvokeAsync();
 
         exitCode.Should().Be(0);
-        var manifest = store.Load("ac", "remote")!;
+        var manifest = store.Load("sample", "ac", "remote")!;
         manifest.LocalWorkload.Should().BeNull();
         manifest.Reference.Should().Be(ImageName.OfTeam("sample", "remote"));
         manifest.State.Should().ContainSingle();

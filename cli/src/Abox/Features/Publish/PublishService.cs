@@ -132,21 +132,10 @@ public sealed class PublishService(
     {
         RepositoryName(team.Name, squad);
         var build =
-            store.Load(squad, tag)
+            store.Load(team.Name, squad, tag)
             ?? throw new AboxException(
                 $"No local build of '{squad}:{tag}'. Run 'abox build --team {team.Name} --tag {tag} --no-personal' first."
             );
-        if (
-            build.Squad != squad
-            || build.Tag != tag
-            || build.Reference != ImageName.OfTeam(team.Name, tag)
-        )
-        {
-            throw new AboxException(
-                $"The local build '{squad}:{tag}' is not a build of team '{team.Name}'. Run 'abox build --team {team.Name} --tag {tag} --no-personal' again."
-            );
-        }
-
         if (build.IncludesPersonalConfigurations != false)
         {
             throw new AboxException(

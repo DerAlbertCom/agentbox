@@ -64,7 +64,7 @@ public sealed class BuildService(
             ? personalConfigurations.Files
             : [];
         var squad = resolver.Resolve(request.RootDirectory, teamName, squadName, personalFiles);
-        var buildDirectory = store.DirectoryFor(squad.Name, request.Tag);
+        var buildDirectory = store.DirectoryFor(teamName, squad.Name, request.Tag);
 
         var workloadDirectory = Path.Combine(buildDirectory, WorkloadKitGenerator.KitName);
         workloadGenerator.Generate(squad.Workload, workloadDirectory);

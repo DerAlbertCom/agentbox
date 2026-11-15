@@ -33,8 +33,8 @@ public sealed class BuildTagSafetyTests
         };
         Action access = operation switch
         {
-            "directory" => () => store.DirectoryFor("ac", tag),
-            "load" => () => store.Load("ac", tag),
+            "directory" => () => store.DirectoryFor("sample", "ac", tag),
+            "load" => () => store.Load("sample", "ac", tag),
             _ => () => store.Save(new BuildManifest { Squad = "ac", Tag = tag }),
         };
 
