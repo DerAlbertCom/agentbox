@@ -63,29 +63,51 @@ public sealed partial class UserSecretsCopy
                     writer.WritePropertyName(property.Name);
                     WriteTarget(writer, property.Value, ports, rewritten, store.Id, property.Name);
                 }
+                var projectOverrides = new List<ProjectOverrides>();
                 foreach (var project in projects)
-                foreach (var (key, original) in project.Settings.Values)
                 {
-                    if (store.Values.ContainsKey(key) || original is null)
-                        continue;
-                    var target = RewriteEndpoint(original, ports, store.Id, key, project.Project);
-                    if (target == original)
-                        continue;
-                    if (prepared.UnresolvedProjects.Count > 0)
-                        throw new AboxException(
-                            $"{DescribeSetting(store.Id, key, project.Project)}: cannot generate overrides because consumers could not be determined for projects with unreadable XML or unresolved UserSecretsId associations ({string.Join(", ", prepared.UnresolvedProjects.Select(path => JsonSerializer.Serialize(path)))}). Resolve their associations with unconditional literal IDs or fix their XML/permissions and ordinary-file status, or supply authoritative selected host-secret values for copy-only behavior; no stores were copied."
-                        );
-                    if (projects.Length > 1)
-                        throw new AboxException(
-                            $"User-secret store '{store.Id}', key {JsonSerializer.Serialize(key)}, has multiple discovered consumers ({string.Join(", ", projects.Select(consumer => JsonSerializer.Serialize(consumer.Project)))}). Generating overrides for a shared store is a temporary unsupported case. Supply an authoritative selected host-secret value or use separate stores; no stores were copied."
-                        );
-                    safetyOverride |= CheckOriginal(
-                        store.Id,
-                        key,
-                        original,
-                        prepared.Force,
-                        project.Project
+                    var effective = new Dictionary<string, string?>(
+                        project.Settings.Values,
+                        StringComparer.OrdinalIgnoreCase
                     );
+                    var generated = new Dictionary<string, string>(
+                        StringComparer.OrdinalIgnoreCase
+                    );
+                    foreach (var (key, original) in project.Settings.Values)
+                    {
+                        if (store.Values.ContainsKey(key) || original is null)
+                            continue;
+                        var target = RewriteEndpoint(
+                            original,
+                            ports,
+                            store.Id,
+                            key,
+                            project.Project
+                        );
+                        if (target == original)
+                            continue;
+                        safetyOverride |= CheckOriginal(
+                            store.Id,
+                            key,
+                            original,
+                            prepared.Force,
+                            project.Project
+                        );
+                        effective[key] = target;
+                        generated.Add(key, target);
+                    }
+                    projectOverrides.Add(
+                        new ProjectOverrides(project.Project, effective, generated)
+                    );
+                }
+                foreach (
+                    var (key, target) in MergeGeneratedOverrides(
+                        store.Id,
+                        projectOverrides,
+                        prepared.UnresolvedProjects
+                    )
+                )
+                {
                     writer.WriteString(key, target);
                     values.Add(key, target);
                     rewritten.Add(key);

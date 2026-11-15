@@ -826,60 +826,6 @@ public sealed class UserSecretsAppSettingsCommandTests
     }
 
     [Theory]
-    [InlineData("http://localhost:8004/same", false)]
-    [InlineData("http://remote.test:8004/other", false)]
-    [InlineData("http://localhost:5000/api", false)]
-    [InlineData("http://localhost:8004/same", true)]
-    public async Task SharedStoresRejectAnyGenerationButPermitAuthoritativeCopyOnlySecrets(
-        string second,
-        bool authoritative
-    )
-    {
-        using var cli = new UserSecretsCliHarness();
-        cli.Configure("""{"userSecrets":["first","shared"]}""");
-        cli.Store("first", "{}");
-        if (authoritative)
-            cli.Store("shared", """{"Endpoint":"http://localhost:8004/authoritative"}""");
-        foreach (var project in new[] { "Api", "Worker" })
-        {
-            cli.Root.File(
-                $"folder/{project}/{project}.csproj",
-                "<Project><PropertyGroup><UserSecretsId>shared</UserSecretsId></PropertyGroup></Project>"
-            );
-            cli.Root.File(
-                $"folder/{project}/appsettings.json",
-                JsonSerializer.Serialize(
-                    new { Endpoint = project == "Api" ? "http://localhost:8004/same" : second }
-                )
-            );
-        }
-        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
-            .Returns(new[] { 8004 });
-
-        (await cli.Run("--force")).Should().Be(authoritative ? 0 : 1, cli.Console.AllText);
-
-        if (authoritative)
-            Written(cli, "shared")
-                .Should()
-                .Be("""{"Endpoint":"http://host.docker.internal:8004/authoritative"}""");
-        else
-        {
-            await cli.NoWrites();
-            cli.Console.AllText.Should()
-                .Contain("shared")
-                .And.Contain("Endpoint")
-                .And.Contain("multiple")
-                .And.Contain("Api.csproj")
-                .And.Contain("Worker.csproj")
-                .And.Contain("temporary");
-        }
-        cli.Console.AllText.Should()
-            .NotContain("/same")
-            .And.NotContain("/other")
-            .And.NotContain("/authoritative");
-    }
-
-    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]
