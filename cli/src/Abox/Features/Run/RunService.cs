@@ -26,6 +26,7 @@ public sealed class RunService(
     SandboxRecordStore records,
     SandboxCreator create,
     ISbxClient sbx,
+    SandboxResolver sandboxes,
     IHostPrograms hostPrograms,
     IConsole console
 )
@@ -50,10 +51,10 @@ public sealed class RunService(
         }
 
         var location = Path.GetFullPath(request.Location);
-        var name = SandboxName.For(location);
         var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
 
-        var sandbox = await sbx.FindSandboxAsync(name, cancellationToken);
+        var sandbox = await sandboxes.FindAsync(location, cancellationToken);
+        var name = sandbox?.Name ?? SandboxName.For(location);
         if (sandbox is null)
         {
             console.WriteError($"There is no sandbox for '{location}'.");
@@ -61,7 +62,7 @@ public sealed class RunService(
             return 1;
         }
 
-        if (!await ReplaceWithANewerBuildAsync(name, location, folderConfig, cancellationToken))
+        if (!await ReplaceWithANewerBuildAsync(sandbox, location, folderConfig, cancellationToken))
         {
             return 1;
         }
@@ -138,13 +139,13 @@ public sealed class RunService(
     /// was made of. Returns false when the command must not go on.
     /// </summary>
     private async Task<bool> ReplaceWithANewerBuildAsync(
-        string name,
+        SandboxInfo sandbox,
         string location,
         FolderConfig? folderConfig,
         CancellationToken cancellationToken
     )
     {
-        var record = records.Load(name);
+        var record = records.Load(sandbox.Name);
         if (record is null || record.KitReference is not null)
         {
             return true;
@@ -186,7 +187,8 @@ public sealed class RunService(
                     record.Tag,
                     folderConfig,
                     AssumeYes: true,
-                    Local: true
+                    Local: true,
+                    ExistingSandbox: sandbox
                 ),
                 cancellationToken
             ) == 0;

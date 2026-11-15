@@ -16,6 +16,7 @@ namespace Abox.Sandboxes;
 /// <param name="FolderConfig">The folder configuration snapshot loaded by the caller; null means absent.</param>
 /// <param name="AssumeYes">Whether the replacement of an existing sandbox is confirmed already.</param>
 /// <param name="Local">Whether to use local kits instead of pulling the published set.</param>
+/// <param name="ExistingSandbox">The actual identity already selected for an accepted run replacement, if any.</param>
 public sealed record SandboxCreationRequest(
     SquadResolver.ResolvedTeam Team,
     string? Squad,
@@ -23,7 +24,8 @@ public sealed record SandboxCreationRequest(
     string Tag,
     FolderConfig? FolderConfig,
     bool AssumeYes = false,
-    bool Local = false
+    bool Local = false,
+    SandboxInfo? ExistingSandbox = null
 );
 
 /// <summary>
@@ -32,6 +34,7 @@ public sealed record SandboxCreationRequest(
 public sealed class SandboxCreator(
     SandboxRecordStore records,
     AboxPaths paths,
+    SandboxResolver sandboxes,
     ISbxClient sbx,
     IConsole console,
     LocalSquadSource local,
@@ -66,14 +69,11 @@ public sealed class SandboxCreator(
         var prepared = await source.LoadAsync(selection, cancellationToken);
         var manifest = prepared.Metadata;
 
-        var name = SandboxName.For(location);
         var mcpToRegister = await FindMcpServersToRegisterAsync(manifest, cancellationToken);
-        var replace = await ConfirmReplacementAsync(
-            name,
-            location,
-            request.AssumeYes,
-            cancellationToken
-        );
+        var existing =
+            request.ExistingSandbox ?? await sandboxes.FindAsync(location, cancellationToken);
+        var name = existing?.Name ?? SandboxName.For(location);
+        var replace = ConfirmReplacement(existing, location, request.AssumeYes);
         cancellationToken.ThrowIfCancellationRequested();
         await RegisterMcpServersAsync(mcpToRegister, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
@@ -148,14 +148,8 @@ public sealed class SandboxCreator(
         return 0;
     }
 
-    private async Task<bool> ConfirmReplacementAsync(
-        string name,
-        string location,
-        bool assumeYes,
-        CancellationToken cancellationToken
-    )
+    private bool ConfirmReplacement(SandboxInfo? existing, string location, bool assumeYes)
     {
-        var existing = await sbx.FindSandboxAsync(name, cancellationToken);
         if (existing is null)
         {
             return false;
@@ -163,7 +157,7 @@ public sealed class SandboxCreator(
 
         if (!assumeYes)
         {
-            console.WriteLine($"The sandbox '{name}' already exists for '{location}'.");
+            console.WriteLine($"The sandbox '{existing.Name}' already exists for '{location}'.");
             console.WriteLine("Replacing it loses what is inside it:");
             console.WriteLine("  - the container, with everything in it");
             console.WriteLine("  - the worktrees under ~/worktrees");

@@ -189,6 +189,53 @@ reproducibility. `sbx kit push` is deliberately not used: its
 legacy `spec.yaml` packager does not understand these v3 descriptors; see
 [artifact-format.md](artifact-format.md).
 
+### Shared existing-sandbox resolution (#10)
+
+`Sandboxes/SandboxResolver.FindAsync(location, token)` is the single location-to-existing-
+sandbox rule for run, on-demand user secrets and create/replacement checks. It returns
+the actual `SandboxInfo` or null: current `SandboxName.For` first, then the exact
+cape-agent-sandbox generated name only after a genuine null/not-found. Discovery
+exceptions and cancellation propagate, never enabling fallback or creation.
+Current naming and effective-location precedence are unchanged. No fuzzy/prefix or
+workspace-metadata matching is used; both-present inventories select the current
+candidate without touching the legacy one.
+
+`Naming/LegacySandboxName` isolates the historical contract, verified against
+cape-agent-sandbox `1512ff71c31c6bfa7e923a43683c6d80624c40d0`:
+
+- Sanitize the original leaf before case conversion: non-ASCII-letter/digit/underscore/
+  hyphen characters become hyphens; lowercase invariantly, trim surrounding hyphens,
+  and use `root` when empty. Append `-ai-sbx-` and three SHA-256 bytes of the UTF-8
+  historical real path as six lowercase hex characters.
+- Windows uses `Path.GetFullPath` and a final directory link target when available,
+  falling back to the full path on missing/ordinary/inaccessible link resolution.
+  Preserve case, native separators and retained trailing separators in the hash.
+- Non-Windows uses the historical `bash -c 'cd "$1" 2>/dev/null && pwd -P' bash <path>`;
+  take its last output line on success, otherwise the original effective location.
+  Never hash the Windows-lowercased/slash-normalized current naming input instead.
+
+Callers carry the selected actual name into local-record reads, probes, launcher
+context, policy discovery, transfer and removal. Accepted run replacement passes
+its already-selected `SandboxInfo` in `SandboxCreationRequest.ExistingSandbox` so
+a second candidate appearing after consent cannot redirect destructive work.
+Create's read-only MCP validation, host-secret preparation, confirmation, cancellation
+checks, state preparation and removal safeguards remain in place. Explicitly
+authorized replacement creates and records the replacement under that same name;
+ordinary compatibility lookup writes no record or state/alias mapping and migrates
+neither legacy state layout nor Herdr registrations.
+
+On-demand squad authorization reads only the selected sandbox's existing local record
+before accessing selected host stores. When no squad check is needed, host input and
+deny-list validation still precede runtime access. Legacy discovery alone establishes
+no trusted provenance, so ordinary run can succeed while squad-qualified copying
+correctly refuses. Destination/ownership, policy, value-free reporting and sensitive
+transport checks are unchanged.
+
+Explicit-name `exec`/`pipe`, inventory-wide prune and host proxy-secret commands do
+not use location fallback. Future location-based commands, including ports (#3),
+must use this resolver and retain the actual selected identity; this change adds
+neither ports nor public stop/delete commands. See [verification and red evidence](verification/legacy-sandbox-compatibility.md).
+
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag>]
 [--local] [--yes]`
 
@@ -229,7 +276,9 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
    schema/identity, state paths and matching host-mount capabilities are validated;
    missing/invalid metadata requires maintainer republication, never local fallback.
    Only `--local` reads the local build manifest for state and MCP metadata.
-3. Names the sandbox after the folder: `<folder>-abox-<hash>`, where the hash is the
+3. Resolves an existing current or legacy sandbox as above and retains its actual
+   name for an authorized replacement. For a new sandbox, names it after the
+   folder: `<folder>-abox-<hash>`, where the hash is the
    first five hex characters, uppercase, of SHA-256 over the normalized absolute
    path: forward slashes, lowercased on Windows.
 4. Validates MCP registrations read-only, then asks before replacing an existing
@@ -684,6 +733,7 @@ cli/src/Abox/
   Launchers/        one class per launcher
   Sandboxes/        application-level sandbox orchestration shared by create and run
     SandboxCreator.cs       the create operation shared by create and run
+    SandboxResolver.cs      current-first, exact legacy fallback for existing sandboxes
     PublishedSquadSource.cs reads the published set's bundled squad metadata
     SquadSources.cs         local and remote ISquadSource adapters
   Sbx/              every call to sbx: CLI arguments, settings and response models

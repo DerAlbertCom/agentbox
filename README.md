@@ -167,6 +167,33 @@ absolute path; otherwise it is `~/.config/abox/config.yaml` on Linux/macOS or
 lowercase JFrog repository name, not a URL, host, path or tag. Omitted or blank
 values use the default. It is independent of each workload's `publishRepository`.
 
+### Reusing cape-agent-sandbox environments
+
+`run`, `user-secrets` and create/replacement checks find the sandbox for the
+effective folder (`--location`, then `defaultLocation`, then the current folder).
+They first check the current `<folder>-abox-<hash>` name. Only when it is absent
+do they check the exact historical `<folder>-ai-sbx-<hash>` generated name.
+Runtime/discovery errors stop the command; they are not treated as absence.
+
+A legacy sandbox is reused **in place**, including when sbx exec needs to start
+it. Probes, launchers and secret copying use its actual name. If both names exist,
+the agentbox name wins and the legacy sandbox is left alone. There is no automatic
+rename, recreation, cleanup, adoption record or persistent-state/Herdr migration.
+Arbitrary custom names and workspace-metadata matches are not discovered.
+
+`run` and `user-secrets` still never create a missing sandbox. Normal `create`
+uses current naming when neither candidate exists. Replacing an existing legacy
+sandbox still requires the usual confirmation (or explicit `--yes`), lists the
+same losses, and retains the selected name rather than converting it to agentbox
+naming. An accepted newer-build replacement from `run` does the same.
+
+Discovery is **not squad authorization**: ordinary run can open a legacy sandbox
+without an agentbox record, but squad-qualified user-secret copying still refuses
+when a matching trusted local record is missing or unknown. Neither `--force` nor
+discovery creates that trust. Review the [user-secret safety contract](#copying-net-user-secrets)
+before copying. Historical path spelling and link rules determine the legacy hash;
+this is not a general alias search across all spellings of a folder.
+
 ### Copying .NET user secrets
 
 Declare the squad and only the intended stores/keys in **the sandbox folder's
