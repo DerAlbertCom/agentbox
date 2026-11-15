@@ -112,7 +112,7 @@ public sealed class UserSecretsCommandTests
     [InlineData("[]")]
     [InlineData("{\"userSecrets\":null}")]
     [InlineData("{\"userSecrets\":[12]}")]
-    [InlineData("{\"userSecrets\":[{\"id\":\"sample\",\"keys\":[]}]}")]
+    [InlineData("{\"userSecrets\":[{\"id\":\"sample\",\"keys\":null}]}")]
     [InlineData("{\"userSecrets\":[\"sample\",\"SAMPLE\"]}")]
     [InlineData("{\"userSecrets\":[],\"userSecrets\":[\"sample\"]}")]
     [InlineData("{\"unknown\":\"synthetic-value\"}")]
