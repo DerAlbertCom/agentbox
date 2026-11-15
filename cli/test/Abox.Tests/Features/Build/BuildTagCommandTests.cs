@@ -72,7 +72,7 @@ public sealed class BuildTagCommandTests
 
         // Assert
         exitCode.Should().Be(0, console.AllText);
-        var manifest = store.Load("ac", tag)!;
+        var manifest = store.Load("sample", "ac", tag)!;
         manifest.Tag.Should().Be(tag);
         File.ReadAllText(Path.Combine(manifest.WorkloadKitDirectory, "workload.yaml"))
             .Should()

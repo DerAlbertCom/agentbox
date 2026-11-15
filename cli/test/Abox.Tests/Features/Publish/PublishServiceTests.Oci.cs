@@ -245,7 +245,7 @@ public sealed partial class PublishServiceTests
     private void SaveRegistryKitBuild()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.Kits.Add(new ManifestKit { Name = "tool", Reference = "ghcr.io/example/tool:1" });
         SaveVerifiedBuild(build);
     }
