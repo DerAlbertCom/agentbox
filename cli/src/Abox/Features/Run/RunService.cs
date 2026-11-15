@@ -101,10 +101,22 @@ public sealed class RunService(
         var squad =
             folderConfig?.Squad ?? (string.IsNullOrWhiteSpace(record?.Squad) ? null : record.Squad);
         var tag = string.IsNullOrWhiteSpace(record?.Tag) ? config.DefaultTag : record.Tag;
-        var manifest =
-            record is { KitReference: null } && squad is not null ? store.Load(squad, tag) : null;
-        ImageName.TryParseTeam(manifest?.Reference, tag, out var buildTeam);
         var team = string.IsNullOrWhiteSpace(record?.Team) ? null : record.Team;
+        BuildManifest? manifest = null;
+        if (record is { KitReference: null } && squad is not null)
+        {
+            try
+            {
+                manifest = team is null
+                    ? store.LoadLegacy(squad, tag)
+                    : store.Load(team, squad, tag);
+            }
+            catch (AboxException exception)
+            {
+                console.WriteError(exception.Message);
+            }
+        }
+        ImageName.TryParseTeam(manifest?.Reference, tag, out var buildTeam);
         team ??= buildTeam;
         team ??= config.DefaultTeam;
         if (squad is null && team is not null)
@@ -126,7 +138,10 @@ public sealed class RunService(
 
         var placeholders =
             team is null || squad is null ? " (replace <name> placeholders)" : string.Empty;
-        var local = buildTeam is not null && buildTeam == team ? " --local" : string.Empty;
+        var local =
+            buildTeam is not null && buildTeam.Equals(team, StringComparison.OrdinalIgnoreCase)
+                ? " --local"
+                : string.Empty;
         var root =
             local.Length > 0 && !string.IsNullOrWhiteSpace(manifest?.RootDirectory)
                 ? $" --root \"{manifest.RootDirectory}\""
@@ -158,7 +173,17 @@ public sealed class RunService(
             return true;
         }
 
-        var manifest = store.Load(record.Squad, record.Tag);
+        BuildManifest? manifest;
+        try
+        {
+            manifest = store.Load(record.Team, record.Squad, record.Tag);
+        }
+        catch (AboxException exception)
+        {
+            // Invalid or unrelated local metadata must not interrupt an existing sandbox.
+            console.WriteError(exception.Message);
+            return true;
+        }
         if (manifest?.LocalWorkload is null || manifest.CreatedAt <= record.BuildCreatedAt)
         {
             return true;

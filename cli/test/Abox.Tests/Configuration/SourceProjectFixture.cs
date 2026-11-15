@@ -100,8 +100,8 @@ internal sealed class SourceProjectFixture : IDisposable
     public string ProjectKit { get; }
     public string PersonalKit { get; }
 
-    public BuildManifest LoadBuild(string squad = "ac") =>
-        _provider.GetRequiredService<BuildStore>().Load(squad, "release")!;
+    public BuildManifest LoadBuild(string squad = "ac", string team = "sample") =>
+        _provider.GetRequiredService<BuildStore>().Load(team, squad, "release")!;
 
     public async Task<int> InvokeAsync(string workingDirectory, params string[] arguments)
     {

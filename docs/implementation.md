@@ -67,8 +67,23 @@ does not skip the workload image build.
    image building. `LocalWorkload` records the unique tag, image content ID,
    Docker context, runtime kit directory and its fingerprint on image builds.
 
-The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unless the
-command or the user configuration says otherwise.
+The build lives in `<state dir>/builds/<team>/<squad>/<tag>/`, with lowercase team
+and squad path segments. The tag is `latest` unless the command or the user
+configuration says otherwise. Teams sharing a squad/tag keep separate generated
+sources, manifests, state mixins and local image selections, including in one
+multi-team build. Separate source projects deliberately using the same team identity
+still share that team's local storage; project identity is not a storage dimension.
+
+Build-store reads check the manifest's squad, tag and explicit team ownership marker
+(`Reference`). If no qualified manifest exists, an old
+`<state dir>/builds/<squad>/<tag>/build.json` is usable only with matching, unambiguous
+ownership. Missing/conflicting ownership, duplicate JSON properties or unreadable
+metadata require rebuilding for the requested team; no directory/source-path
+inference substitutes for provenance. A present but invalid qualified manifest
+never falls back to an older one. Builds write only the new layout: old sources,
+manifests, images and runtime directories are not moved, deleted or relabelled.
+See [team-isolation verification](verification/team-qualified-builds.md) for the
+synthetic coverage and legacy compatibility checks.
 
 Normal and metadata-only builds, local/remote creation and reusable build-store
 access use the same registry-tag grammar: 1–128 ASCII letters, digits, underscores,
@@ -90,7 +105,7 @@ The command reports that no image was built/selected and prints the remote creat
 command. `--no-personal` still excludes personal declarations and captures source
 fingerprints; all existing publication provenance checks remain in force.
 
-This mode explicitly replaces the selected squad/tag manifest and **invalidates
+This mode explicitly replaces the selected team/squad/tag manifest and **invalidates
 any previous local image selection, even with identical inputs**. It does not
 delete existing images, runtime kit directories or sandboxes, and does not retain
 an image whose validity could require Docker checks. To retain another local
@@ -413,14 +428,20 @@ published tag.
    recorded squad; it copies no secrets and changes no squad. When replacement is
    accepted and the folder config has `squad`, requires a known matching sandbox
    record before preparation/replacement. A conflict never silently switches squads.
-4. For a locally created sandbox, offers to replace it when the build of its squad is newer than the one the
+4. For a locally created sandbox, offers to replace it when the build of its recorded
+   team/squad/tag is newer than the one the
    sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
    the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local,
    resolving team sources from the newer build's recorded root (or the sandbox
    location for legacy metadata), so a separate `create --root` project stays usable.
    Accepted replacement uses `SandboxCreator`, including shared user-secret
    preparation/copying. Failed required copying prevents launch. Ordinary run or
-   declining the newer build never reads selected host stores or resyncs secrets.
+    declining the newer build never reads selected host stores or resyncs secrets.
+    Another team's build is never offered or borrowed for a create hint. Unproven or
+    invalid local metadata reports a rebuild instruction without interrupting an
+    existing sandbox's ordinary launch. A teamless legacy record can recover a hint
+    only from an explicitly owned legacy manifest; it does not search other teams'
+    qualified stores or use source paths to guess identity.
 5. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
 6. Asks the runtime where the workspace is (`WORKSPACE_DIR`) and starts the launcher.

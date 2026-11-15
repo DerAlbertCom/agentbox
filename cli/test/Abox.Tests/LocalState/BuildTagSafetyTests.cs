@@ -24,7 +24,9 @@ public sealed class BuildTagSafetyTests
         var tag = input switch
         {
             "traversal" => Path.GetRelativePath(
-                Path.Combine(paths.BuildsDirectory, "ac"),
+                operation == "legacy"
+                    ? Path.Combine(paths.BuildsDirectory, "ac")
+                    : Path.Combine(paths.BuildsDirectory, "sample", "ac"),
                 outside.Path
             ),
             "absolute" => outside.Path,
@@ -33,9 +35,18 @@ public sealed class BuildTagSafetyTests
         };
         Action access = operation switch
         {
-            "directory" => () => store.DirectoryFor("ac", tag),
-            "load" => () => store.Load("ac", tag),
-            _ => () => store.Save(new BuildManifest { Squad = "ac", Tag = tag }),
+            "directory" => () => store.DirectoryFor("sample", "ac", tag),
+            "load" => () => store.Load("sample", "ac", tag),
+            "legacy" => () => store.LoadLegacy("ac", tag),
+            _ => () =>
+                store.Save(
+                    new BuildManifest
+                    {
+                        Squad = "ac",
+                        Tag = tag,
+                        Reference = $"agentbox-rwest-sample:{tag}",
+                    }
+                ),
         };
 
         // Act
@@ -63,7 +74,7 @@ public sealed class BuildTagSafetyTests
                 "C:relative",
             }
         )
-        foreach (var operation in new[] { "directory", "load", "save" })
+        foreach (var operation in new[] { "directory", "load", "legacy", "save" })
         {
             yield return [operation, tag];
         }
