@@ -399,8 +399,8 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   merely that the flag was supplied. The on-demand warning uses the successful
   copy report; lifecycle callers retain those semantics.
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
-  before writing. `UserSecretsCopy.Target.cs` is the integration point for #8's
-  policy discovery/transformation, retaining originals for deny/force accounting.
+  before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
+  using sbx policy discovery, retaining originals for deny/force accounting.
   Each selected store replaces its entire destination, clearing old unmatched keys,
   even for a zero-key `{}` result. Reports contain IDs, key names/counts, never values.
   Only parsed JSON data is serialized for transfer:
@@ -440,8 +440,9 @@ always prepares with `force: false`; replacement consent/`--yes` is not force.
 
 #### Supported rewrite contract (#8)
 
-The approved clarification on #2/#8 supersedes experimental relay metadata,
-host/container port translation and first-name selection:
+The implemented rewrite flow follows the approved clarification on #2/#8,
+superseding experimental relay metadata, host/container port translation and
+first-name selection. See [supported forms, preservation and verification](user-secrets-rewriting.md).
 
 - Discover exact kit-declared TCP resources through
   `sbx policy ls <sandbox> --source kit --type network --json`. Require active,
@@ -467,16 +468,19 @@ host/container port translation and first-name selection:
 
 #### User-secrets integration status
 
-At this documentation baseline, safe on-demand copying (#6), filtering (#7) and
-creation/replacement integration (#9) are implemented. **Policy rewriting (#8)
-is pending integration**; the preceding section is its approved contract, not a
-claim that the baseline performs rewriting.
+Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
+rewriting (#8) and creation/replacement integration (#9) are implemented through
+the shared copy flow.
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force
 warnings report actual overridden matches only after successful copying. JSON
 formatting/escape spelling is not a preservation contract; unchanged string
 contents stay unchanged.
+
+Final integrated Debug verification: **738 passed, zero failures, 4 explicit
+native Windows symlink-privilege skips** (742 total). The skipped receiver cases
+are not claimed as passing; see [rewrite verification](user-secrets-rewriting.md).
 
 The accepted [verification matrix](verification/user-secrets/README.md) is
 **local/nonempty kit policy + published/empty kit policy**. An already-published
@@ -731,10 +735,6 @@ cli/src/Abox/
 
 ## What is not built yet
 
-- .NET user-secret address rewriting (#8) is pending integration; safe on-demand
-  copying (#6), filters (#7), lifecycle copying (#9) and the safety-review fixes
-  are implemented. See [the precise status and accepted verification limits](#user-secrets-integration-status)
-  before treating the rewrite contract as delivered behavior.
 - Discovering published squads remotely when `--squad` is omitted.
 - Pruning local builds, versioned runtime kits, host-Docker `abox-workload` images
   and registry components. `abox prune` currently removes only sbx template images.

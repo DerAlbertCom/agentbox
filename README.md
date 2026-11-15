@@ -281,7 +281,7 @@ Copying is runtime-only: payloads and integrity frames travel over UTF-8/no-BOM
 stdin, never process arguments, images, build inputs or published artifacts. This
 does not change the separate proxy/host-secret command `abox secrets`.
 
-**Endpoint rewriting (#8, pending integration):** the approved contract discovers
+**Endpoint rewriting (#8, implemented):** abox discovers
 exact kit-declared TCP `localhost:<port>` resources using supported sandbox policy
 metadata and checks each port's **effective** authorization. Only supported URI
 authorities and database connection-string endpoint fields change loopback to
@@ -302,6 +302,7 @@ required metadata fails before writes, not by guessing. There is no host kit-sou
 Authorization is not proof of service availability or protection against later
 policy changes. The accepted live evidence is **local/nonempty + published/empty
 kit policy**; published/nonempty rewriting remains unverified. See the
+[supported forms and rewrite verification](docs/user-secrets-rewriting.md) and
 [verification record](docs/verification/user-secrets/README.md).
 
 Transfer serializes selected JSON data, not raw source text: destination JSON
