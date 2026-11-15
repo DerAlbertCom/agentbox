@@ -568,17 +568,5 @@ configure publishing credentials. See [the publishing details](docs/implementati
 
 ## The formatting and the hooks
 
-The code is formatted with [CSharpier](https://csharpier.com), which comes with the
-repository as a local tool:
-
-```sh
-dotnet csharpier format cli     # format the code
-dotnet csharpier check cli      # check the formatting
-```
-
-The hook in `.githooks/pre-commit` checks the formatting before every commit. Enable
-the hooks of the repository once:
-
-```sh
-git config core.hooksPath .githooks
-```
+See the [coding standards](CODING_STANDARDS.md) for architecture conventions and
+[formatting and hook setup](CODING_STANDARDS.md#formatting-and-hooks).
