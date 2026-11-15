@@ -394,11 +394,18 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   contain flat effective keys so array indices never shift. All input must still
   be valid, even with no matches or force. This phase makes no sandbox calls/writes.
   `PreparedUserSecrets` is opaque, in-memory and has a value-free `ToString`.
+  `SafetyOverride` on the prepared snapshot/report means at least one selected
+  original value actually matched the deny list and was allowed by `--force`, not
+  merely that the flag was supplied. The on-demand warning uses the successful
+  copy report; lifecycle callers retain those semantics.
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
   before writing. `UserSecretsCopy.Target.cs` is the integration point for #8's
   policy discovery/transformation, retaining originals for deny/force accounting.
   Each selected store replaces its entire destination, clearing old unmatched keys,
   even for a zero-key `{}` result. Reports contain IDs, key names/counts, never values.
+  Only parsed JSON data is serialized for transfer:
+  skipped comments and trailing commas must not survive as unscanned payload text.
+  No hook framework or alternate pipeline is needed.
 - `SbxClient.UserSecrets.cs` owns captured default-user exec, environment/path checks
   and the fixed receiver. All ancestor symlinks, nonregular/multiply-linked files
   and wrong-owned secret directories/files fail. It verifies stdin byte count and
@@ -406,6 +413,8 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   required. Secret root/store directories are 0700, files 0600. It does not assume
   `/home/agent` or run as root. The host adapter and receiver both prefer APPDATA
   over HOME, even on Unix, and reject unusable environment roots rather than guess.
+  Destination checks omit `exec -i` and explicitly close an empty redirected stdin;
+  they cannot consume or forward host stdin.
 
 The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when APPDATA
 is set (also on Unix), otherwise `<HOME>/.microsoft/usersecrets/<id>/secrets.json`.
@@ -463,16 +472,11 @@ creation/replacement integration (#9) are implemented. **Policy rewriting (#8)
 is pending integration**; the preceding section is its approved contract, not a
 claim that the baseline performs rewriting.
 
-**Safety review fixes are also pending integration:** serialize selected JSON data
-rather than transfer raw unfiltered source text (which retains skipped comments),
-isolate no-payload checks from inherited host stdin (omit `exec -i` and close empty
-redirected stdin), and report actual-match-only force overrides after successful
-copying. `SafetyOverride` on the prepared snapshot/successful report must mean a
-selected original value actually matched and was allowed by `--force`, not merely
-that the flag was supplied. The desired normalized-output contract excludes
-comments/trailing commas and does not preserve JSON formatting/escape spelling,
-while preserving unchanged string contents. Until those fixes land, do not claim
-unfiltered comments cannot be copied or that force warnings prove an actual match.
+The safety review fixes are integrated: normalized transfer excludes skipped
+comments/trailing commas, no-payload checks cannot consume host stdin, and force
+warnings report actual overridden matches only after successful copying. JSON
+formatting/escape spelling is not a preservation contract; unchanged string
+contents stay unchanged.
 
 The accepted [verification matrix](verification/user-secrets/README.md) is
 **local/nonempty kit policy + published/empty kit policy**. An already-published
@@ -727,10 +731,10 @@ cli/src/Abox/
 
 ## What is not built yet
 
-- .NET user-secret address rewriting (#8) and the safety-review fixes are pending
-  integration; safe on-demand copying (#6), filters (#7) and lifecycle copying (#9)
+- .NET user-secret address rewriting (#8) is pending integration; safe on-demand
+  copying (#6), filters (#7), lifecycle copying (#9) and the safety-review fixes
   are implemented. See [the precise status and accepted verification limits](#user-secrets-integration-status)
-  before treating the rewrite/normalized-output contracts as delivered behavior.
+  before treating the rewrite contract as delivered behavior.
 - Discovering published squads remotely when `--squad` is omitted.
 - Pruning local builds, versioned runtime kits, host-Docker `abox-workload` images
   and registry components. `abox prune` currently removes only sbx template images.

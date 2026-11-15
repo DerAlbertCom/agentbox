@@ -255,10 +255,9 @@ safe filtered copy. A block names the store/key, never the value.
 
 `--force` is **on-demand only** and bypasses only matched deny-list policy, not
 invalid configuration/JSON, missing files, squad constraints, metadata/destination
-checks, cancellation or transport errors. The reporting contract is a warning
+checks, cancellation or transport errors. A warning is reported
 after a successful copy **only if selected original values actually matched**;
-passing `--force` with no match is not an override. Actual-match reporting is
-pending the safety fixes noted in [implementation status](docs/implementation.md#user-secrets-integration-status).
+passing `--force` with no match is not an override.
 Automatic copying always enforces the list: `--yes` and replacement consent are
 not force. If validation blocks creation, correct the values/selection. For an
 intentional override, explicitly deselect the blocked stores, create, restore the
@@ -305,10 +304,10 @@ policy changes. The accepted live evidence is **local/nonempty + published/empty
 kit policy**; published/nonempty rewriting remains unverified. See the
 [verification record](docs/verification/user-secrets/README.md).
 
-The normalized-output contract serializes selected JSON data, not raw source text:
-comments are not values, JSON formatting/escape spelling is not preserved, and
-unchanged string contents stay unchanged. **Unfiltered comment removal is pending
-the safety fixes**; do not rely on comments being excluded until they land.
+Transfer serializes selected JSON data, not raw source text: destination JSON
+contains no skipped comments or trailing commas. JSON formatting/escape spelling
+is not preserved; unchanged string contents stay unchanged. Destination checks
+close an empty redirected stdin and cannot forward host stdin.
 
 Rerunning replaces the **entire** destination store, removing old keys. The fixed
 receiver checks the byte count and SHA-256 frame before a same-directory atomic
