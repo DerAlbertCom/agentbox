@@ -11,7 +11,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class PublishedSquadSourceTests
+public sealed partial class PublishedSquadSourceTests
 {
     public static bool IsNotWindows => !OperatingSystem.IsWindows();
 
@@ -51,16 +51,22 @@ public sealed class PublishedSquadSourceTests
     {
         _programs.Exists("docker").Returns(true);
         _runner
+            .When(runner =>
+                runner.RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            )
+            .Do(call => _calls.Add(call.Arg<ProcessRequest>()));
+        _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var request = call.Arg<ProcessRequest>();
-                _calls.Add(request);
                 var args = request.Arguments;
                 if (args[0] == _fail)
                     return new ProcessResult(1, "", "access denied SECRET-NOT-FOR-OUTPUT");
                 if (args[0] == "buildx")
                 {
+                    if (args.Contains("--raw") && _rawManifests.TryGetValue(args[^1], out var raw))
+                        return Result(raw);
                     var config = args[^1] == Config;
                     if (args.Contains("--format"))
                     {

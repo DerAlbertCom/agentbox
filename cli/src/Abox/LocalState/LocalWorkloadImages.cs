@@ -47,14 +47,7 @@ public sealed class LocalWorkloadImages(
             "--provenance=false",
             "--load",
         };
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN")))
-        {
-            arguments.AddRange([
-                "--secret",
-                $"id={WorkloadKitGenerator.GitHubTokenSecret},env=GITHUB_TOKEN",
-            ]);
-        }
-
+        arguments.AddRange(WorkloadKitGenerator.GitHubBuildSecretArguments());
         arguments.Add(workloadDirectory);
         console.WriteLine($"Building reusable workload image '{reference}'...");
         await RunAsync(arguments, cancellationToken);
@@ -177,15 +170,11 @@ public sealed class LocalWorkloadImages(
         return id;
     }
 
-    private void RequireDocker()
-    {
-        if (!programs.Exists("docker"))
-        {
-            throw new AboxException(
-                "Local workload images need Docker with Buildx on PATH. Install Docker and run 'abox build' again."
-            );
-        }
-    }
+    private void RequireDocker() =>
+        OciRegistry.RequireDocker(
+            programs,
+            "Local workload images need Docker with Buildx on PATH. Install Docker and run 'abox build' again."
+        );
 
     private async Task<ProcessResult> RunAsync(
         IReadOnlyList<string> arguments,

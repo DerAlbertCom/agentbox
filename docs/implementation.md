@@ -416,7 +416,11 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
 - `list` shows the services the kits ask for, the kits that ask for them, and whether
   the value is stored on the host.
 - `set` asks for the values and stores them. The value goes through the standard input
-  of sbx, so it stays out of the process list and out of the shell history.
+  of sbx as explicit UTF-8 without a BOM or added newline, preserving non-ASCII service
+  and custom secrets independently of the console code page. It stays out of process
+  arguments, environment settings and shell history. Normal redacted diagnostics remain
+  available; this encoding opt-in does not change sensitive-transfer suppression,
+  attached-console streams or raw pipes.
 - `remove` takes the values off the host. Custom secrets are matched by `--host`,
   or by sbx's `--env-name` selector when only `env` was declared; service names
   are used only for service secrets. `list` uses the same custom-secret identity.

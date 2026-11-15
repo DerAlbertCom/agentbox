@@ -96,7 +96,10 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
         if (request.StandardInput is not null)
         {
             startInfo.RedirectStandardInput = true;
-            if (request.OutputPolicy == ProcessOutputPolicy.Sensitive)
+            if (
+                request.UseUtf8StandardInput
+                || request.OutputPolicy == ProcessOutputPolicy.Sensitive
+            )
                 startInfo.StandardInputEncoding = new UTF8Encoding(
                     encoderShouldEmitUTF8Identifier: false,
                     throwOnInvalidBytes: true
