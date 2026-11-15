@@ -6,7 +6,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class UserSecretsDiscovery38CommandTests
+public sealed class UserSecretsDiscoveryCommandTests
 {
     [Theory]
     [InlineData(false, false)]
@@ -60,8 +60,8 @@ public sealed class UserSecretsDiscovery38CommandTests
         }
         else
         {
-            Written(cli, "first").Should().Be("{}");
-            Written(cli, "shared")
+            cli.Written("first").Should().Be("{}");
+            cli.Written("shared")
                 .Should()
                 .Be(
                     """{"Copied":"synthetic-only","Endpoint":"http://host.docker.internal:8004/synthetic-path"}"""
@@ -87,7 +87,7 @@ public sealed class UserSecretsDiscovery38CommandTests
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();
-        using var links = new DirectoryLinks38();
+        using var links = new DirectoryLinks();
         cli.Configure("""{"userSecrets":["shared"]}""");
         cli.Store("shared", "{}");
         var target = cli.Root.Directory_(
@@ -127,7 +127,7 @@ public sealed class UserSecretsDiscovery38CommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "shared")
+        cli.Written("shared")
             .Should()
             .Be(
                 targetKind == "inside"
@@ -146,7 +146,7 @@ public sealed class UserSecretsDiscovery38CommandTests
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();
-        using var links = new DirectoryLinks38();
+        using var links = new DirectoryLinks();
         cli.Root.File("folder/src/abox.json", """{"userSecrets":["shared"]}""");
         Project(cli, "src/deep/Api", "http://localhost:8004/synthetic-path");
         var entry = Path.Combine(cli.Root.Path, "entry");
@@ -183,7 +183,7 @@ public sealed class UserSecretsDiscovery38CommandTests
                     + "Dangling Unix symlinks are not returned by directory enumeration; this case requires a Windows junction."
             );
         using var cli = new UserSecretsCliHarness();
-        using var links = new DirectoryLinks38();
+        using var links = new DirectoryLinks();
         cli.Configure("""{"userSecrets":["first","shared"]}""");
         cli.Store("first", "{}");
         Project(cli, "src/deep/Api", "http://localhost:8004/synthetic-path");
@@ -248,7 +248,7 @@ public sealed class UserSecretsDiscovery38CommandTests
         // Assert
         exit.Should().Be(file == "Api.csproj" ? 0 : 1, cli.Console.AllText);
         if (file == "Api.csproj")
-            Written(cli, "shared").Should().Be("{}");
+            cli.Written("shared").Should().Be("{}");
         else
         {
             await cli.NoWrites();
@@ -267,64 +267,5 @@ public sealed class UserSecretsDiscovery38CommandTests
             "folder/" + directory + "/appsettings.json",
             "{\"Endpoint\":\"" + endpoint + "\"}"
         );
-    }
-
-    private static string Written(UserSecretsCliHarness cli, string id) =>
-        (string)
-            cli
-                .Sbx.ReceivedCalls()
-                .Single(call =>
-                    call.GetMethodInfo().Name == nameof(ISbxClient.WriteUserSecretsAsync)
-                    && (string)call.GetArguments()[1]! == id
-                )
-                .GetArguments()[2]!;
-
-    private sealed class DirectoryLinks38 : IDisposable
-    {
-        private readonly List<string> links = [];
-
-        internal async Task Add(string link, string target, bool symbolic)
-        {
-            link = Path.GetFullPath(link);
-            target = Path.GetFullPath(target);
-            try
-            {
-                if (OperatingSystem.IsWindows() && !symbolic)
-                {
-                    var result = await new ProcessRunner().RunAsync(
-                        new ProcessRequest("cmd", ["/c", "mklink", "/J", link, target]),
-                        CancellationToken.None
-                    );
-                    result.ExitCode.Should().Be(0, result.StandardError);
-                }
-                else
-                    Directory.CreateSymbolicLink(link, target);
-                links.Add(link);
-            }
-            catch (Exception exception)
-                when (exception is UnauthorizedAccessException or PlatformNotSupportedException
-                    || (
-                        OperatingSystem.IsWindows()
-                        && exception is IOException
-                        && (exception.HResult & 0xffff) == 1314
-                    )
-                )
-            {
-                throw new InvalidOperationException(
-                    Xunit.v3.DynamicSkipToken.Value
-                        + "Directory symlinks require native link privileges on this host.",
-                    exception
-                );
-            }
-        }
-
-        public void Dispose()
-        {
-            for (var index = links.Count - 1; index >= 0; index--)
-                if (OperatingSystem.IsWindows())
-                    Directory.Delete(links[index]);
-                else
-                    File.Delete(links[index]);
-        }
     }
 }

@@ -4,7 +4,7 @@ using Abox.Sbx;
 
 namespace Abox.Tests;
 
-public sealed class Performance40SensitivePolicyProcessTests
+public sealed class UserSecretsSensitivePolicyProcessTests
 {
     [Theory]
     [InlineData(false, "success")]
@@ -70,14 +70,14 @@ public sealed class Performance40SensitivePolicyProcessTests
             var inventory = request.Arguments[1] == "ls";
             var port = inventory ? 0 : int.Parse(request.Arguments[^1].AsSpan("localhost:".Length));
             var stdout = inventory
-                ? Performance40PolicyFixture.Inventory(
+                ? GatedUserSecretsPolicyRunner.Inventory(
                     "synthetic-sandbox",
                     "localhost:8001",
                     "localhost:8002",
                     "localhost:8003",
                     "localhost:8004"
                 )
-                : Performance40PolicyFixture
+                : GatedUserSecretsPolicyRunner
                     .Authorization("synthetic-sandbox", port, allowed: port != 8002)
                     .Replace("}", ",\"diagnostic\":\"synthetic-password 123456789 true\"}");
             if (port == 8002 && outcome == "malformed")

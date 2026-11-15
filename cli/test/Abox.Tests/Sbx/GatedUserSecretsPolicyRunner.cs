@@ -7,7 +7,7 @@ using Abox.Sbx;
 
 namespace Abox.Tests;
 
-internal sealed class Performance40PolicyFixture : IProcessRunner, IDisposable
+internal sealed class GatedUserSecretsPolicyRunner : IProcessRunner, IDisposable
 {
     private readonly TempDirectory root = new();
     private readonly Channel<int> started = Channel.CreateUnbounded<int>();
@@ -21,7 +21,7 @@ internal sealed class Performance40PolicyFixture : IProcessRunner, IDisposable
     private int active;
     private int maximumActive;
 
-    internal Performance40PolicyFixture(string sandbox, params string[] resources)
+    internal GatedUserSecretsPolicyRunner(string sandbox, params string[] resources)
     {
         Sandbox = sandbox;
         inventory = Inventory(sandbox, resources);

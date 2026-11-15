@@ -7,14 +7,14 @@ using NSubstitute.Extensions;
 
 namespace Abox.Tests;
 
-public sealed class Performance40PolicyCommandTests
+public sealed class UserSecretsPolicyCommandTests
 {
     [Fact]
     public async Task CliInvocationCancellationReachesAllPolicyChecksAndPreventsEveryWrite()
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();
-        using var policy = new Performance40PolicyFixture(
+        using var policy = new GatedUserSecretsPolicyRunner(
             cli.Name,
             "localhost:8001",
             "localhost:8002",
@@ -62,7 +62,7 @@ public sealed class Performance40PolicyCommandTests
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();
-        using var policy = new Performance40PolicyFixture(
+        using var policy = new GatedUserSecretsPolicyRunner(
             cli.Name,
             "localhost:8001",
             "localhost:8002",
@@ -139,7 +139,7 @@ public sealed class Performance40PolicyCommandTests
         // Act
         for (var invocation = 0; invocation < 2; invocation++)
         {
-            using var policy = new Performance40PolicyFixture(
+            using var policy = new GatedUserSecretsPolicyRunner(
                 cli.Name,
                 "localhost:8001",
                 "localhost:8002",

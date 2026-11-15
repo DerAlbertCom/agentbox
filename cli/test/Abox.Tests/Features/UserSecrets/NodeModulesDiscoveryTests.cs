@@ -1,12 +1,11 @@
 using System.Text.Json;
-using Abox.Infrastructure;
 using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class NodeModulesDiscovery39Tests
+public sealed class NodeModulesDiscoveryTests
 {
     [Theory]
     [InlineData("node_modules/package")]
@@ -29,7 +28,7 @@ public sealed class NodeModulesDiscovery39Tests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "shared")
+        cli.Written("shared")
             .Should()
             .Be("""{"Url":"http://host.docker.internal:8004/synthetic-private"}""");
         cli.Console.AllText.Should().NotContain("synthetic-private");
@@ -69,7 +68,7 @@ public sealed class NodeModulesDiscovery39Tests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "shared"));
+        using var written = JsonDocument.Parse(cli.Written("shared"));
         written
             .RootElement.EnumerateObject()
             .Select(property => property.Name)
@@ -130,8 +129,8 @@ public sealed class NodeModulesDiscovery39Tests
         exit.Should().Be(excluded ? 0 : 1, cli.Console.AllText);
         if (excluded)
         {
-            Written(cli, "first").Should().Be("""{"Copied":"synthetic-private"}""");
-            Written(cli, "shared")
+            cli.Written("first").Should().Be("""{"Copied":"synthetic-private"}""");
+            cli.Written("shared")
                 .Should()
                 .Be("""{"Url":"http://host.docker.internal:8004/synthetic-private"}""");
         }
@@ -209,7 +208,7 @@ public sealed class NodeModulesDiscovery39Tests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "shared")
+        cli.Written("shared")
             .Should()
             .Be("""{"Url":"http://host.docker.internal:8004/synthetic-private"}""");
         cli.Console.AllText.Should().NotContain("synthetic-private");
@@ -259,60 +258,11 @@ public sealed class NodeModulesDiscovery39Tests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "shared")
+        cli.Written("shared")
             .Should()
             .Be("""{"Url":"http://host.docker.internal:8004/synthetic-private"}""");
         cli.Console.AllText.Should().NotContain("synthetic-private").And.NotContain("Bad.csproj");
         AssertUnchanged(originals);
-    }
-
-    private sealed class DirectoryLinks : IDisposable
-    {
-        private readonly List<string> links = [];
-
-        internal async Task Add(string link, string target)
-        {
-            link = Path.GetFullPath(link);
-            target = Path.GetFullPath(target);
-            try
-            {
-                if (OperatingSystem.IsWindows())
-                {
-                    var result = await new ProcessRunner().RunAsync(
-                        new ProcessRequest("cmd", ["/c", "mklink", "/J", link, target]),
-                        CancellationToken.None
-                    );
-                    if (result.ExitCode != 0)
-                        throw new IOException(
-                            "Native Windows directory junction creation unavailable: "
-                                + result.StandardError
-                        );
-                }
-                else
-                    Directory.CreateSymbolicLink(link, target);
-                links.Add(link);
-            }
-            catch (Exception exception)
-                when (exception
-                        is IOException
-                            or UnauthorizedAccessException
-                            or PlatformNotSupportedException
-                )
-            {
-                throw new InvalidOperationException(
-                    Xunit.v3.DynamicSkipToken.Value
-                        + "Directory link capability unavailable on this host: "
-                        + exception.Message,
-                    exception
-                );
-            }
-        }
-
-        public void Dispose()
-        {
-            foreach (var link in links.AsEnumerable().Reverse())
-                Directory.Delete(link);
-        }
     }
 
     private static void Project(UserSecretsCliHarness cli, string directory, string settings)
@@ -328,16 +278,6 @@ public sealed class NodeModulesDiscovery39Tests
         cli
             .Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
-
-    private static string Written(UserSecretsCliHarness cli, string id) =>
-        (string)
-            cli
-                .Sbx.ReceivedCalls()
-                .Single(call =>
-                    call.GetMethodInfo().Name == nameof(ISbxClient.WriteUserSecretsAsync)
-                    && (string)call.GetArguments()[1]! == id
-                )
-                .GetArguments()[2]!;
 
     private static Dictionary<string, string> Sources(UserSecretsCliHarness cli) =>
         Directory

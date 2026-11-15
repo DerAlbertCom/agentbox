@@ -5,10 +5,10 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class UserSecretsDiscovery38CancellationTests
+public sealed class UserSecretsPreparationCancellationTests
 {
     [Fact]
-    public async Task CancelledPreparationNeverWritesDestinationsOrChangesSyntheticSources()
+    public async Task CancellationBeforePreparationNeverWritesDestinationsOrChangesSyntheticSources()
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();

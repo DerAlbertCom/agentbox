@@ -6,6 +6,8 @@ namespace Abox.Sbx;
 
 public sealed partial class SbxClient
 {
+    private const int MaximumConcurrentUserSecretsPolicyChecks = 4;
+
     public async Task<IReadOnlyList<int>> GetUserSecretsHostPortsAsync(
         string sandbox,
         CancellationToken cancellationToken
@@ -64,7 +66,7 @@ public sealed partial class SbxClient
             // Await every worker, including cancellation cleanup, before exposing any authorization.
             await Task.WhenAll(
                 Enumerable
-                    .Range(0, Math.Min(4, candidates.Count))
+                    .Range(0, Math.Min(MaximumConcurrentUserSecretsPolicyChecks, candidates.Count))
                     .Select(_ => CheckCandidatesAsync())
             );
             cancellationToken.ThrowIfCancellationRequested();

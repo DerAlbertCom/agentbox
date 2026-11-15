@@ -2,13 +2,13 @@ using Abox.Infrastructure;
 
 namespace Abox.Tests;
 
-public sealed class Performance40PolicyConcurrencyTests
+public sealed class UserSecretsPolicyConcurrencyTests
 {
     [Fact]
     public async Task AllCandidatesOverlapWithinFourAndResultsIgnoreCompletionOrder()
     {
         // Arrange
-        using var fixture = new Performance40PolicyFixture(
+        using var fixture = new GatedUserSecretsPolicyRunner(
             "synthetic-sandbox",
             "localhost:8009",
             "localhost:8003",
@@ -83,7 +83,7 @@ public sealed class Performance40PolicyConcurrencyTests
     )
     {
         // Arrange
-        using var fixture = new Performance40PolicyFixture(
+        using var fixture = new GatedUserSecretsPolicyRunner(
             "synthetic-sandbox",
             "localhost:8001",
             "localhost:8002",
@@ -99,7 +99,7 @@ public sealed class Performance40PolicyConcurrencyTests
             await fixture.NextStartedAsync();
         fixture.Complete(8001);
         (await fixture.NextFinishedAsync()).Should().Be(8001);
-        var valid = Performance40PolicyFixture.Authorization(fixture.Sandbox, 8002);
+        var valid = GatedUserSecretsPolicyRunner.Authorization(fixture.Sandbox, 8002);
 
         // Act
         if (failure == "throw")
@@ -149,7 +149,7 @@ public sealed class Performance40PolicyConcurrencyTests
     public async Task CancellationDuringChecksAwaitsEveryProcessCleanupAndDoesNotStartQueuedCandidates()
     {
         // Arrange
-        using var fixture = new Performance40PolicyFixture(
+        using var fixture = new GatedUserSecretsPolicyRunner(
             "synthetic-sandbox",
             "localhost:8001",
             "localhost:8002",
@@ -188,7 +188,7 @@ public sealed class Performance40PolicyConcurrencyTests
     public async Task CancellationBeforeInventoryStartsNoProcesses()
     {
         // Arrange
-        using var fixture = new Performance40PolicyFixture("synthetic-sandbox", "localhost:8001");
+        using var fixture = new GatedUserSecretsPolicyRunner("synthetic-sandbox", "localhost:8001");
         using var cancellation = new CancellationTokenSource();
         await cancellation.CancelAsync();
 
@@ -204,7 +204,7 @@ public sealed class Performance40PolicyConcurrencyTests
     public async Task EmptyInventoryNeedsNoAuthorizationProcesses()
     {
         // Arrange
-        using var fixture = new Performance40PolicyFixture("synthetic-sandbox");
+        using var fixture = new GatedUserSecretsPolicyRunner("synthetic-sandbox");
 
         // Act
         var ports = await fixture.ReadAsync();
@@ -221,7 +221,7 @@ public sealed class Performance40PolicyConcurrencyTests
     public async Task SingleCandidateWaitsForItsEffectiveAllowOrDeny(bool allowed)
     {
         // Arrange
-        using var fixture = new Performance40PolicyFixture("synthetic-sandbox", "localhost:8001");
+        using var fixture = new GatedUserSecretsPolicyRunner("synthetic-sandbox", "localhost:8001");
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 
         // Act

@@ -174,6 +174,14 @@ internal sealed class ProjectSettings(
         );
     }
 
+    private static readonly string[] ExcludedDirectoryNames =
+    [
+        ".git",
+        "bin",
+        "obj",
+        "node_modules",
+    ];
+
     private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
         ? StringComparer.OrdinalIgnoreCase
         : StringComparer.Ordinal;
@@ -218,26 +226,26 @@ internal sealed class ProjectSettings(
 
     private static IEnumerable<string> ProjectFiles(
         string root,
-        string directory,
+        string resolvedDirectory,
         HashSet<string> visited,
         CancellationToken cancellationToken
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
         // The root and each parent are already resolved; ordinary children reuse that ancestry.
-        var relative = Path.GetRelativePath(root, directory);
+        var relative = Path.GetRelativePath(root, resolvedDirectory);
         if (
             Path.IsPathRooted(relative)
             || relative == ".."
             || relative.StartsWith(".." + Path.DirectorySeparatorChar)
-            || !visited.Add(directory)
+            || !visited.Add(resolvedDirectory)
         )
             yield break;
         if (relative.Split(Path.DirectorySeparatorChar).Any(IsExcludedDirectory))
             yield break;
         foreach (
             var path in Directory
-                .EnumerateFiles(directory, "*.csproj")
+                .EnumerateFiles(resolvedDirectory, "*.csproj")
                 .Order(StringComparer.Ordinal)
         )
         {
@@ -249,7 +257,9 @@ internal sealed class ProjectSettings(
                 yield return path;
         }
         foreach (
-            var child in Directory.EnumerateDirectories(directory).Order(StringComparer.Ordinal)
+            var child in Directory
+                .EnumerateDirectories(resolvedDirectory)
+                .Order(StringComparer.Ordinal)
         )
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -264,8 +274,5 @@ internal sealed class ProjectSettings(
     }
 
     private static bool IsExcludedDirectory(string name) =>
-        new[] { ".git", "bin", "obj", "node_modules" }.Contains(
-            name,
-            StringComparer.OrdinalIgnoreCase
-        );
+        ExcludedDirectoryNames.Contains(name, StringComparer.OrdinalIgnoreCase);
 }
