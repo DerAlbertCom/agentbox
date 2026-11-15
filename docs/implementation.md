@@ -709,14 +709,25 @@ the assembled repository by their build id (the tags `«id»`, `«id»-kit-N` an
 kit sources: an sbx-kit-src image stays as long as its image id is in the kept set. What
 is left goes with `sbx template rm`, one image at a time, and sbx asks nothing (--force).
 
-With `--full`, the prune reaches for every sbx kit image of a known age, not only the
-stale sets: it removes everything, and what a sandbox uses, sbx refuses and keeps. The
-prune reports what sbx keeps and is happy about it. With `--sbx`, it stops the running
-sandboxes first (`sbx stop`, one per sandbox, the kit builder included).
+With `--full`, the prune reaches for every eligible sbx kit image of a known age and
+id, not only the stale sets, subject to the conservative checks below. What a sandbox
+uses, sbx refuses and keeps; full prune reports those refusals without failing. With
+`--sbx`, it stops the running sandboxes first (`sbx stop`, one per sandbox, the kit
+builder included).
 
-The command never touches secrets, or images of any other repository, and it never
-removes an image whose age or id sbx does not report: prune only throws away what it
-can prove is stale.
+Both modes recognize only the exact repository names `sandbox-kit-assembled` and
+`sbx-kit-src`, either bare or as the final `/`-delimited component of a qualified
+repository (for example `docker.io/library/sbx-kit-src`). Arbitrary suffix matches
+such as `other-sbx-kit-src` do not qualify and cannot influence newest-set selection.
+An image without a reported age or nonblank image id stays in both modes. If any
+assembled image has uncertain metadata, its whole build group (including kit and
+template aliases) stays, and all kit sources stay: the inventory cannot prove which
+sources that retained set may need. Other complete assembled groups can still be
+removed when eligible; normal mode also keeps every group tied for newest.
+
+The command never calls broad `sbx prune` or `sbx reset`, touches secrets or unrelated
+repositories, or removes host-Docker local builds or registry components. All removal
+requests remain individual `sbx template rm` calls, subject to runtime in-use refusals.
 
 ## The files
 
