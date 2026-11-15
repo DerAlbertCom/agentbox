@@ -470,6 +470,94 @@ public sealed class UserSecretsLifecycleTests
             .And.NotContain("Created sandbox");
     }
 
+    [Theory]
+    [InlineData("published")]
+    [InlineData("local")]
+    [InlineData("run")]
+    public async Task FailedTargetPreparationKeepsTheNewSandboxAndDoesNotLaunchOrWrite(string entry)
+    {
+        using var fixture = new Fixture();
+        fixture.Existing();
+        fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
+        fixture.Store("sample", "{}");
+        fixture
+            .Sbx.ValidateUserSecretsDestinationAsync(
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<string>>(),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(Task.FromException(new IOException("synthetic-private-diagnostic")));
+
+        (await fixture.Replace(entry)).Should().Be(1);
+
+        fixture.Records.Load(fixture.Name)!.BuildCreatedAt.Should().BeAfter(Fixture.OldBuild);
+        fixture
+            .Console.AllText.Should()
+            .Contain("record retained")
+            .And.Contain("abox user-secrets --location")
+            .And.NotContain("synthetic-private-diagnostic")
+            .And.NotContain("Created sandbox");
+        await fixture
+            .Sbx.DidNotReceive()
+            .WriteUserSecretsAsync(
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<string>(),
+                Arg.Any<CancellationToken>()
+            );
+        await fixture
+            .Sbx.DidNotReceive()
+            .ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task CancellationAfterCreationStillSavesTheNewRecordButStartsNoTransfer()
+    {
+        using var fixture = new Fixture();
+        using var cancellation = new CancellationTokenSource();
+        fixture.Existing();
+        fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
+        fixture.Store("sample", "{}");
+        fixture
+            .Sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                cancellation.Cancel();
+                return new SbxOutcome(0, "");
+            });
+
+        (await fixture.CreateShared(cancellation.Token)).Should().Be(130);
+
+        fixture.Records.Load(fixture.Name)!.BuildCreatedAt.Should().BeAfter(Fixture.OldBuild);
+        await fixture.NoCopy();
+        fixture
+            .Console.AllText.Should()
+            .Contain("record retained")
+            .And.NotContain("Created sandbox");
+    }
+
+    [Fact]
+    public async Task CancellationDuringCreationDoesNotStartASubsequentCopy()
+    {
+        using var fixture = new Fixture();
+        fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
+        fixture.Store("sample", "{}");
+        fixture
+            .Sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromException<SbxOutcome>(new OperationCanceledException("synthetic-private"))
+            );
+
+        (await fixture.Create()).Should().Be(130);
+
+        await fixture.NoCopy();
+        fixture.Records.Load(fixture.Name).Should().BeNull();
+        fixture
+            .Console.AllText.Should()
+            .NotContain("synthetic-private")
+            .And.NotContain("Created sandbox");
+    }
+
     private sealed class Fixture : IDisposable
     {
         public TempDirectory Root { get; } = new();
