@@ -13,9 +13,13 @@ public sealed partial class LocalWorkloadImagesTests
     [Fact]
     public async Task BuildProducesARealUniqueLocalImageAndAThinV3Kit()
     {
+        // Arrange: the fixture supplies isolated sources and a fake Docker runner.
+
+        // Act
         var image = await BuildAsync("one");
         var next = await BuildAsync("two");
 
+        // Assert
         image.Reference.Should().StartWith("docker.io/library/abox-workload:");
         image.Reference.Should().NotBe(next.Reference);
         image.ImageId.Should().Be(LocalWorkloadTest.ImageId);
@@ -45,11 +49,14 @@ public sealed partial class LocalWorkloadImagesTests
     [Fact]
     public async Task CheckingAvailabilityDoesNotBuildOrPull()
     {
+        // Arrange
         var image = await BuildAsync("one");
         _runner.ClearReceivedCalls();
 
+        // Act
         await LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
 
+        // Assert
         await _runner.Received(2).RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
         await _runner
             .DidNotReceive()
@@ -66,6 +73,7 @@ public sealed partial class LocalWorkloadImagesTests
     [InlineData(false)]
     public async Task MissingOrReplacedLocalContentRequiresRebuilding(bool missing)
     {
+        // Arrange
         var image = await BuildAsync("one");
         _runner
             .RunAsync(
@@ -78,15 +86,18 @@ public sealed partial class LocalWorkloadImagesTests
                     : new ProcessResult(0, "sha256:" + new string('b', 64), "")
             );
 
+        // Act
         var action = () =>
             LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*abox build*again*");
     }
 
     [Fact]
     public async Task ChangedRuntimeRecipesAreRejectedBeforeAnyDockerOperation()
     {
+        // Arrange
         var image = await BuildAsync("one");
         File.AppendAllText(
             Path.Combine(image.RuntimeKitDirectory, "workload.dockerfile"),
@@ -94,9 +105,11 @@ public sealed partial class LocalWorkloadImagesTests
         );
         _runner.ClearReceivedCalls();
 
+        // Act
         var action = () =>
             LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*runtime kit changed*abox build*"
         );
@@ -108,6 +121,7 @@ public sealed partial class LocalWorkloadImagesTests
     [Fact]
     public async Task ARemoteBuilderIsNotUsedForHostOnlyImages()
     {
+        // Arrange
         _runner
             .RunAsync(
                 Arg.Is<ProcessRequest>(request => request.Arguments.Contains("ls")),
@@ -121,8 +135,10 @@ public sealed partial class LocalWorkloadImagesTests
                 )
             );
 
+        // Act
         var action = () => BuildAsync("one");
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*docker-driver*docker-container*"
         );
@@ -137,6 +153,7 @@ public sealed partial class LocalWorkloadImagesTests
     [Fact]
     public async Task SourcesChangedWhileDockerBuildsAreNotRecorded()
     {
+        // Arrange
         _runner
             .RunAsync(
                 Arg.Is<ProcessRequest>(request => request.Arguments.Contains("--load")),
@@ -151,8 +168,10 @@ public sealed partial class LocalWorkloadImagesTests
                 return new ProcessResult(0, "", "");
             });
 
+        // Act
         var action = () => BuildAsync("one");
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*sources changed*abox build*"
         );

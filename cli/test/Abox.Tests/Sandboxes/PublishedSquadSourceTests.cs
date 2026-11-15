@@ -158,11 +158,14 @@ public sealed partial class PublishedSquadSourceTests
         bool gzip
     )
     {
+        // Arrange
         _index = index;
         _gzip = gzip;
 
+        // Act
         var result = await LoadAsync();
 
+        // Assert
         result
             .Reference.Should()
             .Be("rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac@" + PublishedSquadTest.Digest);
@@ -190,18 +193,37 @@ public sealed partial class PublishedSquadSourceTests
     [Fact]
     public async Task AcceptsTheOriginalPublishedMetadataFormatWithoutAnExplicitVersion()
     {
+        // Arrange
         _metadata.Remove("SchemaVersion");
-        (await LoadAsync()).Metadata.Squad.Should().Be("ac");
+
+        // Act
+        var result = await LoadAsync();
+
+        // Assert
+        result.Metadata.Squad.Should().Be("ac");
     }
 
     [Fact]
     public async Task RegistryIdentityIsCaseInsensitiveButTagsAreNot()
     {
+        // Arrange
         _metadata["Team"] = "MTI-CA";
         _metadata["Squad"] = "AC";
-        (await LoadAsync()).Metadata.Squad.Should().Be("ac");
+
+        // Act
+        var result = await LoadAsync();
+
+        // Assert
+        result.Metadata.Squad.Should().Be("ac");
+
+        // Arrange
         _metadata["Tag"] = "LATEST";
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -211,8 +233,14 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("CreatedAt", "not-a-date")]
     public async Task RejectsWrongIdentityAndMalformedTimestamps(string field, string value)
     {
+        // Arrange
         _metadata[field] = value;
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -221,8 +249,14 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("Team")]
     public async Task MissingRequiredFieldsCannotSilentlyDisableRuntimeConfiguration(string field)
     {
+        // Arrange
         _metadata.Remove(field);
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -233,8 +267,14 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("different")]
     public async Task RejectsUnsafeOrInconsistentHostStatePaths(string path)
     {
+        // Arrange
         _metadata["State"]![0]!["RelativePath"] = path;
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -245,8 +285,14 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("/home/agent//.published")]
     public async Task RejectsNonCanonicalSandboxPaths(string path)
     {
+        // Arrange
         _metadata["State"]![0]!["SandboxPath"] = path;
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -254,8 +300,14 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("Mcp")]
     public async Task RejectsDuplicateRuntimeEntries(string field)
     {
+        // Arrange
         _metadata[field]!.AsArray().Add(_metadata[field]![0]!.DeepClone());
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -264,8 +316,14 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("not-a-url")]
     public async Task RejectsInvalidMcpUrls(string url)
     {
+        // Arrange
         _metadata["Mcp"]![0]!["Url"] = url;
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -273,37 +331,66 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("Mcp")]
     public async Task RejectsNullEntries(string field)
     {
+        // Arrange
         _metadata[field] = JsonNode.Parse("[null]");
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Fact]
     public async Task RejectsUnsupportedMetadataSchema()
     {
+        // Arrange
         _metadata["SchemaVersion"] = 2;
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Fact]
     public async Task MissingBundledMetadataRequiresRepublishingInsteadOfLocalPreparation()
     {
+        // Arrange
         _metadataPath = null;
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Fact]
     public async Task SymlinkMetadataIsNotFollowed()
     {
+        // Arrange
         _metadataPath = "symlink";
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Fact]
     public async Task CorruptGzipIsReportedAsInvalidPublishedMetadata()
     {
+        // Arrange
         _layerBytes = [0x1f, 0x8b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
 
-        await RejectAsync();
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory(
@@ -314,6 +401,7 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData(true)]
     public async Task CleanupFailureWarnsWithoutMaskingTheResultOrMetadataError(bool corrupt)
     {
+        // Arrange
         _lockArchive = true;
         if (corrupt)
         {
@@ -324,11 +412,19 @@ public sealed partial class PublishedSquadSourceTests
         {
             if (corrupt)
             {
-                await RejectAsync();
+                // Act
+                var action = LoadAsync;
+
+                // Assert
+                await RejectAsync(action);
             }
             else
             {
-                (await LoadAsync()).Metadata.Squad.Should().Be("ac");
+                // Act
+                var result = await LoadAsync();
+
+                // Assert
+                result.Metadata.Squad.Should().Be("ac");
             }
             _console
                 .Errors.Should()
@@ -348,10 +444,16 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("mount")]
     public async Task InvalidPublishedDescriptorsFailClosed(string error)
     {
+        // Arrange
         _missingConfig = error == "config";
         _wrongDescriptor = error == "descriptor";
         _missingMount = error == "mount";
-        await RejectAsync();
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
     }
 
     [Theory]
@@ -360,8 +462,13 @@ public sealed partial class PublishedSquadSourceTests
     [InlineData("image")]
     public async Task RegistryErrorsAreActionableAndDoNotEchoToolSecrets(string operation)
     {
+        // Arrange
         _fail = operation;
+
+        // Act
         var action = LoadAsync;
+
+        // Assert
         var error = (await action.Should().ThrowAsync<AboxException>()).Which;
         error
             .Message.Should()
@@ -373,8 +480,13 @@ public sealed partial class PublishedSquadSourceTests
     [Fact]
     public async Task MissingDockerDoesNotRecommendALocalBuild()
     {
+        // Arrange
         _programs.Exists("docker").Returns(false);
+
+        // Act
         var action = LoadAsync;
+
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*Install Docker*no local build*"
         );
@@ -390,9 +502,8 @@ public sealed partial class PublishedSquadSourceTests
             CancellationToken.None
         );
 
-    private async Task RejectAsync()
+    private static async Task RejectAsync(Func<Task<PublishedSquad>> action)
     {
-        var action = LoadAsync;
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*republish*No local metadata fallback*not replaced*"
         );

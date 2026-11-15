@@ -18,6 +18,7 @@ public sealed class LegacySandboxInventoryTests
         bool explicitLocation
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { DefaultLocation = LegacySandboxFixture.Location },
             existingSandbox: false
@@ -33,10 +34,11 @@ public sealed class LegacySandboxInventoryTests
         cli.Sbx.FindSandboxAsync(otherName, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(otherName, "running", null));
 
-        (await cli.Invoke(explicitLocation ? ["run", "--location", other] : ["run"]))
-            .Should()
-            .Be(0);
+        // Act
+        var exitCode = await cli.Invoke(explicitLocation ? ["run", "--location", other] : ["run"]);
 
+        // Assert
+        exitCode.Should().Be(0);
         await cli
             .Sbx.Received(1)
             .ExecAsync(
@@ -50,6 +52,7 @@ public sealed class LegacySandboxInventoryTests
     [Fact]
     public async Task PruneStillUsesActualInventoryNamesWithoutLocationResolution()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         string[] names = [cli.Name, LegacySandboxFixture.Name, "unrelated-running-sandbox"];
         cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
@@ -59,8 +62,11 @@ public sealed class LegacySandboxInventoryTests
         cli.Sbx.StopSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));
 
-        (await cli.Invoke("prune", "--sbx")).Should().Be(0);
+        // Act
+        var exitCode = await cli.Invoke("prune", "--sbx");
 
+        // Assert
+        exitCode.Should().Be(0);
         foreach (var name in names)
             await cli.Sbx.Received(1).StopSandboxAsync(name, Arg.Any<CancellationToken>());
         await cli
@@ -81,6 +87,7 @@ public sealed class LegacySandboxInventoryTests
         bool legacy
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var preferred = SandboxName.For(LegacySandboxFixture.Location);
         var names = new List<string>
@@ -103,10 +110,11 @@ public sealed class LegacySandboxInventoryTests
         );
         var requests = UseRealSbx(cli, _ => new ProcessResult(0, inventory, ""));
 
-        (await cli.Invoke("run", "--location", LegacySandboxFixture.Location))
-            .Should()
-            .Be(current || legacy ? 0 : 1);
+        // Act
+        var exitCode = await cli.Invoke("run", "--location", LegacySandboxFixture.Location);
 
+        // Assert
+        exitCode.Should().Be(current || legacy ? 0 : 1);
         var executions = requests
             .Where(request => request.FileName == "sbx" && request.Arguments[0] == "exec")
             .ToList();
@@ -143,6 +151,7 @@ public sealed class LegacySandboxInventoryTests
         string error
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var count = 0;
         var requests = UseRealSbx(
@@ -153,8 +162,11 @@ public sealed class LegacySandboxInventoryTests
                     : new ProcessResult(exit, output, error)
         );
 
-        (await cli.Invoke("run", "--location", LegacySandboxFixture.Location)).Should().Be(1);
+        // Act
+        var exitCode = await cli.Invoke("run", "--location", LegacySandboxFixture.Location);
 
+        // Assert
+        exitCode.Should().Be(1);
         count.Should().Be(legacyLookup ? 2 : 1);
         cli.Console.AllText.Should().Contain("sbx ls").And.NotContain("Create it with");
         requests
@@ -170,12 +182,16 @@ public sealed class LegacySandboxInventoryTests
     [InlineData("pipe")]
     public async Task ExplicitNamesRemainExactAndNeverDiscoverAnotherSandbox(string command)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Provider.GetRequiredService<TrailingArguments>().Values = ["echo", "hello"];
         cli.Sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(23);
 
-        (await cli.Invoke(command, LegacySandboxFixture.Name)).Should().Be(23);
+        // Act
+        var exitCode = await cli.Invoke(command, LegacySandboxFixture.Name);
 
+        // Assert
+        exitCode.Should().Be(23);
         await cli
             .Sbx.Received(1)
             .ExecAsync(
