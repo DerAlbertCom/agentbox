@@ -10,14 +10,14 @@ namespace Abox.UserSecrets;
 // Static, workspace-local configuration only. Never invoke MSBuild or application startup.
 internal sealed class ProjectSettings(
     string project,
-    UserSecretSnapshot settings,
-    IReadOnlyDictionary<string, string?> effectiveSettings,
+    UserSecretSnapshot selectedSettings,
+    IReadOnlyDictionary<string, string?> allSettings,
     bool hasAppSettingsSource
 )
 {
     internal string Project { get; } = project;
-    internal UserSecretSnapshot Settings { get; } = settings;
-    internal IReadOnlyDictionary<string, string?> EffectiveSettings { get; } = effectiveSettings;
+    internal UserSecretSnapshot SelectedSettings { get; } = selectedSettings;
+    internal IReadOnlyDictionary<string, string?> AllSettings { get; } = allSettings;
     internal bool HasAppSettingsSource { get; } = hasAppSettingsSource;
 
     internal static async Task<(
@@ -170,7 +170,7 @@ internal sealed class ProjectSettings(
                     new UTF8Encoding(false, true),
                     cancellationToken
                 );
-                snapshot = UserSecretSnapshot.Parse(selection, json, applyFilters: false);
+                snapshot = UserSecretSnapshot.ParseAll(selection.Id, json);
             }
             catch (Exception exception)
                 when (exception
@@ -191,11 +191,14 @@ internal sealed class ProjectSettings(
                 merged.Add(key, value);
             }
         }
-        var mergedJson = JsonSerializer.Serialize(merged);
+        var allSettings = UserSecretSnapshot.ParseAll(
+            selection.Id,
+            JsonSerializer.Serialize(merged)
+        );
         return new ProjectSettings(
             Path.GetRelativePath(root, project),
-            UserSecretSnapshot.Parse(selection, mergedJson),
-            UserSecretSnapshot.Parse(selection, mergedJson, applyFilters: false).Values,
+            allSettings.SelectKeys(selection),
+            allSettings.Values,
             hasSource
         );
     }

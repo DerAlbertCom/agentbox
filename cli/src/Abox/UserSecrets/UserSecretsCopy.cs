@@ -46,7 +46,10 @@ public sealed partial class UserSecretsCopy(
             cancellationToken.ThrowIfCancellationRequested();
             var consumers = discovery
                 .Projects.Where(project =>
-                    project.Settings.Id.Equals(selection.Id, StringComparison.OrdinalIgnoreCase)
+                    project.SelectedSettings.Id.Equals(
+                        selection.Id,
+                        StringComparison.OrdinalIgnoreCase
+                    )
                 )
                 .ToArray();
             string json;

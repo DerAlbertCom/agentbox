@@ -67,7 +67,7 @@ accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
    This is exactly the on-demand copy path, including key selection and supported
    policy-based rewriting and appsettings generation; there is no lifecycle-only
    transport. Generation needs runtime policy, so generated-original deny checks,
-   unsafe adaptation and temporary shared-store checks occur here. All stores'
+   unsafe adaptation and all-consumer shared-store compatibility checks occur here. All stores'
    target/destination validation finishes before the first destination write.
 6. Only a successful required copy reports full creation success. `run` launches
    only after that succeeds.
@@ -88,7 +88,7 @@ unchanged.
 Every copy rebuilds each selected destination from current selected host secrets
 and generated overrides, removing stale generated values and destination-only
 edits. Ordinary `run` performs no discovery or refresh. See the bounded discovery,
-precedence, filters and temporary limitations in [appsettings overrides](user-secrets-appsettings.md).
+precedence, filters and shared-store conflict rules in [appsettings overrides](user-secrets-appsettings.md).
 
 ## Failure, cancellation and recovery
 

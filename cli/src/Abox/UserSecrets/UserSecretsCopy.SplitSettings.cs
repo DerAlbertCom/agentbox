@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 
@@ -32,20 +31,9 @@ public sealed partial class UserSecretsCopy
         var consumers = new List<ProjectOverrides>();
         foreach (var project in projects)
         {
-            var effective = EffectiveSettings(project, store);
-            var target = RewriteSetting(
-                host,
-                ports,
-                store.Id,
-                DatabaseHostKey,
-                effective,
-                project.Project
+            consumers.Add(
+                BuildProjectOverrides(project, store, ports, [new(DatabaseHostKey, host)])
             );
-            effective[DatabaseHostKey] = target;
-            var generated = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (target != host)
-                generated.Add(DatabaseHostKey, target);
-            consumers.Add(new ProjectOverrides(project.Project, effective, generated));
         }
         // A selected host alone still derives its destination from consumer-specific port metadata.
         var adapted = MergeGeneratedOverrides(
@@ -66,7 +54,7 @@ public sealed partial class UserSecretsCopy
     )
     {
         var effective = new Dictionary<string, string?>(
-            project.EffectiveSettings,
+            project.AllSettings,
             StringComparer.OrdinalIgnoreCase
         );
         foreach (var (key, value) in store.Values)
@@ -89,13 +77,12 @@ public sealed partial class UserSecretsCopy
             return RewriteEndpoint(value, ports, id, key, project);
         if (!effective.TryGetValue(DatabasePortKey, out var portText) || portText is null)
             return value;
-        bool IsMappedPort(string text) =>
-            int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
-            && port is >= 1 and <= 65535
-            && ports.Contains(port);
-        if (IsSplitLoopback(value) && IsMappedPort(portText))
+        if (IsSplitLoopback(value) && IsMappedEndpointPort(portText, ports))
             return "host.docker.internal";
-        if (portText.Split(',').Any(part => IsMappedPort(part.Trim())) && HasSplitLoopback(value))
+        if (
+            portText.Split(',').Any(part => IsMappedEndpointPort(part.Trim(), ports))
+            && HasSplitLoopback(value)
+        )
             throw new AboxException(
                 $"{DescribeSetting(id, key, project)}: recognized mapped-local split setting has an unsupported or ambiguous format. Use one literal loopback Host and one decimal Port in Database_Config; no stores were copied."
             );

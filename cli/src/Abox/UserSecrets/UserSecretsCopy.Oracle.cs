@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -15,10 +14,12 @@ public sealed partial class UserSecretsCopy
     {
         target = value;
         var replacements = new List<(int Start, int Length)>();
-        if (OracleEndpoint(value, 0, ports, replacements, out var valid))
+        var endpoint = CollectOracleHosts(value, ports);
+        if (endpoint.Recognized)
         {
-            if (replacements.Count > 0 && !valid)
+            if (endpoint.Hosts.Count > 0 && !endpoint.Valid)
                 throw unsupported();
+            replacements.AddRange(endpoint.Hosts);
         }
         else
         {
@@ -30,8 +31,10 @@ public sealed partial class UserSecretsCopy
             var allValid = true;
             foreach (var source in sources)
             {
-                recognized |= OracleSourceEndpoint(value, source, ports, replacements, out valid);
-                allValid &= valid;
+                var sourceHosts = CollectOracleSourceHosts(value, source, ports);
+                recognized |= sourceHosts.Recognized;
+                allValid &= sourceHosts.Valid;
+                replacements.AddRange(sourceHosts.Hosts);
             }
             if (!uniqueAndComplete)
             {
@@ -49,13 +52,13 @@ public sealed partial class UserSecretsCopy
                 if (incomplete.Success)
                 {
                     position += incomplete.Length;
-                    recognized |= OracleSourceEndpoint(
+                    var sourceHosts = CollectOracleSourceHosts(
                         value,
                         new ConnectionField("Data Source", position, value.Length - position),
-                        ports,
-                        replacements,
-                        out _
+                        ports
                     );
+                    recognized |= sourceHosts.Recognized;
+                    replacements.AddRange(sourceHosts.Hosts);
                 }
             }
             if (
@@ -79,22 +82,29 @@ public sealed partial class UserSecretsCopy
         return true;
     }
 
-    private static bool OracleSourceEndpoint(
+    private sealed class OracleHostResult(
+        bool recognized,
+        bool valid,
+        IReadOnlyList<(int Start, int Length)> hosts
+    )
+    {
+        public bool Recognized { get; } = recognized;
+        public bool Valid { get; } = valid;
+        public IReadOnlyList<(int Start, int Length)> Hosts { get; } = hosts;
+    }
+
+    private static OracleHostResult CollectOracleSourceHosts(
         string value,
         ConnectionField source,
-        HashSet<int> ports,
-        List<(int Start, int Length)> replacements,
-        out bool valid
+        HashSet<int> ports
     )
     {
         var quote = source.Start > 0 ? value[source.Start - 1] : '\0';
         if (quote is not ('\'' or '"'))
-            return OracleEndpoint(
+            return CollectOracleHosts(
                 value.Substring(source.Start, source.Length),
-                source.Start,
                 ports,
-                replacements,
-                out valid,
+                source.Start,
                 inConnectionString: true
             );
 
@@ -114,48 +124,37 @@ public sealed partial class UserSecretsCopy
                 index++;
         }
         positions.Add(source.Start + source.Length);
-        var hosts = new List<(int Start, int Length)>();
-        var recognized = OracleEndpoint(
-            decoded.ToString(),
-            0,
-            ports,
-            hosts,
-            out valid,
-            inConnectionString: true
+        var result = CollectOracleHosts(decoded.ToString(), ports, inConnectionString: true);
+        return new OracleHostResult(
+            result.Recognized,
+            result.Valid,
+            result
+                .Hosts.Select(host =>
+                    (
+                        positions[host.Start],
+                        positions[host.Start + host.Length] - positions[host.Start]
+                    )
+                )
+                .ToArray()
         );
-        replacements.AddRange(
-            hosts.Select(host =>
-                (positions[host.Start], positions[host.Start + host.Length] - positions[host.Start])
-            )
-        );
-        return recognized;
     }
 
-    private static bool OracleEndpoint(
+    private static OracleHostResult CollectOracleHosts(
         string value,
-        int offset,
         HashSet<int> ports,
-        List<(int Start, int Length)> replacements,
-        out bool valid,
+        int offset = 0,
         bool inConnectionString = false
     )
     {
         if (!OracleDescriptorPrefix().IsMatch(value))
-            return OracleEasyConnect(
-                value,
-                offset,
-                ports,
-                replacements,
-                out valid,
-                inConnectionString
-            );
+            return CollectOracleEasyConnectHosts(value, ports, offset, inConnectionString);
+        var replacements = new List<(int Start, int Length)>();
         var parser = new OracleDescriptorParser(value);
         var root = parser.Parse();
         var fullyValid = parser.Complete;
         if (root is not null)
             Visit(root);
-        valid = fullyValid;
-        return true;
+        return new OracleHostResult(true, fullyValid, replacements);
 
         void Visit(OracleDescriptorNode node)
         {
@@ -168,12 +167,7 @@ public sealed partial class UserSecretsCopy
                 var mapped =
                     (addressPorts.Length == 0 && ports.Contains(1521))
                     || addressPorts.Any(child =>
-                        int.TryParse(
-                            value.AsSpan(child.Start, child.Length),
-                            NumberStyles.None,
-                            CultureInfo.InvariantCulture,
-                            out var port
-                        ) && ports.Contains(port)
+                        IsMappedEndpointPort(value.AsSpan(child.Start, child.Length), ports)
                     );
                 var local = hosts
                     .Where(host => IsLoopback(value.Substring(host.Start, host.Length)))
@@ -181,17 +175,17 @@ public sealed partial class UserSecretsCopy
                 if (!mapped || local.Length == 0)
                     return;
                 var protocols = node.Children.Where(child => child.Key == "PROTOCOL").ToArray();
+                var protocol =
+                    protocols.Length == 1
+                        ? value.Substring(protocols[0].Start, protocols[0].Length)
+                        : "";
                 fullyValid &=
                     hosts.Length == 1
                     && addressPorts.Length == 1
                     && protocols.Length == 1
                     && (
-                        value
-                            .Substring(protocols[0].Start, protocols[0].Length)
-                            .Equals("tcp", StringComparison.OrdinalIgnoreCase)
-                        || value
-                            .Substring(protocols[0].Start, protocols[0].Length)
-                            .Equals("tcps", StringComparison.OrdinalIgnoreCase)
+                        protocol.Equals("tcp", StringComparison.OrdinalIgnoreCase)
+                        || protocol.Equals("tcps", StringComparison.OrdinalIgnoreCase)
                     )
                     && !node.Children.Any(child =>
                         child.Key is "HTTPS_PROXY" or "HTTPS_PROXY_PORT"
@@ -321,23 +315,20 @@ public sealed partial class UserSecretsCopy
         }
     }
 
-    private static bool OracleEasyConnect(
+    private static OracleHostResult CollectOracleEasyConnectHosts(
         string value,
-        int offset,
         HashSet<int> ports,
-        List<(int Start, int Length)> replacements,
-        out bool valid,
+        int offset,
         bool inConnectionString
     )
     {
-        valid = true;
         var leading = value.Length - value.TrimStart().Length;
         var text = value.Trim();
         var prefix = OracleEasyPrefix().Match(text);
         if (!prefix.Success && text.StartsWith("tcp:", StringComparison.OrdinalIgnoreCase))
-            return false; // SQL Server's tcp:host,port is handled by the existing dispatcher.
+            return new(false, true, []); // SQL Server's tcp:host,port belongs to its dispatcher.
         if (!prefix.Success && text.Contains("://", StringComparison.Ordinal))
-            return false;
+            return new(false, true, []);
         var start = prefix.Length;
         var end = text.IndexOfAny(['/', '?'], start);
         if (end < 0)
@@ -346,11 +337,11 @@ public sealed partial class UserSecretsCopy
         // A bare authority followed by whitespace prose is not an endpoint. Explicit
         // Data Source/prefix syntax still opts into malformed-endpoint validation.
         if (!inConnectionString && !prefix.Success && authority.Any(char.IsWhiteSpace))
-            return false;
+            return new(false, true, []);
         if (!prefix.Success && end == text.Length && !authority.Contains(':'))
-            return false; // A bare name can be a TNS alias, not an Easy Connect endpoint.
+            return new(false, true, []); // A bare name can be a TNS alias.
         if (authority.Contains('=') || authority.Contains('('))
-            return false;
+            return new(false, true, []);
         var suffix = text[end..];
         // tcp(s) URLs predate Oracle support. URI-only userinfo/paths/fragments still
         // belong to that dispatcher, rather than becoming malformed Easy Connect.
@@ -363,8 +354,9 @@ public sealed partial class UserSecretsCopy
             && Uri.TryCreate(text, UriKind.Absolute, out var uri)
             && uri.IsWellFormedOriginalString()
         )
-            return false;
-        valid =
+            return new(false, true, []);
+        var replacements = new List<(int Start, int Length)>();
+        var valid =
             !text.Any(char.IsControl)
             && OracleEasySuffix().IsMatch(suffix)
             && OracleEasyOptions(suffix);
@@ -372,7 +364,7 @@ public sealed partial class UserSecretsCopy
         var position = start;
         foreach (var list in authority.Split(';'))
         {
-            var pending = new List<(int Start, int Length, bool Local)>();
+            var pending = new List<(int Start, int Length)>();
             foreach (var address in list.Split(','))
             {
                 var unbracketed = OracleUnbracketedIpv6().Match(address);
@@ -386,14 +378,7 @@ public sealed partial class UserSecretsCopy
                     var ambiguousPort = unbracketed.Success
                         ? unbracketed.Groups["port"].Value
                         : "1521";
-                    if (
-                        int.TryParse(
-                            ambiguousPort,
-                            NumberStyles.None,
-                            CultureInfo.InvariantCulture,
-                            out var mappedNumber
-                        ) && ports.Contains(mappedNumber)
-                    )
+                    if (IsMappedEndpointPort(ambiguousPort, ports))
                         replacements.Add((offset + leading + position, address.Length));
                     position += address.Length + 1;
                     continue;
@@ -408,27 +393,15 @@ public sealed partial class UserSecretsCopy
                 recognized = true;
                 valid &= match.Length == address.Length;
                 var host = match.Groups["host"];
-                pending.Add(
-                    (offset + leading + position + host.Index, host.Length, IsLoopback(host.Value))
-                );
+                if (IsLoopback(host.Value))
+                    pending.Add((offset + leading + position + host.Index, host.Length));
                 var port = match.Groups["port"];
                 if (port.Success)
                 {
-                    if (
-                        int.TryParse(
-                            port.Value,
-                            NumberStyles.None,
-                            CultureInfo.InvariantCulture,
-                            out var number
-                        ) && number is > 0 and <= 65535
-                    )
+                    if (TryParseEndpointPort(port.Value, out var number))
                     {
                         if (ports.Contains(number))
-                            replacements.AddRange(
-                                pending
-                                    .Where(host => host.Local)
-                                    .Select(host => (host.Start, host.Length))
-                            );
+                            replacements.AddRange(pending);
                     }
                     else
                         valid = false;
@@ -437,11 +410,9 @@ public sealed partial class UserSecretsCopy
                 position += address.Length + 1;
             }
             if (ports.Contains(1521))
-                replacements.AddRange(
-                    pending.Where(host => host.Local).Select(host => (host.Start, host.Length))
-                );
+                replacements.AddRange(pending);
         }
-        return recognized;
+        return new OracleHostResult(recognized, valid, replacements);
     }
 
     private static bool OracleEasyOptions(string suffix)
