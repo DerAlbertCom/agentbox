@@ -47,7 +47,7 @@ public interface ISbxClient
         CancellationToken cancellationToken
     );
 
-    /// <summary>Exact kit-provisioned TCP host ports currently authorized in this sandbox.</summary>
+    /// <summary>Explicit sandbox-declared TCP host ports currently authorized for this sandbox.</summary>
     Task<IReadOnlyList<int>> GetUserSecretsHostPortsAsync(
         string sandbox,
         CancellationToken cancellationToken

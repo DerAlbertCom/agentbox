@@ -26,16 +26,7 @@ public sealed class UserSecretsRewriteTests
         fixture
             .Requests[0]
             .Arguments.Should()
-            .Equal(
-                "policy",
-                "ls",
-                fixture.Sandbox,
-                "--source",
-                "kit",
-                "--type",
-                "network",
-                "--json"
-            );
+            .Equal("policy", "ls", fixture.Sandbox, "--type", "network", "--json");
     }
 
     [Theory]

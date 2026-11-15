@@ -11,22 +11,55 @@ published artifact; `abox secrets` is unchanged.
 
 ## Runtime policy is the inventory
 
-No local kit sources or build records are needed, including for a published squad:
+The selected sandbox's current runtime policy is the **sole source of truth**.
+No local kit sources, build records or artifact lookup are used, including for a
+published squad:
 
 ```sh
-sbx policy ls <sandbox> --source kit --type network --json
+sbx policy ls <sandbox> --type network --json
 sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>
 ```
 
-Only active, noneditable, sandbox-scoped/provisioned kit network allow rules with
-`net:connect:tcp` and exact `localhost:<integer 1..65535>` resources supply
-candidates. Their name, sandbox identity, scope/application, origin, layer and
-provenance must match the supported runtime schema. Ports are deduplicated and
-checked in numeric order. A valid effective check must describe the same sandbox,
-TCP action and target; a deny excludes that port even when the kit allows it.
+Two supported rule shapes in that same runtime inventory supply candidates:
+
+- Active, noneditable, sandbox-scoped/provisioned kit network allow rules with
+  `net:connect:tcp` and exact `localhost:<integer 1..65535>` resources. Their name,
+  sandbox identity, scope/application, origin, layer and provenance must match the
+  supported runtime schema. Other resources in a kit rule supply no candidates.
+- Active, editable local rules explicitly added to **that sandbox**, with
+  `provenance: {created_via: added}`, matching rule ID/name and policy ID in the
+  observed sbx v0.51.0 UUID format. Every resource must be an exact
+  `localhost:<integer 1..65535>` and the sole action must be `net:connect:tcp`.
+  Scope, application and sandbox ID must all match; origin must be `scoped` and
+  layer `local`. Only the observed persistent-rule fields are supported: unknown
+  fields/provenance, including lifetime or conditional constraints, exclude the
+  manual rule rather than guessing their meaning. Inactive/expired rules do not
+  declare candidates.
+
+Provisioned-rule provenance identifies metadata already carried by the sandbox;
+it is not a lookup of a kit, source file, image or registry. Adding the missing
+declarations to an existing sandbox does not require the original kit to exist.
+
+Ports from both sources are deduplicated and checked in numeric order. A valid
+effective check must describe the same sandbox, TCP action and target; a deny
+excludes that port even when an explicit declaration allows it.
 Missing, malformed or unavailable required metadata fails before any store write.
-An empty inventory is valid: ambient/manual/global authorization never supplies
-rewrite intent. These commands do not change policy.
+An empty inventory is valid. Global, wildcard, all-port, remote, other-sandbox and
+unrecognized rules never supply rewrite intent; effective `allowed: true` alone
+is insufficient. These discovery commands do not change policy.
+
+To intentionally map a missing host service without kit sources or sandbox
+recreation, the user can add a narrowly scoped declaration:
+
+```sh
+sbx policy allow network --sandbox <sandbox> --protocol tcp localhost:1521
+```
+
+This command **does** add a network grant for that sandbox/port. abox never runs it
+automatically. Rerun the explicit copy operation when ready to refresh overrides;
+an ordinary sandbox run still does not copy secrets. No kit install, build or
+restart is required. This later user clarification extends the original kit-only
+rewrite-intent contract; it does not treat arbitrary network permission as a map.
 
 For supported URL/PostgreSQL/Oracle endpoint fields, `localhost` (case-insensitive),
 dotted IPv4 loopback and IPv6 loopback change to `host.docker.internal`, retaining
@@ -152,6 +185,9 @@ Published/nonempty runtime rewriting has **not** been demonstrated and is an
 explicitly accepted limitation, not a claim of passing coverage. Do not publish a
 new artifact or change global policy merely to fill that gap. See the
 [verification evidence and sanitized fixtures](verification/user-secrets/README.md).
+The later [sandbox-scoped policy verification](verification/user-secrets-scoped-policy.md)
+also exercises production discovery of explicit manual declarations on an existing
+sandbox, without copying secrets or claiming live service readiness.
 
 Automated tests exercise the production shared-copy and sbx/process seams with
 disposable synthetic host files. For the integrated #12 story's Debug/Release

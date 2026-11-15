@@ -17,8 +17,9 @@ and this project-local `appsettings.development.json`:
 }
 ```
 
-If the sandbox's kit policy declares and currently authorizes host port 4317 but
-not 5000, generation adds only:
+If the sandbox's runtime policy explicitly declares and currently authorizes host
+port 4317 but not 5000, generation adds only (using either supported kit declarations
+or [explicit sandbox-scoped local rules](user-secrets-rewriting.md#runtime-policy-is-the-inventory)):
 
 ```json
 { "Telemetry:Endpoint": "http://host.docker.internal:4317" }

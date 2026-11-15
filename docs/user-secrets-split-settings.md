@@ -19,7 +19,9 @@ For example, project-local appsettings containing:
 ```
 
 produces only this sandbox User Secrets override when host port 8004 is declared
-by kit policy and currently authorized:
+by supported runtime policy (kit or an
+[explicit sandbox-scoped local rule](user-secrets-rewriting.md#runtime-policy-is-the-inventory))
+and currently authorized:
 
 ```json
 { "Database_Config:Host": "host.docker.internal" }

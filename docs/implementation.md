@@ -543,12 +543,23 @@ always prepares with `force: false`; replacement consent/`--yes` is not force.
 The implemented rewrite flow follows the approved clarification on #2/#8,
 superseding experimental relay metadata, host/container port translation and
 first-name selection. See [supported forms, preservation and verification](user-secrets-rewriting.md).
+The later user clarification permits explicit sandbox-scoped local policy
+declarations as an additional source of rewrite intent, without kit files or
+recreation; the original kit-only restriction is superseded, not its safety checks.
+The sandbox is the sole mapping source: no kit files, local build records, image
+contents or registry lookups participate in runtime port discovery. Provisioning
+provenance below describes existing runtime metadata, not a kit lookup.
 
-- Discover exact kit-declared TCP resources through
-  `sbx policy ls <sandbox> --source kit --type network --json`. Require active,
+- Discover exact declared TCP resources through
+  `sbx policy ls <sandbox> --type network --json`. Keep active,
   sandbox-scoped/provisioned kit network allow rules with `net:connect:tcp` and
-  literal `localhost:<integer 1..65535>` resources; deduplicate/sort ports numerically.
-  Wildcard/global/manual rules are not inferred kit intent. An empty inventory is valid.
+  literal `localhost:<integer 1..65535>` resources. Also recognize the observed
+  sbx v0.51.0 persistent local-rule schema: active/editable, exact matching sandbox
+  scope/application/identity, scoped/local origin/layer, `created_via: added`, UUID
+  rule ID/name and policy ID, TCP-only action and only exact localhost-port resources.
+  Unknown manual fields/provenance (including expiry/constraints) are excluded.
+  Deduplicate/sort ports numerically. Wildcard/global/broad authorization is never
+  inferred rewrite intent. An empty inventory is valid.
 - Check current effective authorization with
   `sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>`;
   a higher-priority deny excludes the port. Missing/malformed required metadata
@@ -642,6 +653,10 @@ ambient global reachability is not kit rewrite intent. Windows sbx v0.51.0 live
 transport evidence and representative Unix/automated path tests do not establish
 an independent Unix-host sbx run. No host store mutation, production-secret reads
 or new publication is needed or claimed by these synthetic checks.
+The later [scoped-policy QA record](verification/user-secrets-scoped-policy.md)
+documents explicitly authorized local declarations on the existing `D:\dev\rwe`
+sandbox and read-only production port discovery; no real secret copy, connectivity
+or authentication check was performed for that change.
 
 ### `abox prune [--full] [--sbx]`
 

@@ -374,8 +374,10 @@ stdin, never process arguments, images, build inputs or published artifacts. Thi
 does not change the separate proxy/host-secret command `abox secrets`.
 
 **Endpoint rewriting (#8, implemented):** abox discovers
-exact kit-declared TCP `localhost:<port>` resources using supported sandbox policy
-metadata and checks each port's **effective** authorization. Only supported URI
+exact TCP `localhost:<port>` declarations from the sandbox's current runtime
+network policy, whether provisioned at creation or explicitly added later. It
+checks each port's **effective** authorization. No local kit files, build records
+or artifact lookup are involved. Only supported URI
 authorities and database connection-string endpoint fields change loopback to
 `host.docker.internal`, keeping the **same published host port**:
 
@@ -393,8 +395,10 @@ unrelated credentials, fields, paths and queries remain unchanged. Recognized
 mapped-local endpoints with unsafe/ambiguous syntax fail before any destination
 write, rather than silently retaining known broken configuration. Arbitrary text
 and unmapped localhost references are not errors. A service published as `8004:5432`
-does **not** imply a `5432 -> 8004` rewrite. Wildcard/global/manual rules are not
-kit intent; a valid empty inventory means no rewrites. Unavailable/malformed
+does **not** imply a `5432 -> 8004` rewrite. Wildcard/global/all-port authorization
+is not rewrite intent; a valid empty inventory means no rewrites. Explicit manual
+declarations must match the supported persistent sandbox-scoped, TCP-only schema;
+unknown lifetime/constraint fields are not inferred. Unavailable/malformed
 required metadata fails before writes, not by guessing. There is no host kit-source,
 `/etc/hosts`, experimental `host-port@1` or `sbx ports` lookup and no policy change.
 Authorization is not proof of service availability or protection against later
@@ -402,6 +406,10 @@ policy changes. The accepted live evidence is **local/nonempty + published/empty
 kit policy**; published/nonempty rewriting remains unverified. See the
 [supported forms and rewrite verification](docs/user-secrets-rewriting.md) and
 [verification record](docs/verification/user-secrets/README.md).
+An explicit `sbx policy allow network --sandbox <sandbox> --protocol tcp localhost:1521`
+can declare a missing host port without kit files or recreation. This is a user
+policy change, never an automatic abox grant; see the
+[scoped-policy contract and QA evidence](docs/verification/user-secrets-scoped-policy.md).
 
 Transfer serializes selected JSON data, not raw source text: destination JSON
 contains no skipped comments or trailing commas. JSON formatting/escape spelling
