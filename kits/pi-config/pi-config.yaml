@@ -12,12 +12,22 @@ capabilities:
       directory: /home/agent/.pi/agent
       filename: AGENTS.md
       content: |
-        You work in a sandbox that has its own tools. The workspace of the folder you
-        were started for is at /home/agent/workspace.
+        You work in a sandbox that has its own tools. The runtime's `WORKSPACE_DIR`
+        environment variable identifies the folder you were started for. Before
+        working on the project, enter that directory:
+
+        ```sh
+        cd -- "$WORKSPACE_DIR"
+        ```
+
+        Use this runtime path rather than the image's default working directory.
 
         Conventions for work in this sandbox:
 
-        - The credentials are not in the sandbox. Ask the host for them through the
-          tools of the sandbox instead of looking for tokens.
+        - Service credentials managed by the sandbox proxy stay on the host. Use the
+          sandbox tools' proxy-backed access rather than searching for tokens.
+        - Explicitly selected .NET User Secrets may have been copied into runtime
+          files for applications. Treat these files as sensitive and keep their
+          values out of output; they are separate from host proxy credentials.
         - `mise upgrade --bump` updates the tools of the image. The exact versions of
           the workload do not move with a plain `mise upgrade`.

@@ -806,7 +806,8 @@ install step per tool. The versions of one tool are installed in one step, so mi
 keeps them all, and every list is reversed, because mise activates the first entry of
 its list: the last entry of the workload is the default of the image.
 The GitHub token is passed as a BuildKit secret, so it never lands in a layer. The
-generated image has `/home/agent/workspace` as its working directory.
+generated image has `/home/agent/workspace` as its default working directory, not
+a guaranteed runtime workspace mount path.
 Generated Dockerfiles and workload/state descriptors, and copied workload scripts,
 use LF line endings on every host OS. Scripts are copied by file name; two source
 paths with the same file name (case-insensitive for cross-platform builds) are
@@ -908,7 +909,10 @@ For architecture and coding conventions, see the
   for a squad and the team has more than one, it asks which one.
 - **The workspace is where the runtime puts it.** The runtime mounts the folder of the
   host at the same path in the sandbox and says so with `WORKSPACE_DIR`, so the
-  launcher asks for it instead of assuming `/home/agent/workspace`.
+  launcher asks for it instead of assuming `/home/agent/workspace`. The shipped
+  OpenCode and pi guidance also directs agents to enter `WORKSPACE_DIR`, retaining
+  their agent-specific conventions. Both distinguish host proxy credentials from
+  explicitly copied .NET User Secrets in sensitive runtime application files.
 - **The state directories of a squad are mounted from the host.** sbx mounts a host
   directory only where a kit asks for it, so abox writes a mixin that asks for every
   state directory and passes one `--mount` per directory.

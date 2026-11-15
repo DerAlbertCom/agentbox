@@ -15,7 +15,7 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 - **Kit**: a v3 kit, either a workload (full root filesystem) or a mixin (layers added on top). Used for team and squad customization, agent configuration, and auth. Spec: https://github.com/docker/sandbox-kit-spec
 - **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, and `state`.
 - **Sandbox**: one per folder.
-- **Workspace**: the folder's files inside the sandbox, at `/home/agent/workspace`.
+- **Workspace**: the folder's files inside the sandbox, at the runtime-provided `WORKSPACE_DIR`.
 - **State**: host directories that persist when a sandbox is replaced.
 - **Launcher**: what `abox run` starts: a shell, or a desktop app on the host that works with the sandbox.
 
@@ -81,14 +81,14 @@ Herdr's terminal program `herdr` is a separate product that does not share agent
 
 **Launcher contract.** A launcher:
 - has a unique lowercase id, a one-line summary for `abox run --help`, and its host and sandbox needs;
-- receives the folder, the sandbox name, the workspace path (`/home/agent/workspace`), and the argv after `--`;
+- receives the folder, the sandbox name, the runtime workspace path (`WORKSPACE_DIR`), and the argv after `--`;
 - uses argv as the command for its first terminal, if it has one. `shell` runs argv instead of a shell;
 - returns 0 when its work is done, or the command's exit code for `shell`;
 - reaches the sandbox only through the internal exec and `abox pipe`, as described in this section. *(proposed)*
 
 ### `shell`
 
-Runs `bash -l` in the workspace with a TTY, through the internal exec. The shell starts in the image's `WORKDIR`, which is the workspace.
+Runs `bash -l` in the workspace with a TTY, through the internal exec. The shell's working directory is the runtime-provided workspace, which can differ from the image's `WORKDIR`.
 
 ### `herdr-app`
 
@@ -96,7 +96,7 @@ Herdr runs agents in terminals that stay alive in `hc` (herdr-core), so they kee
 
 1. Register the sandbox as a machine, unless `hc machine ls --json` already lists the sandbox name: `hc machine add --via "abox pipe <sandbox> -- sh -c" --name <sandbox>`. `abox pipe` is a hidden entry point that runs a command in the sandbox with stdin and stdout attached. It is not in `--help`. `abox` must be on `PATH` for `hc` to call it. (verify: quoting, and whether TARGET can be omitted with `--via`)
 2. Start `herdr-app` detached if no window is open. `herdr-app` with no arguments opens the window. (verify: readiness; `herdr-app status` returns JSON with an `errors` list)
-3. Open a space on the machine: `herdr-app do space.new --name <folder> --folder /home/agent/workspace --machine <sandbox>`, adding `--argv '<JSON array>'` when argv is given. Argument names come from `herdr-app commands`.
+3. Open a space on the machine: `herdr-app do space.new --name <folder> --folder <runtime-workspace> --machine <sandbox>`, using the discovered `WORKSPACE_DIR` for `<runtime-workspace>` and adding `--argv '<JSON array>'` when argv is given. Argument names come from `herdr-app commands`.
 4. Exit 0. The terminals keep running in `hc` inside the sandbox.
 
 Notes: the machine name is the sandbox name, so a replaced sandbox keeps its entry. Terminals on the machine end when the sandbox stops (verify). The host's `hc` and the one in the image must be the same protocol generation (verify).
@@ -187,10 +187,10 @@ state:                         # directories; ~ is /home/agent
 
 ## Sandbox layout
 
-- The workspace is the folder, at `/home/agent/workspace`. The sbx@1 capability places an assigned workspace at the image's absolute `WORKDIR`. Images are per squad, not per folder, so the path is the same for every folder. (verify on a test sandbox)
-- The runtime sets `WORKSPACE_DIR` to that path, plus `SANDBOX_NAME` and `SANDBOX_ID` (sbx@1). Agents and launchers read `WORKSPACE_DIR`.
+- The workspace is the folder at the path selected by the runtime. The generated image's default `WORKDIR` is not a guarantee of where the runtime mounts a folder.
+- The runtime sets `WORKSPACE_DIR` to the actual workspace path, plus `SANDBOX_NAME` and `SANDBOX_ID` (sbx@1). Agents and launchers read `WORKSPACE_DIR` rather than assuming a fixed path.
 - Agents and tools use `~/worktrees` by default. It is not mounted from the host, so its contents are lost when a sandbox is replaced (open question 9).
-- Credentials never live inside the sandbox. Kits configure the Docker Sandbox credentials proxy. The values come from `abox secrets`.
+- Proxy credentials stay on the host. Kits configure the Docker Sandbox credentials proxy; the values come from `abox secrets`. Separately, the opt-in .NET `user-secrets` flow copies explicitly selected values into runtime files inside the sandbox. These are sensitive application files, not proxy credentials or image contents.
 
 ## Naming
 
@@ -252,7 +252,7 @@ Never call `sbx prune` (it removes every stopped sandbox on the machine) or `sbx
 1. `abox pipe` passes bytes both ways with no TTY and prints nothing extra. `herdr-app` depends on it.
 2. `hc machine add --via`: quoting, and whether TARGET can be omitted.
 3. The `hc` install method for the image, that `hc` starts its server on first use, and that its version matches the host's protocol generation.
-4. Workspace placement at `WORKDIR`, on a test sandbox with sbx 0.51.0.
+4. Runtime workspace placement and `WORKSPACE_DIR`, independently of the image's default `WORKDIR`, on a test sandbox with sbx 0.51.0.
 5. State mounts: a generated `host-mount@1` mixin passed with `--kit`, and `--mount` per entry.
 6. Orca: CLI command names on each OS, and whether its CLI can add an SSH target.
 7. Windows locations and executable names of `herdr-app`, `hc`, and Orca.
