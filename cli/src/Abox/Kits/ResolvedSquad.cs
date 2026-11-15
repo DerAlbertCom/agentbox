@@ -19,7 +19,7 @@ public sealed class ResolvedSquad(
     /// <summary>The name of the squad.</summary>
     public string Name { get; } = name;
 
-    /// <summary>The directory the squad's configuration lives in.</summary>
+    /// <summary>The owning project root discovered with the selected team.</summary>
     public string RootDirectory { get; } = rootDirectory;
 
     /// <summary>The workload the base image is built from.</summary>

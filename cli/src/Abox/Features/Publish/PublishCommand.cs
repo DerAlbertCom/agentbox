@@ -25,7 +25,7 @@ public sealed class PublishCommand : Command
         var root = new Option<string>("--root")
         {
             Description =
-                "The directory that holds the teams folder. Defaults to the current directory.",
+                "The directory to start searching for team sources. Defaults to the current directory.",
         };
         var tag = new Option<string>("--tag")
         {
@@ -48,17 +48,7 @@ public sealed class PublishCommand : Command
                     async () =>
                     {
                         var settings = config.Value;
-                        var named = parseResult.GetValue(teams);
-                        var wanted =
-                            named is { Length: > 0 } ? named
-                            : settings.DefaultTeam is { } fallback ? [fallback]
-                            : [];
-                        if (wanted.Length == 0)
-                        {
-                            throw new AboxException(
-                                "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
-                            );
-                        }
+                        var wanted = settings.ResolveTeams(parseResult.GetValue(teams));
 
                         var resolved = wanted
                             .Select(team =>
