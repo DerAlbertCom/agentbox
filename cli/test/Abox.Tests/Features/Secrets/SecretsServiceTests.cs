@@ -59,6 +59,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task TheServicesOfTheKitsAreListed()
     {
+        // Arrange
         WriteKitWithService("github");
         _root.File(
             "teams/sample/ac.abox",
@@ -71,8 +72,10 @@ public sealed class SecretsServiceTests
             """
         );
 
+        // Act
         var exitCode = await _service.ListAsync(Request(), CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(0);
         _console.AllText.Should().Contain("github");
         _console.AllText.Should().Contain("pi-config");
@@ -85,6 +88,7 @@ public sealed class SecretsServiceTests
     [InlineData("remove")]
     public async Task SecretsCommandsUseTheConfiguredDefaultTeam(string action)
     {
+        // Arrange
         _root.File(
             "teams/sample/ac.abox",
             "workload: mti-ca-dotnet\nsecrets: [{service: github}]\n"
@@ -101,16 +105,20 @@ public sealed class SecretsServiceTests
             _console
         );
 
-        (await command.Parse([action, "--squad", "ac", "--root", _root.Path]).InvokeAsync())
-            .Should()
-            .Be(0);
+        // Act
+        var exitCode = await command
+            .Parse([action, "--squad", "ac", "--root", _root.Path])
+            .InvokeAsync();
 
+        // Assert
+        exitCode.Should().Be(0);
         _console.AllText.Should().NotContain("No team is given");
     }
 
     [Fact]
     public async Task AStoredSecretIsShownAsStored()
     {
+        // Arrange
         WriteKitWithService("github");
         _root.File(
             "teams/sample/ac.abox",
@@ -125,14 +133,17 @@ public sealed class SecretsServiceTests
         _sbx.ListSecretsAsync(Arg.Any<CancellationToken>())
             .Returns(new HostSecrets(["github"], []));
 
+        // Act
         await _service.ListAsync(Request(), CancellationToken.None);
 
+        // Assert
         _console.AllText.Should().Contain("stored");
     }
 
     [Fact]
     public async Task AValueIsStoredUnderItsService()
     {
+        // Arrange
         WriteKitWithService("github");
         _root.File(
             "teams/sample/ac.abox",
@@ -146,8 +157,10 @@ public sealed class SecretsServiceTests
         );
         _console.Answers.Add("the-token");
 
+        // Act
         var exitCode = await _service.SetAsync(Request(), CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1).SetSecretAsync("github", "the-token", Arg.Any<CancellationToken>());
     }
@@ -155,6 +168,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task AValueIsEncodedWhenTheConfigurationSaysSo()
     {
+        // Arrange
         WriteKitWithService("github");
         _root.File(
             "teams/sample/ac.abox",
@@ -169,8 +183,10 @@ public sealed class SecretsServiceTests
         );
         _console.Answers.Add("the-token");
 
+        // Act
         await _service.SetAsync(Request(), CancellationToken.None);
 
+        // Assert
         await _sbx.Received(1)
             .SetSecretAsync(
                 "github",
@@ -182,6 +198,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task AValueIsBuiltFromItsInputs()
     {
+        // Arrange
         WriteKitWithService("registry");
         _root.File(
             "teams/sample/ac.abox",
@@ -200,8 +217,10 @@ public sealed class SecretsServiceTests
         _console.Answers.Add("albert");
         _console.Answers.Add("secret");
 
+        // Act
         await _service.SetAsync(Request(), CancellationToken.None);
 
+        // Assert
         await _sbx.Received(1)
             .SetSecretAsync(
                 "registry",
@@ -213,6 +232,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task ASecretOfAServiceSbxDoesNotKnowIsStoredWithItsHost()
     {
+        // Arrange
         WriteKitWithService("elastic");
         _root.File(
             "teams/sample/ac.abox",
@@ -228,8 +248,10 @@ public sealed class SecretsServiceTests
         );
         _console.Answers.Add("the-key");
 
+        // Act
         await _service.SetAsync(Request(), CancellationToken.None);
 
+        // Assert
         await _sbx.Received(1)
             .SetCustomSecretAsync(
                 "elastic",
@@ -243,6 +265,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task AServiceThatIsNotDeclaredIsAnError()
     {
+        // Arrange
         WriteKitWithService("github");
         _root.File(
             "teams/sample/ac.abox",
@@ -253,8 +276,10 @@ public sealed class SecretsServiceTests
             """
         );
 
+        // Act
         var exitCode = await _service.SetAsync(Request(), CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(1);
         await _sbx.DidNotReceive()
             .SetSecretAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -271,6 +296,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task OnlyTheGivenServiceIsSet()
     {
+        // Arrange
         WriteKitWithService("github");
         _root.File(
             "teams/sample/ac.abox",
@@ -285,11 +311,13 @@ public sealed class SecretsServiceTests
         );
         _console.Answers.Add("the-token");
 
+        // Act
         await _service.SetAsync(
             new SecretsRequest("sample", "ac", _root.Path, ["github"]),
             CancellationToken.None
         );
 
+        // Assert
         await _sbx.Received(1).SetSecretAsync("github", "the-token", Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .SetSecretAsync("elastic", Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -298,6 +326,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task ASecretIsRemoved()
     {
+        // Arrange
         WriteKitWithService("github");
         _root.File(
             "teams/sample/ac.abox",
@@ -310,8 +339,10 @@ public sealed class SecretsServiceTests
             """
         );
 
+        // Act
         var exitCode = await _service.RemoveAsync(Request(), CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .RemoveSecretAsync("github", null, null, Arg.Any<CancellationToken>());
@@ -320,6 +351,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task ASecretOfAServiceSbxDoesNotKnowIsRemovedByItsHost()
     {
+        // Arrange
         WriteKitWithService("elastic");
         _root.File(
             "teams/sample/ac.abox",
@@ -334,8 +366,10 @@ public sealed class SecretsServiceTests
             """
         );
 
+        // Act
         await _service.RemoveAsync(Request(), CancellationToken.None);
 
+        // Assert
         await _sbx.Received(1)
             .RemoveSecretAsync("elastic", "api.elastic.co", null, Arg.Any<CancellationToken>());
     }
@@ -343,6 +377,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task EnvironmentOnlyCustomSecretsAreRemovedByTheirEnvironmentVariable()
     {
+        // Arrange
         _root.File(
             "teams/sample/ac.abox",
             "workload: mti-ca-dotnet\nsecrets: [{service: elastic, env: ELASTIC_API_KEY}]\n"
@@ -361,8 +396,17 @@ public sealed class SecretsServiceTests
             _console
         );
 
-        (await service.SetAsync(Request(), CancellationToken.None)).Should().Be(0);
-        (await service.RemoveAsync(Request(), CancellationToken.None)).Should().Be(0);
+        // Act
+        var setExitCode = await service.SetAsync(Request(), CancellationToken.None);
+
+        // Assert
+        setExitCode.Should().Be(0);
+
+        // Act
+        var removeExitCode = await service.RemoveAsync(Request(), CancellationToken.None);
+
+        // Assert
+        removeExitCode.Should().Be(0);
 
         await runner
             .Received(1)
@@ -397,6 +441,7 @@ public sealed class SecretsServiceTests
     [Fact]
     public async Task EnvironmentOnlyCustomSecretsAreRecognisedAsStored()
     {
+        // Arrange
         _root.File(
             "teams/sample/ac.abox",
             "workload: mti-ca-dotnet\nsecrets: [{service: elastic, env: ELASTIC_API_KEY}]\n"
@@ -404,8 +449,11 @@ public sealed class SecretsServiceTests
         _sbx.ListSecretsAsync(Arg.Any<CancellationToken>())
             .Returns(new HostSecrets([], [new CustomSecret([], "ELASTIC_API_KEY")]));
 
-        (await _service.ListAsync(Request(), CancellationToken.None)).Should().Be(0);
+        // Act
+        var exitCode = await _service.ListAsync(Request(), CancellationToken.None);
 
+        // Assert
+        exitCode.Should().Be(0);
         _console.AllText.Should().Contain("stored").And.NotContain("not set");
     }
 

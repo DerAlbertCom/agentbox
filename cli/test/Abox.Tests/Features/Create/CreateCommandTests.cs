@@ -21,13 +21,16 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task RemoteCreateFromAnArbitraryDirectoryDoesNotNeedTeamsOrABuild()
     {
+        // Arrange
         var command = Command("");
         Directory.Delete(Path.Combine(_root.Path, "teams"), recursive: true);
         Directory.Delete(Path.Combine(_root.Path, "config"), recursive: true);
         Directory.Delete(Path.Combine(_root.Path, "state"), recursive: true);
 
+        // Act
         var exitCode = await InvokeAsync(command, ["--team", "mti-ca", "--squad", "ac"]);
 
+        // Assert
         _console.AllText.Should().NotContain("There is no team 'mti-ca'");
         exitCode.Should().Be(0);
         await _sbx.Received(1)
@@ -42,11 +45,15 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task RemoteCreateWithoutSquadRequiresItRatherThanLookingForLocalTeams()
     {
+        // Arrange
         var command = Command("");
         Directory.Delete(Path.Combine(_root.Path, "teams"), recursive: true);
 
-        (await InvokeAsync(command, ["--team", "mti-ca"])).Should().Be(1);
+        // Act
+        var exitCode = await InvokeAsync(command, ["--team", "mti-ca"]);
 
+        // Assert
+        exitCode.Should().Be(1);
         _console.AllText.Should().Contain("requires --squad").And.NotContain("There is no team");
         _sbx.ReceivedCalls()
             .Should()
@@ -58,13 +65,18 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task RemoteCreateRejectsRootBeforeAnySbxCalls()
     {
+        // Arrange
         var command = Command("");
         _sbx.ClearReceivedCalls();
 
-        (await InvokeAsync(command, ["--team", "sample", "--squad", "ac", "--root", _root.Path]))
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await InvokeAsync(
+            command,
+            ["--team", "sample", "--squad", "ac", "--root", _root.Path]
+        );
 
+        // Assert
+        exitCode.Should().Be(1);
         _console.AllText.Should().Contain("--root requires --local");
         _sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -72,13 +84,15 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task LocalCreateStillRequiresTheLocalTeamSources()
     {
+        // Arrange
         var command = Command("");
         Directory.Delete(Path.Combine(_root.Path, "teams"), recursive: true);
 
-        (await InvokeAsync(command, ["--team", "mti-ca", "--squad", "ac", "--local"]))
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await InvokeAsync(command, ["--team", "mti-ca", "--squad", "ac", "--local"]);
 
+        // Assert
+        exitCode.Should().Be(1);
         _console.AllText.Should().Contain("There is no team 'mti-ca'");
         await _sbx.DidNotReceive()
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
@@ -92,10 +106,13 @@ public sealed class CreateCommandTests
         string repository
     )
     {
+        // Arrange
         var command = Command(yaml);
 
+        // Act
         var exitCode = await InvokeAsync(command, ["--squad", "ac", "--tag", "release"]);
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .CreateAsync(
@@ -112,10 +129,13 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task LocalCreationUsesTheLocalKitsInsteadOfThePullRepository()
     {
+        // Arrange
         var command = Command("pullRepository: team-docker-release");
 
+        // Act
         var exitCode = await InvokeAsync(command, ["--local", "--tag", "release"]);
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .CreateAsync(
@@ -130,25 +150,33 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task LocalCreateAcceptsSquadNamesInAnotherCase()
     {
+        // Arrange
         var command = Command("");
 
-        (await InvokeAsync(command, ["--local", "--squad", "AC", "--tag", "release"]))
-            .Should()
-            .Be(0);
+        // Act
+        var exitCode = await InvokeAsync(command, ["--local", "--squad", "AC", "--tag", "release"]);
+
+        // Assert
+        exitCode.Should().Be(0);
     }
 
     [Fact]
     public async Task LocalCreateFindsTeamsNextToItsLocation()
     {
+        // Arrange
         var command = Command("");
         using var project = new TempDirectory();
         project.File("teams/sample/ac.abox", "workload: sample\n");
         Directory.Delete(Path.Combine(_root.Path, "teams"), recursive: true);
 
-        (await InvokeAsync(command, ["--local", "--location", project.Path, "--tag", "release"]))
-            .Should()
-            .Be(0);
+        // Act
+        var exitCode = await InvokeAsync(
+            command,
+            ["--local", "--location", project.Path, "--tag", "release"]
+        );
 
+        // Assert
+        exitCode.Should().Be(0);
         await _sbx.Received(1)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request => request.Location == project.Path),
@@ -159,36 +187,40 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task LocalCreateCanResolveTeamsFromAnExplicitRootOutsideTheLocation()
     {
+        // Arrange
         var command = Command("");
         using var workspace = new TempDirectory();
 
-        (
-            await InvokeAsync(
-                command,
-                [
-                    "--local",
-                    "--squad",
-                    "ac",
-                    "--tag",
-                    "release",
-                    "--location",
-                    workspace.Path,
-                    "--root",
-                    _root.Path,
-                ]
-            )
-        )
-            .Should()
-            .Be(0);
+        // Act
+        var exitCode = await InvokeAsync(
+            command,
+            [
+                "--local",
+                "--squad",
+                "ac",
+                "--tag",
+                "release",
+                "--location",
+                workspace.Path,
+                "--root",
+                _root.Path,
+            ]
+        );
+
+        // Assert
+        exitCode.Should().Be(0);
     }
 
     [Fact]
     public async Task PullingUsesTheDefaultTagFromSettings()
     {
+        // Arrange
         var command = Command("defaultTag: release\npullRepository: team-docker-release\n");
 
+        // Act
         var exitCode = await InvokeAsync(command, ["--squad", "ac"]);
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .CreateAsync(
@@ -203,14 +235,17 @@ public sealed class CreateCommandTests
     [Fact]
     public async Task TheSandboxLocationCanBeOutsideTheTeamSourceProject()
     {
+        // Arrange
         using var workspace = new TempDirectory();
         var command = Command("");
 
+        // Act
         var exitCode = await InvokeAsync(
             command,
             ["--squad", "ac", "--tag", "release", "--location", workspace.Path]
         );
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .CreateAsync(

@@ -28,13 +28,16 @@ public sealed class PruneServiceTests
     [Fact]
     public async Task NothingToRemoveIsReportedAndReturnsZero()
     {
+        // Arrange
         _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>()).Returns([]);
 
+        // Act
         var code = await _service.PruneTemplatesAsync(
             new PruneRequest(false, false),
             CancellationToken.None
         );
 
+        // Assert
         code.Should().Be(0);
         await _sbx.DidNotReceive()
             .RemoveTemplateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -44,13 +47,16 @@ public sealed class PruneServiceTests
     [Fact]
     public async Task TheStaleImagesAreRemovedAndThePlanDecidesIt()
     {
+        // Arrange
         _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>()).Returns(SampleImages());
 
+        // Act
         var code = await _service.PruneTemplatesAsync(
             new PruneRequest(false, false),
             CancellationToken.None
         );
 
+        // Assert
         code.Should().Be(0);
         await _sbx.Received()
             .RemoveTemplateAsync(
@@ -75,28 +81,34 @@ public sealed class PruneServiceTests
     [Fact]
     public async Task AFailedRemovalStopsTheRunWithAnError()
     {
+        // Arrange
         _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>()).Returns(SampleImages());
         _sbx.RemoveTemplateAsync($"{Assembled}:3e09f411a663a519", Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(1, "no such image"));
 
+        // Act
         var act = () =>
             _service.PruneTemplatesAsync(new PruneRequest(false, false), CancellationToken.None);
 
+        // Assert
         await act.Should().ThrowAsync<AboxException>().WithMessage("*3e09f411a663a519*");
     }
 
     [Fact]
     public async Task AFullPruneReachesForEverythingAndKeepsWhatSbxNeeds()
     {
+        // Arrange
         _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>()).Returns(SampleImages());
         _sbx.RemoveTemplateAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(1, "the image is used by a sandbox"));
 
+        // Act
         var code = await _service.PruneTemplatesAsync(
             new PruneRequest(true, false),
             CancellationToken.None
         );
 
+        // Assert
         code.Should().Be(0);
         await _sbx.Received()
             .RemoveTemplateAsync(
@@ -111,6 +123,7 @@ public sealed class PruneServiceTests
     [Fact]
     public async Task AFullPruneStopsTheSandboxesWhenItIsAskedTo()
     {
+        // Arrange
         _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>()).Returns(SampleImages());
         _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
             .Returns(
@@ -121,11 +134,13 @@ public sealed class PruneServiceTests
                 }
             );
 
+        // Act
         var code = await _service.PruneTemplatesAsync(
             new PruneRequest(true, true),
             CancellationToken.None
         );
 
+        // Assert
         code.Should().Be(0);
         await _sbx.DidNotReceive().StopSandboxAsync("a-stopped-one", Arg.Any<CancellationToken>());
         await _sbx.Received().StopSandboxAsync("a-running-one", Arg.Any<CancellationToken>());
@@ -135,15 +150,18 @@ public sealed class PruneServiceTests
     [Fact]
     public async Task ARegularPruneStopsTheSandboxesWhenItIsAskedTo()
     {
+        // Arrange
         _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>()).Returns(SampleImages());
         _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
             .Returns(new List<SandboxInfo> { new("a-running-one", "running", DateTimeOffset.Now) });
 
+        // Act
         var code = await _service.PruneTemplatesAsync(
             new PruneRequest(false, true),
             CancellationToken.None
         );
 
+        // Assert
         code.Should().Be(0);
         await _sbx.Received().StopSandboxAsync("a-running-one", Arg.Any<CancellationToken>());
     }
