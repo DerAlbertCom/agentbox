@@ -184,6 +184,32 @@ capabilities:
   configuration, `kits/github-enterprise-auth` reaches a host through a credential the
   host holds.
 
+## MCP servers
+
+An `mcp` entry is either a scalar registered-server name or a mapping with `name`
+and an optional `url`:
+
+```yaml
+mcp:
+  - azuredevops
+  - name: elastic
+    url: ${{ parameters.elastic-url }}
+```
+
+A name-only entry must already be registered on the host. For a URL entry, abox
+registers the server if its name is missing; it does not replace an existing host
+registration. URLs support the same parameter references as kit arguments. MCP
+names must be unique across the squad's base chain and personal additions. Local
+build manifests and published squad metadata preserve these names and resolved URLs.
+
+Only `name` and `url` are supported mapping keys. `command`, `args` and `headers`
+are rejected as unknown keys, even when empty: abox does not support launching MCP
+commands or configuring arguments, authentication headers or other transports.
+The error identifies the source `.abox` file and offending `mcp` field before
+generating that squad's build output, registering servers or replacing a sandbox.
+Remove the unsupported fields and use an existing host registration by name, or
+declare a name and URL.
+
 ## State
 
 State declarations use sandbox paths, not host paths: `~` means `/home/agent`.
