@@ -191,7 +191,8 @@ hyphens, beginning with a letter/digit, without trailing dots or Windows device
 names. Duplicate IDs and duplicate effective .NET keys are rejected
 case-insensitively, including nested/colon-key collisions. The folder JSON is
 strict; store JSON accepts .NET-style comments and trailing commas and must have
-an object root. Nested objects, arrays and scalar types are preserved.
+an object root. Nested objects, arrays and scalar types are preserved; destination
+JSON is reserialized without comments or trailing commas.
 
 The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when
 `APPDATA` is set, **including on Unix**, otherwise
@@ -207,11 +208,13 @@ a missing sandbox is never created/replaced by this command.
 All selected originals are snapshotted in memory, parsed and checked against the
 global deny list **before any destination write**. Strings are checked after JSON
 unescaping, as are number/boolean text values; null/empty containers have no text.
-A block identifies the store/key, never the value. `--force` reports its use and
-bypasses **only** this deny check, not invalid config/JSON, missing files, unsafe
-paths, cancellation or transport failures. Copying is runtime-only: payloads and
-integrity frames travel over UTF-8/no-BOM stdin, never process arguments, images,
-build inputs or published artifacts. This does not change `abox secrets`.
+A block identifies the store/key, never the value. `--force` bypasses **only** this
+deny check; a warning after a successful copy reports an actual overridden match,
+not merely the presence of the flag. It does not bypass invalid config/JSON,
+missing files, unsafe paths, cancellation or transport failures. Copying is
+runtime-only: payloads and integrity frames travel over UTF-8/no-BOM stdin, never
+process arguments, images, build inputs or published artifacts. This does not
+change `abox secrets`.
 
 Rerunning replaces the **entire** destination store, removing old keys. The fixed
 receiver checks the byte count and SHA-256 frame before a same-directory atomic

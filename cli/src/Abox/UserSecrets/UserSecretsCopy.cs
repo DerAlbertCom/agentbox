@@ -52,19 +52,23 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
             }
             stores.Add(UserSecretSnapshot.Parse(selection, json));
         }
-        if (!force)
-            foreach (var store in stores)
-            foreach (var (key, value) in store.Values)
-                if (
-                    value is not null
-                    && config.UserSecretsDenyList.Any(denied =>
-                        value.Contains(denied, StringComparison.OrdinalIgnoreCase)
-                    )
+        var safetyOverride = false;
+        foreach (var store in stores)
+        foreach (var (key, value) in store.Values)
+            if (
+                value is not null
+                && config.UserSecretsDenyList.Any(denied =>
+                    value.Contains(denied, StringComparison.OrdinalIgnoreCase)
                 )
+            )
+            {
+                if (!force)
                     throw new AboxException(
                         $"User-secret store '{store.Id}', key {JsonSerializer.Serialize(key)}, is blocked by the global deny list. No stores were copied. Use --force only if this is intentional."
                     );
-        return new PreparedUserSecrets(stores, force);
+                safetyOverride = true;
+            }
+        return new PreparedUserSecrets(stores, safetyOverride);
     }
 
     public async Task<UserSecretsReport> CopyAsync(
@@ -100,7 +104,8 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                 await sbx.WriteUserSecretsAsync(
                     sandbox,
                     store.Id,
-                    store.Root.GetRawText(),
+                    // Raw text retains skipped comments; transfer parsed data only.
+                    JsonSerializer.Serialize(store.Root),
                     cancellationToken
                 );
             }
@@ -130,6 +135,8 @@ public sealed class PreparedUserSecrets
     }
 
     internal IReadOnlyList<UserSecretSnapshot> Stores { get; }
+
+    /// <summary>At least one selected original value matched the deny list and was allowed by --force.</summary>
     public bool SafetyOverride { get; }
 
     public override string ToString() =>
@@ -138,6 +145,7 @@ public sealed class PreparedUserSecrets
 
 public sealed record UserSecretsStoreReport(string Id, int KeyCount);
 
+/// <summary>Successful copy summary; SafetyOverride records actual selected-original deny matches allowed by --force.</summary>
 public sealed record UserSecretsReport(
     IReadOnlyList<UserSecretsStoreReport> Stores,
     bool SafetyOverride

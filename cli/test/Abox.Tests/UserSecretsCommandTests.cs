@@ -250,9 +250,7 @@ public sealed class UserSecretsCommandTests
             .WriteUserSecretsAsync(
                 Arg.Any<string>(),
                 "sample",
-                Arg.Is<string>(json =>
-                    json.Contains(unix ? "Unix" : "Windows") && json.Contains("Grüße 🔒")
-                ),
+                Arg.Is<string>(json => HasStringValue(json, unix ? "Unix" : "Windows", "Grüße 🔒")),
                 Arg.Any<CancellationToken>()
             );
     }
@@ -430,6 +428,12 @@ public sealed class UserSecretsCommandTests
         await fixture
             .Sbx.DidNotReceive()
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    private static bool HasStringValue(string json, string key, string value)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        return document.RootElement.GetProperty(key).GetString() == value;
     }
 
     private sealed class Fixture : IDisposable
