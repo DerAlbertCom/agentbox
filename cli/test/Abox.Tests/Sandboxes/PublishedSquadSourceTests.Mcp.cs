@@ -78,7 +78,7 @@ public sealed partial class PublishedSquadSourceTests
             new BuildRequest([team], root.Path, "latest", Verify: false, MetadataOnly: !local),
             CancellationToken.None
         );
-        var manifest = store.Load("ac", "latest")!;
+        var manifest = store.Load("mti-ca", "ac", "latest")!;
         _metadata["Mcp"] = JsonSerializer.SerializeToNode(manifest.Mcp);
         _metadata["State"] = new JsonArray();
         var name = SandboxName.For(root.Path);

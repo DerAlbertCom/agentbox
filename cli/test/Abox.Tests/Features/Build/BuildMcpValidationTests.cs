@@ -64,7 +64,7 @@ public sealed class BuildMcpValidationTests : IDisposable
         (await BuildAsync(metadataOnly))
             .Should()
             .Be(0, _console.AllText);
-        var buildDirectory = _store.DirectoryFor("ac", "latest");
+        var buildDirectory = _store.DirectoryFor("sample", "ac", "latest");
         _root.File(Path.Combine(buildDirectory, "workload/scripts/keep.sh"), "keep this script");
         var before = FilesInState();
         var declaration =
