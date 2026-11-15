@@ -187,17 +187,18 @@ sandbox still requires the usual confirmation (or explicit `--yes`), lists the
 same losses, and retains the selected name rather than converting it to agentbox
 naming. An accepted newer-build replacement from `run` does the same.
 
-Discovery is **not squad authorization**: ordinary run can open a legacy sandbox
-without an agentbox record, but squad-qualified user-secret copying still refuses
-when a matching trusted local record is missing or unknown. Neither `--force` nor
-discovery creates that trust. Review the [user-secret safety contract](#copying-net-user-secrets)
+On-demand `user-secrets` does **not verify the sandbox's squad** or require an
+agentbox record, even when `abox.json` declares a squad. It copies into the resolved
+existing sandbox without creating or changing any record. Create/run replacement
+squad checks remain unchanged. Review the [user-secret safety contract](#copying-net-user-secrets)
 before copying. Historical path spelling and link rules determine the legacy hash;
 this is not a general alias search across all spellings of a folder.
 
 ### Copying .NET user secrets
 
-Declare the squad and only the intended stores/keys in **the sandbox folder's
-`abox.json`** (not a squad `.abox` file or the source project selected by `--root`):
+Declare only the intended stores/keys and optionally the creation squad in **the
+sandbox folder's `abox.json`** (not a squad `.abox` file or the source project
+selected by `--root`):
 
 ```json
 {
@@ -254,9 +255,11 @@ scalar types and empty-container handling.
 The optional `squad` selects local or published creation when `--squad` is omitted.
 An explicit option must match case-insensitively; conflicts fail, not override the
 folder. The team still comes from `--team` or `defaultTeam`. With no folder squad,
-existing command selection applies. On-demand `user-secrets` and accepted `run`
-replacement require a known matching sandbox record when a folder squad is present;
-they never silently switch an existing sandbox's squad. Ordinary `run` (including
+existing command selection applies. Accepted `run` replacement requires a known
+matching sandbox record when a folder squad is present; it never silently switches
+an existing sandbox's squad. On-demand `user-secrets` ignores squad identity when
+selecting the existing sandbox: missing, matching or mismatched records do not
+block copying. Folder configuration is still validated. Ordinary `run` (including
 declining replacement) can still open the existing sandbox with a different or
 unknown recorded squad: it copies no secrets and changes no squad.
 
@@ -283,7 +286,7 @@ null/empty containers have no text. A blocked unmatched value does not prevent a
 safe filtered copy. A block names the store/key, never the value.
 
 `--force` is **on-demand only** and bypasses only matched deny-list policy, not
-invalid configuration/JSON, missing files, squad constraints, metadata/destination
+invalid configuration/JSON, missing files, policy metadata/destination
 checks, cancellation or transport errors. A warning is reported
 after a successful copy **only if selected original values actually matched**;
 passing `--force` with no match is not an override.

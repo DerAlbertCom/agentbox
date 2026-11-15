@@ -2,7 +2,6 @@ using System.CommandLine;
 using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
-using Abox.LocalState;
 using Abox.Sandboxes;
 using Abox.UserSecrets;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,7 +14,6 @@ public sealed class UserSecretsCommand : Command
         Lazy<AboxConfig> config,
         Preflight preflight,
         Lazy<UserSecretsCopy> copy,
-        Lazy<SandboxRecordStore> records,
         SandboxResolver sandboxes,
         IConsole console
     )
@@ -45,18 +43,11 @@ public sealed class UserSecretsCommand : Command
                             ?? throw new AboxException(
                                 "No abox.json in this folder. Declare 'userSecrets' explicitly before copying."
                             );
-                        Task<PreparedUserSecrets> PrepareHostSecretsAsync() =>
-                            copy.Value.PrepareAsync(
-                                folderConfig,
-                                parseResult.GetValue(force),
-                                cancellationToken
-                            );
-
-                        // Squad-qualified reads need the selected identity's trusted record first.
-                        // Otherwise retain host-only validation before contacting the runtime.
-                        var prepared = folderConfig.Squad is null
-                            ? await PrepareHostSecretsAsync()
-                            : null;
+                        var prepared = await copy.Value.PrepareAsync(
+                            folderConfig,
+                            parseResult.GetValue(force),
+                            cancellationToken
+                        );
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                             return 1;
                         var sandbox =
@@ -64,9 +55,6 @@ public sealed class UserSecretsCommand : Command
                             ?? throw new AboxException(
                                 $"There is no sandbox for '{folder}'. Run 'abox create' for this folder first; user-secrets never creates or replaces one."
                             );
-                        if (folderConfig.Squad is not null)
-                            folderConfig.EnsureSandboxSquad(records.Value.Load(sandbox)?.Squad);
-                        prepared ??= await PrepareHostSecretsAsync();
                         UserSecretsReport report;
                         try
                         {

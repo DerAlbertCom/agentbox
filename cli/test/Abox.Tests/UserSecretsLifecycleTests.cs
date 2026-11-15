@@ -101,17 +101,12 @@ public sealed class UserSecretsLifecycleTests
     [InlineData("published")]
     [InlineData("local")]
     [InlineData("run")]
-    [InlineData("on-demand")]
-    public async Task AConflictingSquadCannotCopyOrReplace(string entry)
+    public async Task AConflictingSquadCannotReplaceOrAutomaticallyCopy(string entry)
     {
         using var fixture = new Fixture();
         fixture.Existing();
         fixture.Configure("""{"squad":"bd","userSecrets":["missing"]}""");
-        var exit = entry switch
-        {
-            "on-demand" => await fixture.OnDemand(),
-            _ => await fixture.Replace(entry),
-        };
+        var exit = await fixture.Replace(entry);
 
         exit.Should().Be(1);
         fixture.Console.AllText.Should().Contain("squad").And.Contain("abox.json");
@@ -482,30 +477,6 @@ public sealed class UserSecretsLifecycleTests
         (await fixture.Replace(entry)).Should().Be(1);
 
         await fixture.NoReplacementOrCopy();
-    }
-
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task AFolderSquadRequiresAKnownMatchingRecordForOnDemandCopy(bool unknownSquad)
-    {
-        using var fixture = new Fixture();
-        fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
-        fixture.Store("sample", "{}");
-        fixture.Existing();
-        if (unknownSquad)
-        {
-            var record = fixture.Records.Load(fixture.Name)!;
-            record.Squad = "";
-            fixture.Records.Save(fixture.Name, record);
-        }
-        else
-            fixture.Records.Remove(fixture.Name);
-
-        (await fixture.OnDemand()).Should().Be(1);
-
-        await fixture.NoReplacementOrCopy();
-        fixture.Console.AllText.Should().Contain("Cannot verify").And.Contain("abox create");
     }
 
     [Fact]

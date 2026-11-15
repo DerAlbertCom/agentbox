@@ -226,12 +226,13 @@ authorized replacement creates and records the replacement under that same name;
 ordinary compatibility lookup writes no record or state/alias mapping and migrates
 neither legacy state layout nor Herdr registrations.
 
-On-demand squad authorization reads only the selected sandbox's existing local record
-before accessing selected host stores. When no squad check is needed, host input and
-deny-list validation still precede runtime access. Legacy discovery alone establishes
-no trusted provenance, so ordinary run can succeed while squad-qualified copying
-correctly refuses. Destination/ownership, policy, value-free reporting and sensitive
-transport checks are unchanged.
+On-demand user-secret copying does not verify squad identity or read/require a local
+sandbox record, even when `abox.json` declares `squad`. Missing, matching, unknown or
+mismatched records do not block copying. Host input and deny-list validation precede
+runtime access. Discovery writes no provenance; create/run replacement squad checks,
+destination/ownership, effective policy authorization, value-free reporting and
+sensitive transport checks are unchanged. This supersedes the earlier on-demand
+record prerequisite in #2/#10, per the user's subsequent policy correction.
 
 Explicit-name `exec`/`pipe`, inventory-wide prune and host proxy-secret commands do
 not use location fallback. Future location-based commands, including ports (#3),
@@ -435,9 +436,10 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
 - `FolderConfig.LoadAsync(location, token)` reads runtime-only `abox.json`,
   returning null for absence. A missing file is an on-demand error but a lifecycle
   no-op. Its optional `squad` selects creation and rejects conflicting explicit
-  selections; on-demand copying and accepted run replacement require a matching
-  known sandbox record if that squad is present. Ordinary run does not impose that
-  copy/replacement constraint. The team still comes from command/user settings.
+  selections; accepted run replacement requires a matching known sandbox record
+  if that squad is present. On-demand copying never checks the sandbox's squad or
+  reads its record. Ordinary run does not impose the replacement constraint.
+  The team still comes from command/user settings.
 - `SandboxCreationRequest` carries the folder configuration snapshot loaded at
   command entry, including null for absence. Creation never reloads it, including
   after deletion; host selections are then snapshotted before destructive work.
@@ -494,7 +496,7 @@ input, image layer or published artifact. Concurrent malicious filesystem edits 
 the sandbox user/root and crash durability are outside this contract.
 
 `--force` is available only on demand and bypasses only matched deny policy, not
-input, squad, metadata, destination or transport checks. The reporting contract is
+input, policy metadata, destination or transport checks. The reporting contract is
 to warn after successful copying only when at least one selected original value
 actually matched, never merely because the flag was supplied. Automatic copying
 always prepares with `force: false`; replacement consent/`--yes` is not force.
@@ -548,9 +550,10 @@ CSharpier and `git diff --check` passed. No Release build or tests were run for
 this final-review change.
 
 Lifecycle regression coverage now explicitly permits non-replacing runs with
-mismatched, missing or unknown squad records, while copying/accepted replacement
-still reject unintended squads. It also checks that entry-time folder snapshots,
-including absence, survive later file edits. A small composed CLI harness shares
+mismatched, missing or unknown squad records. On-demand copying now also permits
+these records; creation/accepted replacement still reject unintended squads.
+It also checks that entry-time folder snapshots, including absence, survive later
+file edits. A small composed CLI harness shares
 synthetic host/store and fake-tool setup across command, filtering, safety and
 lifecycle suites; behavior-specific helpers stay local. The null-deny-list guard
 remains intentional for directly constructed public settings, independently of

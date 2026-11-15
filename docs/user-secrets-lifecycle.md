@@ -25,13 +25,17 @@ This is the existing folder opt-in boundary, not a separate approval mechanism.
 - With no folder squad, existing selection remains: `--squad`, the only local
   squad, or local interactive selection. Published creation still requires a
   squad when neither the option nor the folder specifies one.
-- On-demand `user-secrets` and accepted newer-build replacement from `run` check a
-  folder squad against the sandbox's record. A different or unknown recorded squad
-  fails safely; create the intended sandbox explicitly first. No folder squad means
+- Accepted newer-build replacement from `run` checks a folder squad against the
+  sandbox's record. A different or unknown recorded squad fails safely; create the
+  intended sandbox explicitly first. No folder squad means
   there is no extra identity constraint. Ordinary `run`, including declining
   replacement, can open the existing sandbox despite a different or unknown squad
   record, because it neither copies secrets nor replaces the sandbox. A
   missing-sandbox run hint includes the folder squad, without requiring local team sources.
+- On-demand `user-secrets` does not verify squad identity or read/require a local
+  sandbox record. Missing, matching, unknown or mismatched records do not block
+  copying into the current-first, exact-legacy-fallback sandbox for the folder.
+  `abox.json` still undergoes normal validation, including the optional `squad` field.
 
 The team still comes from `--team` or `defaultTeam`; `abox.json` does not select a
 team. Changing its squad does not silently replace an existing sandbox on `run`.
@@ -97,8 +101,8 @@ For an intentional safety override, use the existing explicit command:
 abox user-secrets --location "/path/to/folder" --force
 ```
 
-This bypasses only matched deny-list policy, not malformed inputs, squad conflicts,
-invalid configuration, destination/metadata checks or transport failures. An
+This bypasses only matched deny-list policy, not malformed inputs, invalid
+configuration, destination/policy metadata checks or transport failures. An
 override is reported only when used by a successful copy. If pre-create validation
 blocks a store, prefer correcting the values/selection. If an intentional override
 is necessary for a new/replacement sandbox, explicitly deselect those stores in

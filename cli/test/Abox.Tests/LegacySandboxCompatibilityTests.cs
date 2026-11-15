@@ -298,9 +298,15 @@ public sealed class LegacySandboxCompatibilityTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task SecretAuthorizationPolicyAndTransferUseTheSameLegacyIdentity(bool hasSquad)
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    [InlineData(true, "ac")]
+    [InlineData(true, "")]
+    [InlineData(true, "other")]
+    public async Task SecretPolicyAndTransferUseTheSameLegacyIdentityRegardlessOfSquadRecord(
+        bool hasSquad,
+        string? recordedSquad
+    )
     {
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var name = LegacyFolderFixture(cli.Location);
@@ -316,12 +322,12 @@ public sealed class LegacySandboxCompatibilityTests
             """{"Endpoint":"https://localhost:8004/path","Password":"synthetic-only"}"""
         );
         var records = new SandboxRecordStore(AboxPaths.For(cli.Root.Path, cli.Root.Path));
-        if (hasSquad)
-            records.Save(name, new SandboxRecord { Squad = "ac" });
+        if (recordedSquad is not null)
+            records.Save(name, new SandboxRecord { Squad = recordedSquad });
         cli.Sbx.GetUserSecretsHostPortsAsync(name, Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<int>)[8004]);
 
-        (await cli.Run("--verbose")).Should().Be(0);
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
 
         await cli.Sbx.Received(1).GetUserSecretsHostPortsAsync(name, Arg.Any<CancellationToken>());
         await cli
@@ -346,7 +352,13 @@ public sealed class LegacySandboxCompatibilityTests
             .And.NotContain("synthetic-only");
         File.ReadAllText(source).Should().Contain("localhost:8004");
         records.Load(cli.Name).Should().BeNull();
-        records.Load(name)?.Squad.Should().Be(hasSquad ? "ac" : null);
+        (records.Load(name)?.Squad).Should().Be(recordedSquad);
+        await cli
+            .Sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+        await cli
+            .Sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     // Test-data oracle for a temporary ordinary directory named 'folder'. The literal
@@ -356,40 +368,6 @@ public sealed class LegacySandboxCompatibilityTests
         + Convert
             .ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(location)))[..6]
             .ToLowerInvariant();
-
-    [Theory]
-    [InlineData("missing")]
-    [InlineData("unknown")]
-    [InlineData("mismatched")]
-    public async Task LegacyDiscoveryDoesNotGrantSquadTrustEvenWithForceOrAPreferredNameRecord(
-        string recordState
-    )
-    {
-        using var cli = new UserSecretsCliHarness(existingSandbox: false);
-        var name = LegacyFolderFixture(cli.Location);
-        cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", null));
-        cli.Configure("""{"squad":"ac","userSecrets":["missing-store"]}""");
-        var records = new SandboxRecordStore(AboxPaths.For(cli.Root.Path, cli.Root.Path));
-        records.Save(cli.Name, new SandboxRecord { Squad = "ac" });
-        if (recordState != "missing")
-            records.Save(
-                name,
-                new SandboxRecord { Squad = recordState == "unknown" ? "" : "other" }
-            );
-
-        (await cli.Run("--force")).Should().Be(1);
-
-        cli.Console.AllText.Should()
-            .Contain(recordState == "mismatched" ? "squad" : "Cannot verify")
-            .And.NotContain("missing-store");
-        await cli.NoWrites();
-        await cli
-            .Sbx.DidNotReceive()
-            .GetUserSecretsHostPortsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        if (recordState == "missing")
-            records.Load(name).Should().BeNull();
-    }
 
     [Theory]
     [InlineData("running")]

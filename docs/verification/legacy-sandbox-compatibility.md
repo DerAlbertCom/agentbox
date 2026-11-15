@@ -2,7 +2,9 @@
 
 ## Approved seam and source
 
-The complete specification is [issue #10](https://github.com/DerAlbertCom/agentbox/issues/10).
+The original specification is [issue #10](https://github.com/DerAlbertCom/agentbox/issues/10).
+The subsequent user-requested on-demand squad-policy correction below supersedes
+its historical user-secret record prerequisite, not its replacement safeguards.
 Tests invoke the composed root CLI with the real shared resolver and fake external
 sbx interaction. Inventory tests additionally use the real sbx adapter with a fake
 process runner to exercise JSON parsing, exact matching and failed listings.
@@ -36,9 +38,9 @@ Each feature slice was tested failing before its implementation:
 2. **Secret identity:** both squad-qualified and unqualified legacy copies failed
    (`expected 0, actual 1`) before on-demand authorization/copy used the selected
    identity; both passed after integration. Positive tests assert policy discovery,
-   destination checks, same-port rewrite and transfer address that name. Missing,
-   unknown and mismatched records still refuse, even with force and an unrelated
-   matching preferred-name record.
+   destination checks, same-port rewrite and transfer address that name. That
+   revision also refused missing, unknown and mismatched records; this prerequisite
+   is superseded by the on-demand policy correction below.
 3. **Create replacement:** both consent cases failed before creator integration:
    declining incorrectly succeeded with a new agentbox sandbox, and accepting
    skipped the legacy replacement prompt. Both passed after shared lookup and
@@ -53,9 +55,10 @@ Each feature slice was tested failing before its implementation:
 The first full regression run caught six existing filtering tests failing because
 unqualified host validation had moved after runtime access. Restoring host-only
 preparation before preflight/discovery when no squad check is required made the
-focused filtering/compatibility set green (62 passed). Squad-qualified access still
-waits for the selected identity's trusted record. Existing MCP-order tests also
-caught and prevented moving discovery ahead of read-only MCP validation.
+focused filtering/compatibility set green (62 passed). At that revision,
+squad-qualified access waited for the selected identity's record; the correction
+below removes that wait. Existing MCP-order tests also caught and prevented moving
+discovery ahead of read-only MCP validation.
 
 Regression coverage additionally checks current-only/legacy-only/both/neither
 inventories, lookalikes/custom workspace names, runtime/permission/malformed-JSON
@@ -72,9 +75,9 @@ including `--yes`, retained name/state and post-create copying.
 The four minor standards suggestions were addressed without changing the approved
 CLI seam or adding behavior:
 
-- On-demand copying names its shared host-preparation phase once. Unqualified
-  validation remains before runtime access; squad-qualified host reads still wait
-  for the selected identity's trusted record. Missing `abox.json` still fails first.
+- On-demand copying named its shared host-preparation phase once. At that revision,
+  only unqualified validation preceded runtime access; the correction below makes
+  host preparation unconditional. Missing `abox.json` still fails first.
 - Run computes a current-name suggestion only in its missing-sandbox branch, then
   uses `sandbox.Name` throughout the existing-sandbox path. No creator change is
   needed: `existing?.Name ?? SandboxName.For(location)` already short-circuits,
@@ -118,3 +121,50 @@ Current and fallback lookups can read separate inventory snapshots; discovery is
 not atomic against concurrent runtime changes. Lookup derives one exact historical
 candidate from the effective path spelling, not every alternative historical
 trailing-separator spelling.
+
+## On-demand user-secrets squad-policy correction
+
+The user subsequently reported that `user-secrets` failed with the squad-record
+error and explicitly required **no squad verification for on-demand copying**.
+That instruction supersedes the earlier on-demand provenance requirement in #2's
+completion comments and #10. It does not change create/run replacement checks.
+
+The regression uses the approved composed CLI, real resolver, synthetic folder
+with `{"squad":"ac","userSecrets":["sample"]}`, synthetic empty store and fake
+external sbx. No live user command, actual host store or user sandbox was accessed.
+
+Red command, before editing production code:
+
+```sh
+dotnet test --project cli/test/Abox.Tests -- --filter-method '*OnDemandCopyDoesNotRequireASandboxSquadRecord*'
+```
+
+The one test failed in about one second, exposing the exact reported error:
+
+```text
+Expected (fixture.Run()) to be 0 because error: Cannot verify the sandbox's squad against abox.json. Create it with abox create for this folder before replacing it or copying user secrets., but found 1 (difference of 1).
+```
+
+The cause was the on-demand command applying the replacement squad guard before
+host preparation. Removing only its guard/record dependency and making shared host
+preparation unconditional made the same command pass. The replacement guard itself
+is retained; its comment/error now describe replacement rather than on-demand copying.
+
+Current and exact legacy-name regressions cover missing, matching, unknown and
+mismatched records, successful transfer to the selected identity, no fabricated
+records and no creation/removal. Squad-present deny/force and policy/destination/
+transfer-failure tests retain the other safety checks. Obsolete on-demand refusal
+assertions were replaced, while local/published/accepted-run replacement conflict
+tests remain. Shared policy authorization and sensitive receiver tests are unchanged.
+
+Verification after the correction:
+
+- Original red command: **4 passed** after expanding the record-state matrix.
+- Focused command/lifecycle/legacy-compatibility tests: **131 passed**.
+- Full Debug solution suite: **799 passed, 4 existing native-Windows-symlink-privilege
+  skips, 803 total, zero failures**.
+- Debug and Release solution builds: **zero warnings/errors**.
+- CSharpier: **159 files checked**; `git diff --check` passed.
+
+This remains Windows-host synthetic verification, not a new live-sbx or independent
+Unix-host run. The user's uncommitted `run-abox.ps1` is excluded from this correction.
