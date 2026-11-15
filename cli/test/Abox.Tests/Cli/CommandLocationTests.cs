@@ -17,6 +17,7 @@ public sealed class CommandLocationTests
     [InlineData(false, false)]
     public async Task CreateAndRunResolveTheSameLocation(bool configured, bool explicitLocation)
     {
+        // Arrange
         using var root = new TempDirectory();
         var console = new TestConsole();
         var config = new AboxConfig
@@ -43,11 +44,22 @@ public sealed class CommandLocationTests
         var command = provider.GetRequiredService<AboxRootCommand>();
         string[] locationArguments = location is null ? [] : ["--location", location];
 
-        (await command.InvokeAsync(["create", "--squad", "ac", .. locationArguments]))
-            .Should()
-            .Be(0);
-        (await command.InvokeAsync(["run", .. locationArguments])).Should().Be(1);
+        // Act
+        var createExitCode = await command.InvokeAsync([
+            "create",
+            "--squad",
+            "ac",
+            .. locationArguments,
+        ]);
 
+        // Assert
+        createExitCode.Should().Be(0);
+
+        // Act
+        var runExitCode = await command.InvokeAsync(["run", .. locationArguments]);
+
+        // Assert
+        runExitCode.Should().Be(1);
         await sbx.Received(1)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request => request.Location == expected),

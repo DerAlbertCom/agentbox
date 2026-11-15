@@ -17,6 +17,7 @@ public sealed class BuildCommandTests
     [InlineData(true)]
     public async Task MetadataOnlyPreparesRemoteMetadataWithoutAnyExternalPrograms(bool noVerify)
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File(
             "teams/sample/ac.abox",
@@ -67,8 +68,10 @@ public sealed class BuildCommandTests
             arguments.Add("--no-verify");
         }
 
+        // Act
         var exitCode = await command.Parse(arguments.ToArray()).InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(0);
         var manifest = store.Load("ac", "remote")!;
         manifest.LocalWorkload.Should().BeNull();

@@ -17,6 +17,7 @@ public sealed class AboxRootCommandTests
     [InlineData(true)]
     public async Task TheCompositionRootWiresVerbosityThroughToExternalTools(bool verbose)
     {
+        // Arrange
         using var root = new TempDirectory();
         var console = new TestConsole();
         var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
@@ -45,10 +46,12 @@ public sealed class AboxRootCommandTests
         });
         using var provider = services.BuildServiceProvider();
 
+        // Act
         var exitCode = await provider
             .GetRequiredService<AboxRootCommand>()
             .InvokeAsync(verbose ? ["test-tool", "--verbose"] : ["test-tool"]);
 
+        // Assert
         exitCode.Should().Be(19);
         console.Output.Should().BeEmpty();
         if (verbose)
@@ -72,6 +75,7 @@ public sealed class AboxRootCommandTests
         params string[] arguments
     )
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File("config.yaml", "unknown-key: invalid\n");
         var console = new TestConsole();
@@ -85,8 +89,10 @@ public sealed class AboxRootCommandTests
         services.AddSingleton(sbx);
         using var provider = services.BuildServiceProvider();
 
+        // Act
         var exitCode = await provider.GetRequiredService<AboxRootCommand>().InvokeAsync(arguments);
 
+        // Assert
         exitCode.Should().Be(0);
         console.Errors.Should().BeEmpty();
         Directory.Exists(Path.Combine(root.Path, "state")).Should().BeFalse();
@@ -107,9 +113,11 @@ public sealed class AboxRootCommandTests
     [Fact]
     public async Task TheExecutableIgnoresAppsettingsInTheWorkingDirectory()
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File("appsettings.json", "not json");
         root.File("abox/config.yaml", "unknown-key: invalid\n");
+        // Act
         var result = await new ProcessRunner().RunAsync(
             new ProcessRequest(
                 "dotnet",
@@ -124,6 +132,7 @@ public sealed class AboxRootCommandTests
             CancellationToken.None
         );
 
+        // Assert
         result.ExitCode.Should().Be(0);
         result.StandardOutput.Should().Contain("abox: AI agent sandboxes");
         result.StandardError.Should().BeEmpty();
@@ -135,6 +144,7 @@ public sealed class AboxRootCommandTests
     [InlineData("publish")]
     public async Task ConfigurationErrorsAreReportedOnceWhenACommandUsesIt(string command)
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File("config.yaml", "unknown-key: invalid\n");
         var console = new TestConsole();
@@ -142,8 +152,10 @@ public sealed class AboxRootCommandTests
         services.AddSingleton(AboxPaths.For(root.Path, root.Path));
         using var provider = services.BuildServiceProvider();
 
+        // Act
         var exitCode = await provider.GetRequiredService<AboxRootCommand>().InvokeAsync([command]);
 
+        // Assert
         exitCode.Should().Be(1);
         console
             .Errors.Should()
@@ -156,13 +168,16 @@ public sealed class AboxRootCommandTests
     [Fact]
     public async Task CancellationUsesTheConventionalExitCode()
     {
+        // Arrange
         var console = new TestConsole();
 
+        // Act
         var exitCode = await CommandHandling.RunAsync(
             () => throw new OperationCanceledException(),
             console
         );
 
+        // Assert
         exitCode.Should().Be(130);
         console.Errors.Should().Equal("error: the command was cancelled.");
     }
@@ -170,12 +185,14 @@ public sealed class AboxRootCommandTests
     [Fact]
     public async Task DuplicateLauncherIdsAreReportedAsAnAboxErrorDuringComposition()
     {
+        // Arrange
         using var root = new TempDirectory();
         var console = new TestConsole();
         var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
         services.AddSingleton(AboxPaths.For(root.Path, root.Path));
         services.AddSingleton<ILauncher, ShellLauncher>();
 
+        // Act
         var exitCode = await CommandHandling.RunAsync(
             async () =>
             {
@@ -185,6 +202,7 @@ public sealed class AboxRootCommandTests
             console
         );
 
+        // Assert
         exitCode.Should().Be(1);
         console
             .Errors.Should()
@@ -204,6 +222,7 @@ public sealed class AboxRootCommandTests
         params string[] args
     )
     {
+        // Arrange
         var console = new TestConsole();
         var output = new ProcessOutput(console);
         var build = new Command("build");
@@ -215,8 +234,10 @@ public sealed class AboxRootCommandTests
         secrets.Subcommands.Add(list);
         var root = new AboxRootCommand([build, secrets], output);
 
+        // Act
         var exitCode = await root.InvokeAsync(args);
 
+        // Assert
         exitCode.Should().Be(17);
         console.AllText.Should().Contain("complete stdout").And.Contain("complete stderr");
         console.Output.Should().BeEmpty();
@@ -234,28 +255,36 @@ public sealed class AboxRootCommandTests
     [Fact]
     public async Task VerboseIsOptInForEachInvocation()
     {
+        // Arrange
         var output = new ProcessOutput(new TestConsole());
         var build = new Command("build");
         build.SetAction(_ => 0);
         var root = new AboxRootCommand([build], output);
 
+        // Act
         await root.InvokeAsync(["build", "--verbose"]);
+        // Assert
         output.Verbose.Should().BeTrue();
+        // Act
         await root.InvokeAsync(["build"]);
+        // Assert
         output.Verbose.Should().BeFalse();
     }
 
     [Fact]
     public async Task VerboseAfterTheSeparatorBelongsToTheChildNotAbox()
     {
+        // Arrange
         var output = new ProcessOutput(new TestConsole());
         var run = new Command("run");
         run.SetAction(_ => 0);
         var root = new AboxRootCommand([run], output);
         var (arguments, trailing) = CommandLine.Split(["run", "--", "--verbose"]);
 
+        // Act
         var exitCode = await root.InvokeAsync(arguments);
 
+        // Assert
         exitCode.Should().Be(0);
         output.Verbose.Should().BeFalse();
         trailing.Should().Equal("--verbose");

@@ -27,11 +27,14 @@ public sealed class PublishCommandTests
     [Fact]
     public async Task TeamAndTagDefaultToTheUserConfiguration()
     {
+        // Arrange
         SaveBuild("sample", "ac", "release");
         var command = Command(new AboxConfig { DefaultTeam = "sample", DefaultTag = "release" });
 
+        // Act
         var exitCode = await command.Parse(["--root", _root.Path]).InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(0);
         _console.AllText.Should().Contain("agentbox-rwest-sample/ac:release");
     }
@@ -39,9 +42,11 @@ public sealed class PublishCommandTests
     [Fact]
     public async Task TeamsCanBeRepeatedAndBuilderAndTagArePassedThrough()
     {
+        // Arrange
         SaveBuild("one", "ac", "test");
         SaveBuild("two", "bd", "test");
 
+        // Act
         var exitCode = await Command(new AboxConfig())
             .Parse([
                 "--team",
@@ -57,6 +62,7 @@ public sealed class PublishCommandTests
             ])
             .InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(0);
         _console
             .AllText.Should()
@@ -77,6 +83,7 @@ public sealed class PublishCommandTests
     [Fact]
     public async Task PublishingUsesTheRepositoryOfTheBuiltInheritedWorkload()
     {
+        // Arrange
         _root.File("teams/sample/cape.abox", "workload: shared\n");
         _root.File("teams/sample/ac.abox", "base: cape\n");
         _root.File("kits/shared.workload", "publishRepository: shared-images-local\n");
@@ -103,8 +110,10 @@ public sealed class PublishCommandTests
             CancellationToken.None
         );
 
+        // Act
         var exitCode = await Command(config).Parse(["--root", _root.Path]).InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(0);
         _console
             .AllText.Should()
@@ -124,8 +133,11 @@ public sealed class PublishCommandTests
     [Fact]
     public async Task NoTeamIsAnAboxErrorNotAnUnhandledException()
     {
+        // Arrange: the fixture supplies a command with no configured default team.
+        // Act
         var exitCode = await Command(new AboxConfig()).Parse([]).InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(1);
         _console.AllText.Should().Contain("No team is given");
         await _runner
@@ -136,13 +148,16 @@ public sealed class PublishCommandTests
     [Fact]
     public async Task PublishingDoesNotRequireSbx()
     {
+        // Arrange
         SaveBuild("sample", "ac", "latest");
         _programs.Exists("sbx").Returns(false);
 
+        // Act
         var exitCode = await Command(new AboxConfig { DefaultTeam = "sample" })
             .Parse(["--root", _root.Path])
             .InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(0);
         await _runner.Received().RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
     }
@@ -150,15 +165,18 @@ public sealed class PublishCommandTests
     [Fact]
     public async Task FailedPublishingReturnsOneWithTheDiagnostic()
     {
+        // Arrange
         SaveBuild("sample", "ac", "latest");
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(1, string.Empty, "buildx is unavailable"));
 
+        // Act
         var exitCode = await Command(new AboxConfig { DefaultTeam = "sample" })
             .Parse(["--root", _root.Path])
             .InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(1);
         _console.AllText.Should().Contain("buildx is unavailable");
     }
@@ -174,13 +192,16 @@ public sealed class PublishCommandTests
     [Fact]
     public async Task EverySelectedTeamIsValidatedBeforeTheFirstPush()
     {
+        // Arrange
         SaveBuild("one", "ac", "latest");
         _root.File("teams/two/bd.abox", "workload: sample\n");
 
+        // Act
         var exitCode = await Command(new AboxConfig())
             .Parse(["--team", "one", "--team", "two", "--root", _root.Path])
             .InvokeAsync();
 
+        // Assert
         exitCode.Should().Be(1);
         _console.AllText.Should().Contain("abox build --team two");
         await _runner

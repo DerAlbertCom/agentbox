@@ -53,6 +53,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task PersonalConfigurationKitsCannotBePublished()
     {
+        // Arrange
         _root.File("teams/sample/ac.abox", "workload: sample\n");
         _root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
         _root.File("kits/private/private.yaml", "schemaVersion: \"3\"\nkind: mixin\n");
@@ -79,8 +80,10 @@ public sealed partial class PublishServiceTests
         );
         File.Delete(Path.Combine(configDirectory, "personal.abox"));
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*personal configuration*");
         _calls.Should().BeEmpty();
     }
@@ -88,6 +91,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task LocalAndRegistryKitsKeepTheirArgumentsAndStateIsIncluded()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         var local = Path.Combine(_root.Path, "local kit");
@@ -119,6 +123,7 @@ public sealed partial class PublishServiceTests
         build.Mcp.Add(new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" });
         SaveVerifiedBuild(build);
 
+        // Act
         await _service.PublishAsync(
             Request("ac") with
             {
@@ -127,6 +132,7 @@ public sealed partial class PublishServiceTests
             CancellationToken.None
         );
 
+        // Assert
         var pushes = _calls.Where(call => call.Arguments.Contains("--push")).ToList();
         pushes.Should().HaveCount(5);
         pushes.Should().OnlyContain(call => call.Arguments.Contains("custom-builder"));
@@ -161,11 +167,14 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task EachSquadPublishesToItsOwnWorkloadRepository()
     {
+        // Arrange
         SaveBuild("ac", "first-images-local");
         SaveBuild("bd", "second-images-local");
 
+        // Act
         await _service.PublishAsync(Request("ac", "bd"), CancellationToken.None);
 
+        // Assert
         var tags = _calls
             .Where(call => call.Arguments.Contains("--tag"))
             .Select(call => call.Arguments[call.Arguments.ToList().IndexOf("--tag") + 1])
@@ -192,11 +201,14 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task MultipleSquadsDoNotOverwriteEachOther()
     {
+        // Arrange
         SaveBuild("ac");
         SaveBuild("bd");
 
+        // Act
         await _service.PublishAsync(Request("ac", "bd"), CancellationToken.None);
 
+        // Assert
         _calls
             .SelectMany(call => call.Arguments)
             .Should()
@@ -220,13 +232,16 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task LegacyBuildsWithoutAPublishRepositoryMustBeRebuilt()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         build.PublishRepository = null;
         _store.Save(build);
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*publishRepository*.workload*abox build --team sample --tag latest --no-personal*"
         );
@@ -244,11 +259,14 @@ public sealed partial class PublishServiceTests
     [InlineData("repository\n")]
     public async Task EveryBuildRepositoryIsValidatedBeforeAnyDockerCall(string repository)
     {
+        // Arrange
         SaveBuild("ac");
         SaveBuild("bd", repository);
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac", "bd"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*publishRepository*");
         _calls.Should().BeEmpty();
     }
@@ -256,10 +274,13 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task EveryBuildIsCheckedBeforeAnythingIsPublished()
     {
+        // Arrange
         SaveBuild("ac");
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac", "bd"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*abox build --team sample --tag latest*"
         );
@@ -269,13 +290,16 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task ASquadBuildFromAnotherTeamIsNotPublished()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         build.Reference = "agentbox-rwest-other:latest";
         _store.Save(build);
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*not a build of team 'sample'*"
         );
@@ -285,13 +309,16 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task AMissingBuiltKitDoesNotStartAPublish()
     {
+        // Arrange
         SaveBuild("ac");
         File.Delete(
             Path.Combine(_store.Load("ac", "latest")!.WorkloadKitDirectory, "workload.yaml")
         );
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*has no descriptor*");
         _calls.Should().BeEmpty();
     }
@@ -299,11 +326,14 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task AMissingDockerGetsAnInstallHint()
     {
+        // Arrange
         SaveBuild("ac");
         _programs.Exists("docker").Returns(false);
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*Docker with the Buildx plugin*"
         );
@@ -313,6 +343,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task AFailedPushDoesNotMoveTheSetTagAndGetsAnAuthenticationHint()
     {
+        // Arrange
         SaveBuild("ac");
         _runner
             .RunAsync(
@@ -321,8 +352,10 @@ public sealed partial class PublishServiceTests
             )
             .Returns(new ProcessResult(1, string.Empty, "unauthorized"));
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         var exception = (await action.Should().ThrowAsync<AboxException>()).Which;
         exception
             .Message.Should()
@@ -344,12 +377,15 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task ComponentTagsAreUniqueAcrossPublishes()
     {
+        // Arrange
         SaveBuild("ac");
         await _service.PublishAsync(Request("ac"), CancellationToken.None);
         var firstSet = YamlReader.Parse(_descriptors.Last(), "first set");
 
+        // Act
         await _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         var secondSet = YamlReader.Parse(_descriptors.Last(), "second set");
         firstSet
             .GetEntries("kits")[0]
@@ -361,12 +397,14 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task TheChosenTagIsUsedForTheLocalBuildAndThePublishedSet()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         build.Tag = "release-1";
         build.Reference = "agentbox-rwest-sample:release-1";
         _store.Save(build);
 
+        // Act
         await _service.PublishAsync(
             Request("ac") with
             {
@@ -375,6 +413,7 @@ public sealed partial class PublishServiceTests
             CancellationToken.None
         );
 
+        // Assert
         _calls
             .Last()
             .Arguments.Should()
@@ -389,9 +428,12 @@ public sealed partial class PublishServiceTests
     [InlineData("")]
     public async Task InvalidRegistryTagsAreRejectedBeforeAccessingBuilds(string tag)
     {
+        // Arrange: the fixture has no builds for the invalid tag.
+        // Act
         var action = () =>
             _service.PublishAsync(Request("ac") with { Tag = tag }, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*not a valid registry tag*"
         );
@@ -401,10 +443,13 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task TheBuiltWorkloadIsPublishedAsAV3SetToJfrog()
     {
+        // Arrange
         SaveBuild("ac");
 
+        // Act
         var result = await _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         result.Should().Be(0);
         var pushes = _calls.Where(call => call.Arguments.Contains("--push")).ToList();
         pushes.Should().HaveCount(3); // workload, portable squad configuration, set
@@ -429,13 +474,16 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task LegacyBuildsWithoutProvenanceAreRejected()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         build.IncludesPersonalConfigurations = null;
         _store.Save(build);
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*unknown configuration provenance*"
         );
@@ -445,13 +493,16 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task LegacyBuildsWithoutFingerprintsMustBeRebuilt()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         build.SourceHashes.Clear();
         _store.Save(build);
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*no source fingerprints*");
         _calls.Should().BeEmpty();
     }
@@ -459,14 +510,17 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task ChangedSourcesAreRejectedBeforeAnyPush()
     {
+        // Arrange
         SaveBuild("ac");
         File.AppendAllText(
             Path.Combine(_store.Load("ac", "latest")!.WorkloadKitDirectory, "workload.yaml"),
             "description: changed\n"
         );
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*sources changed*");
         _calls.Should().BeEmpty();
     }
@@ -474,19 +528,27 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task ConfigurationFilesAndAddedPayloadFilesAreFingerprinted()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         build.ConfigFiles.Add(_root.File("squad.abox", "workload: sample\n"));
         SaveVerifiedBuild(build);
         File.AppendAllText(build.ConfigFiles[0], "state: [~/.private]\n");
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
+
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*sources changed*");
+
+        // Arrange
         SaveVerifiedBuild(build);
         File.WriteAllText(
             Path.Combine(build.WorkloadKitDirectory, "new-payload.txt"),
             "not part of the build"
         );
+
+        // Act / Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*sources changed*");
         _calls.Should().BeEmpty();
     }
@@ -494,6 +556,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task PublicationUsesSnapshotsNotSourcesChangedAfterValidation()
     {
+        // Arrange
         SaveBuild("ac");
         var path = Path.Combine(_store.Load("ac", "latest")!.WorkloadKitDirectory, "workload.yaml");
         var original = File.ReadAllText(path);
@@ -508,8 +571,10 @@ public sealed partial class PublishServiceTests
                 return new ProcessResult(0, "", "");
             });
 
+        // Act
         await _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         _descriptors[0].Should().Be(original);
         _calls
             .Where(call => call.Arguments.Contains("--push"))
@@ -522,14 +587,17 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task SquadReferencesStayStableWhenAnotherSquadIsAdded()
     {
+        // Arrange
         SaveBuild("ac");
         await _service.PublishAsync(Request("ac"), CancellationToken.None);
         var first = _calls.Single(call => call.Arguments.Contains("create")).Arguments;
         _calls.Clear();
         SaveBuild("bd");
 
+        // Act
         await _service.PublishAsync(Request("ac", "bd"), CancellationToken.None);
 
+        // Assert
         var again = _calls.First(call => call.Arguments.Contains("create")).Arguments;
         first[first.ToList().IndexOf("--tag") + 1]
             .Should()
@@ -544,6 +612,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task TeamSquadAndComponentSegmentsCannotCollide()
     {
+        // Arrange
         SaveBuild("ac");
         SaveBuild("workload");
         var second = _store.Load("workload", "latest")!;
@@ -554,8 +623,10 @@ public sealed partial class PublishServiceTests
             "latest"
         );
 
+        // Act
         await _service.PublishAsync(request, CancellationToken.None);
 
+        // Assert
         _calls
             .Where(call => call.Arguments.Contains("create"))
             .SelectMany(call => call.Arguments)
@@ -571,8 +642,11 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task CaseCollidingSquadsAreRejectedBeforeLoadingBuilds()
     {
+        // Arrange: use the fixture with case-colliding squad selections.
+        // Act
         var action = () => _service.PublishAsync(Request("ac", "AC"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*names collide*");
         _calls.Should().BeEmpty();
     }
@@ -580,12 +654,15 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task CaseCollidingTeamsAreRejectedBeforeLoadingBuilds()
     {
+        // Arrange
         var request = new PublishRequest(
             [new("sample", _root.Path, ["ac"]), new("SAMPLE", _root.Path, ["bd"])],
             "latest"
         );
+        // Act
         var action = () => _service.PublishAsync(request, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*names collide*");
         _calls.Should().BeEmpty();
     }
@@ -593,6 +670,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task MissingRemoteAnnotationsStopPublicationBeforePromotion()
     {
+        // Arrange
         SaveBuild("ac");
         _runner
             .RunAsync(
@@ -601,8 +679,10 @@ public sealed partial class PublishServiceTests
             )
             .Returns(new ProcessResult(0, "{}", ""));
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*did not retain a valid v3 workload descriptor*"
         );
@@ -617,6 +697,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task ACorruptSetCandidateNeverMovesTheRequestedTag()
     {
+        // Arrange
         SaveBuild("ac");
         _runner
             .RunAsync(
@@ -628,8 +709,10 @@ public sealed partial class PublishServiceTests
             )
             .Returns(new ProcessResult(0, "{}", ""));
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*did not retain a valid v3 workload descriptor*"
         );
@@ -645,6 +728,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task PlatformManifestsAreInspectedEvenWhenTheIndexIsUnannotated()
     {
+        // Arrange
         SaveBuild("ac");
         var platform = "sha256:" + new string('b', 64);
         var attestation = "sha256:" + new string('c', 64);
@@ -688,8 +772,10 @@ public sealed partial class PublishServiceTests
                 ""
             ));
 
+        // Act
         await _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         await _runner
             .Received(1)
             .RunAsync(
@@ -707,6 +793,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task SuppliedLocalBuildPhaseArgumentsAreRejectedBeforeAnyPush()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         var local = Path.Combine(_root.Path, "build-arg-kit");
@@ -726,8 +813,10 @@ public sealed partial class PublishServiceTests
         );
         SaveVerifiedBuild(build);
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*build-phase arguments is not supported*"
         );
@@ -737,6 +826,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task SuppliedRegistryBuildPhaseArgumentsAreRejectedBeforeAnyPush()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         build.Kits.Add(
@@ -764,8 +854,10 @@ public sealed partial class PublishServiceTests
                 )
             );
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*build-phase arguments is not supported*"
         );
@@ -775,6 +867,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task CleanupFailureDoesNotHideThePublishingError()
     {
+        // Arrange
         SaveBuild("ac");
         string? blocked = null;
         _runner
@@ -799,8 +892,10 @@ public sealed partial class PublishServiceTests
             });
         try
         {
+            // Act
             var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+            // Assert
             (await action.Should().ThrowAsync<AboxException>()).WithMessage(
                 "*original publication failure*"
             );
@@ -839,6 +934,7 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task PublishingUsesTheOriginalVerifiedWorkloadNotTheLocalThinRecipe()
     {
+        // Arrange
         SaveBuild("ac");
         var build = _store.Load("ac", "latest")!;
         const string recipe = "FROM example.com/base:1\nRUN install-workload-tools\n";
@@ -863,8 +959,10 @@ public sealed partial class PublishServiceTests
                 return PublishTestProcess.Run(request);
             });
 
+        // Act
         await _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         publishedRecipe.Should().Be(recipe);
         _configurations.Should().NotBeEmpty();
         _configurations
