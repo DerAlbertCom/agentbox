@@ -71,17 +71,20 @@ public sealed class RunServiceTests
     [Fact]
     public async Task TheShellRunsInTheWorkspaceOfTheSandbox()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
         _sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>())
             .Returns("/home/agent/workspace");
 
+        // Act
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .ExecAsync(
@@ -97,13 +100,16 @@ public sealed class RunServiceTests
     [Fact]
     public async Task TheShellRunsInTheFolderWhenTheRuntimeDoesNotSayWhereTheWorkspaceIs()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
         _sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>()).Returns((string?)null);
 
+        // Act
         await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None);
 
+        // Assert
         await _sbx.Received(1)
             .ExecAsync(
                 Arg.Is<SbxExecRequest>(request => request.WorkingDirectory == _root.Path),
@@ -114,15 +120,18 @@ public sealed class RunServiceTests
     [Fact]
     public async Task TheShellRunsTheCommandThatIsGiven()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
 
+        // Act
         await _service.RunAsync(
             new RunRequest("shell", _root.Path, ["ls", "-la"]),
             CancellationToken.None
         );
 
+        // Assert
         await _sbx.Received(1)
             .ExecAsync(
                 Arg.Is<SbxExecRequest>(request =>
@@ -135,11 +144,14 @@ public sealed class RunServiceTests
     [Fact]
     public async Task WithoutASandboxTheCreateCommandIsPrinted()
     {
+        // Arrange: the fixture has no existing sandbox.
+        // Act
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(1);
         _console
             .AllText.Should()
@@ -154,6 +166,7 @@ public sealed class RunServiceTests
     [Fact]
     public async Task TheCreateHintUsesTheSandboxRecord()
     {
+        // Arrange
         _store.Save(
             new BuildManifest
             {
@@ -172,16 +185,21 @@ public sealed class RunServiceTests
             }
         );
 
-        (await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await _service.RunAsync(
+            new RunRequest("shell", _root.Path, []),
+            CancellationToken.None
+        );
 
+        // Assert
+        exitCode.Should().Be(1);
         _console.AllText.Should().Contain("--team sample --squad ac --tag release --local");
     }
 
     [Fact]
     public async Task ARecordWithoutAKitReferenceDoesNotProveTheSandboxWasLocal()
     {
+        // Arrange
         _records.Save(
             SandboxName.For(_root.Path),
             new SandboxRecord { Squad = "ac", Tag = "release" }
@@ -200,10 +218,14 @@ public sealed class RunServiceTests
             _console
         );
 
-        (await service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await service.RunAsync(
+            new RunRequest("shell", _root.Path, []),
+            CancellationToken.None
+        );
 
+        // Assert
+        exitCode.Should().Be(1);
         _console
             .AllText.Should()
             .Contain("--team <name> --squad ac --tag release")
@@ -215,12 +237,17 @@ public sealed class RunServiceTests
     [Fact]
     public async Task TheCreateHintCanUseTheDefaultTeamsOnlySquad()
     {
+        // Arrange
         _root.File("teams/sample/ac.abox", "workload: sample\n");
 
-        (await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await _service.RunAsync(
+            new RunRequest("shell", _root.Path, []),
+            CancellationToken.None
+        );
 
+        // Assert
+        exitCode.Should().Be(1);
         _console
             .AllText.Should()
             .Contain("--team sample --squad ac --tag latest")
@@ -230,6 +257,7 @@ public sealed class RunServiceTests
     [Fact]
     public async Task AnOldRecordCanRecoverTheTeamFromItsBuildMetadata()
     {
+        // Arrange
         _records.Save(
             SandboxName.For(_root.Path),
             new SandboxRecord { Squad = "ac", Tag = "release" }
@@ -244,10 +272,14 @@ public sealed class RunServiceTests
             }
         );
 
-        (await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await _service.RunAsync(
+            new RunRequest("shell", _root.Path, []),
+            CancellationToken.None
+        );
 
+        // Assert
+        exitCode.Should().Be(1);
         _console.AllText.Should().Contain("--team other-team --squad ac --tag release --local");
         _console.AllText.Should().Contain($"--root \"{_root.Path}\"");
     }
@@ -255,6 +287,7 @@ public sealed class RunServiceTests
     [Fact]
     public async Task MissingLauncherProgramsPrintThePublishedSquadInTheCreateHint()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
@@ -270,15 +303,14 @@ public sealed class RunServiceTests
             }
         );
 
-        (
-            await _service.RunAsync(
-                new RunRequest("herdr-app", _root.Path, []),
-                CancellationToken.None
-            )
-        )
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await _service.RunAsync(
+            new RunRequest("herdr-app", _root.Path, []),
+            CancellationToken.None
+        );
 
+        // Assert
+        exitCode.Should().Be(1);
         _console
             .AllText.Should()
             .Contain("--team other-team --squad ac --tag release")
@@ -290,6 +322,7 @@ public sealed class RunServiceTests
     [InlineData(true)]
     public async Task UnknownTeamAndSquadNamesAreClearlyMarkedInTheCreateHint(bool emptyRecord)
     {
+        // Arrange
         if (emptyRecord)
         {
             _records.Save(SandboxName.For(_root.Path), new SandboxRecord());
@@ -308,10 +341,14 @@ public sealed class RunServiceTests
             _console
         );
 
-        (await service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
-            .Should()
-            .Be(1);
+        // Act
+        var exitCode = await service.RunAsync(
+            new RunRequest("shell", _root.Path, []),
+            CancellationToken.None
+        );
 
+        // Assert
+        exitCode.Should().Be(1);
         _console
             .AllText.Should()
             .Contain("--team <name> --squad <name>")
@@ -321,9 +358,12 @@ public sealed class RunServiceTests
     [Fact]
     public async Task ALauncherThatIsNotKnownIsAnError()
     {
+        // Arrange: the fixture registers only shell and herdr-app launchers.
+        // Act
         var action = () =>
             _service.RunAsync(new RunRequest("nope", _root.Path, []), CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("no launcher 'nope'");
@@ -334,6 +374,7 @@ public sealed class RunServiceTests
     [InlineData(true)]
     public async Task ANewerBuildIsOfferedAndReplacesTheSandbox(bool separateSources)
     {
+        // Arrange
         using var sources = new TempDirectory();
         var sourceRoot = separateSources ? sources : _root;
         var name = SandboxName.For(_root.Path);
@@ -368,11 +409,13 @@ public sealed class RunServiceTests
             }
         );
 
+        // Act
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         _console.AllText.Should().Contain("newer build");
         await _sbx.Received(1).RemoveSandboxAsync(name, Arg.Any<CancellationToken>());
@@ -389,6 +432,7 @@ public sealed class RunServiceTests
     [Fact]
     public async Task APulledSandboxIsNotReplacedByANewerLocalBuild()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
@@ -412,11 +456,13 @@ public sealed class RunServiceTests
             }
         );
 
+        // Act
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         _console.AllText.Should().NotContain("newer build");
         await _sbx.DidNotReceive()
@@ -426,6 +472,7 @@ public sealed class RunServiceTests
     [Fact]
     public async Task NewerMetadataOnlyPreparationDoesNotInterruptAnExistingLocalSandbox()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
@@ -450,11 +497,13 @@ public sealed class RunServiceTests
             }
         );
 
+        // Act
         var exitCode = await _service.RunAsync(
             new RunRequest("shell", _root.Path, []),
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         _console.AllText.Should().NotContain("newer build");
         await _sbx.DidNotReceive()
@@ -465,6 +514,7 @@ public sealed class RunServiceTests
     [Fact]
     public async Task ANewerBuildIsNotOfferedWhenTheAnswerIsNo()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _console.Answer = false;
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
@@ -492,8 +542,10 @@ public sealed class RunServiceTests
             }
         );
 
+        // Act
         await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None);
 
+        // Assert
         await _sbx.DidNotReceive()
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }

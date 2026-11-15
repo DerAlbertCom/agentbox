@@ -50,12 +50,14 @@ public sealed class BuildServiceTests
     [Fact]
     public async Task EachBuildKeepsTheRepositoryOfItsInheritedWorkload()
     {
+        // Arrange
         _root.File("teams/sample/ac.abox", "base: cape\n");
         _root.File("teams/other/cape.abox", "workload: shared\n");
         _root.File("kits/shared.workload", "publishRepository: shared-images-local\n");
         _root.File("teams/sample/bd.abox", "workload: sample\n");
         _root.File("teams/sample/sample.workload", "publishRepository: sample-images-local\n");
 
+        // Act
         await _service.BuildAsync(
             Request() with
             {
@@ -64,6 +66,7 @@ public sealed class BuildServiceTests
             CancellationToken.None
         );
 
+        // Assert
         _store.Load("ac", "latest")!.PublishRepository.Should().Be("shared-images-local");
         _store.Load("bd", "latest")!.PublishRepository.Should().Be("sample-images-local");
     }
@@ -71,6 +74,7 @@ public sealed class BuildServiceTests
     [Fact]
     public async Task ChangingTheWorkloadRepositoryRequiresRebuildingBeforePublication()
     {
+        // Arrange
         _root.File("teams/sample/sample.workload", "publishRepository: original-images-local\n");
         await _service.BuildAsync(
             Request() with
@@ -81,14 +85,18 @@ public sealed class BuildServiceTests
         );
         _root.File("teams/sample/sample.workload", "publishRepository: other-images-local\n");
 
+        // Act
         var check = () => BuildSources.EnsureUnchanged(_store.Load("ac", "latest")!);
 
+        // Assert
         check.Should().Throw<AboxException>().WithMessage("*sources changed*--no-personal*");
     }
 
     [Fact]
     public async Task PublicationBuildsExplicitlyExcludePersonalConfiguration()
     {
+        // Arrange: the fixture supplies sources with personal configuration.
+        // Act
         await _service.BuildAsync(
             Request() with
             {
@@ -97,6 +105,7 @@ public sealed class BuildServiceTests
             CancellationToken.None
         );
 
+        // Assert
         var manifest = _store.Load("ac", "latest")!;
         manifest.IncludesPersonalConfigurations.Should().BeFalse();
         manifest.Kits.Should().BeEmpty();
@@ -108,6 +117,8 @@ public sealed class BuildServiceTests
     [Fact]
     public async Task TheCertificateAssetsAreFingerprintedAndIncludedInPublicationSnapshots()
     {
+        // Arrange: the fixture supplies a publishable workload and bundled assets.
+        // Act
         await _service.BuildAsync(
             Request() with
             {
@@ -115,6 +126,7 @@ public sealed class BuildServiceTests
             },
             CancellationToken.None
         );
+        // Assert
         var manifest = _store.Load("ac", "latest")!;
         var snapshot = BuildSources.Snapshot(manifest, _root.Directory_("snapshot"));
         var asset = Path.Combine("certificates", "rwe_inspection_certificate_chain.pem");
@@ -122,16 +134,22 @@ public sealed class BuildServiceTests
             .Should()
             .Equal(File.ReadAllBytes(Path.Combine(manifest.WorkloadKitDirectory, asset)));
 
+        // Arrange
         File.AppendAllText(Path.Combine(manifest.WorkloadKitDirectory, asset), "\n# changed\n");
+        // Act
         var check = () => BuildSources.EnsureUnchanged(manifest);
+        // Assert
         check.Should().Throw<AboxException>().WithMessage("*sources changed*");
     }
 
     [Fact]
     public async Task LocalBuildsStillIncludePersonalConfigurationByDefaultAndRecordIt()
     {
+        // Arrange: use the fixture's personal configuration and default build request.
+        // Act
         await _service.BuildAsync(Request(), CancellationToken.None);
 
+        // Assert
         var manifest = _store.Load("ac", "latest")!;
         manifest.IncludesPersonalConfigurations.Should().BeTrue();
         manifest.Kits.Should().ContainSingle().Which.Name.Should().Be("private");
@@ -143,6 +161,7 @@ public sealed class BuildServiceTests
     [InlineData(false)]
     public async Task OnlyPublicationBuildsEnforceLinkFreeInputs(bool includePersonalConfigurations)
     {
+        // Arrange
         _root.File("teams/sample/ac.abox", "workload: sample\nkits: [private]\n");
         File.Delete(Path.Combine(_root.Path, "config", "personal.abox"));
         var target = _root.Directory_("shared");
@@ -186,8 +205,10 @@ public sealed class BuildServiceTests
         };
         if (includePersonalConfigurations)
         {
+            // Act
             var exitCode = await _service.BuildAsync(request, CancellationToken.None);
 
+            // Assert
             exitCode.Should().Be(0);
             _store.Load("ac", "latest")!.SourceHashes.Should().BeEmpty();
             await _sbx.Received(1)
@@ -199,8 +220,10 @@ public sealed class BuildServiceTests
         }
         else
         {
+            // Act
             var action = () => _service.BuildAsync(request, CancellationToken.None);
 
+            // Assert
             (await action.Should().ThrowAsync<AboxException>()).WithMessage(
                 "*symbolic link or reparse point*"
             );
@@ -211,6 +234,7 @@ public sealed class BuildServiceTests
     [Fact]
     public async Task SourcesChangedDuringVerificationAreNotSavedAsAVerifiedBuild()
     {
+        // Arrange
         _root.File("teams/sample/ac.abox", "workload: sample\nkits: [private]\n");
         _sbx.InspectKitAsync(
                 Arg.Any<string>(),
@@ -226,6 +250,7 @@ public sealed class BuildServiceTests
                 return new SbxOutcome(0, "");
             });
 
+        // Act
         var action = () =>
             _service.BuildAsync(
                 Request() with
@@ -235,6 +260,7 @@ public sealed class BuildServiceTests
                 CancellationToken.None
             );
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*sources changed*");
         _store.Load("ac", "latest").Should().BeNull();
     }
@@ -245,8 +271,11 @@ public sealed class BuildServiceTests
     [Fact]
     public async Task NoVerifyStillPrebuildsTheWorkloadAndRecordsItsContentIdentity()
     {
+        // Arrange: use the fixture's local workload and fake image builder.
+        // Act
         await _service.BuildAsync(Request() with { Verify = false }, CancellationToken.None);
 
+        // Assert
         var manifest = _store.Load("ac", "latest")!;
         manifest.LocalWorkload.Should().NotBeNull();
         manifest.LocalWorkload!.ImageId.Should().Be(LocalWorkloadTest.ImageId);
@@ -272,6 +301,7 @@ public sealed class BuildServiceTests
         bool changeInputs
     )
     {
+        // Arrange
         await _service.BuildAsync(Request(), CancellationToken.None);
         var image = _store.Load("ac", "latest")!.LocalWorkload!;
         var recipePath = Path.Combine(image.RuntimeKitDirectory, "workload.dockerfile");
@@ -283,6 +313,7 @@ public sealed class BuildServiceTests
         _runner.ClearReceivedCalls();
         _sbx.ClearReceivedCalls();
 
+        // Act
         var exitCode = await _service.BuildAsync(
             Request() with
             {
@@ -291,6 +322,7 @@ public sealed class BuildServiceTests
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         _store.Load("ac", "latest")!.LocalWorkload.Should().BeNull();
         _store

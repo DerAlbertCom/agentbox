@@ -9,7 +9,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class LegacySandboxInventoryTests
+public sealed partial class LegacySandboxInventoryTests
 {
     [Theory]
     [InlineData(false)]
@@ -45,30 +45,6 @@ public sealed class LegacySandboxInventoryTests
                 ),
                 Arg.Any<CancellationToken>()
             );
-    }
-
-    [Fact]
-    public async Task PruneStillUsesActualInventoryNamesWithoutLocationResolution()
-    {
-        using var cli = new UserSecretsCliHarness();
-        string[] names = [cli.Name, LegacySandboxFixture.Name, "unrelated-running-sandbox"];
-        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
-            .Returns(names.Select(name => new SandboxInfo(name, "running", null)).ToList());
-        cli.Sbx.ListTemplatesAsync(Arg.Any<CancellationToken>())
-            .Returns((IReadOnlyList<TemplateImage>)[]);
-        cli.Sbx.StopSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new SbxOutcome(0, ""));
-
-        (await cli.Invoke("prune", "--sbx")).Should().Be(0);
-
-        foreach (var name in names)
-            await cli.Sbx.Received(1).StopSandboxAsync(name, Arg.Any<CancellationToken>());
-        await cli
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await cli
-            .Sbx.DidNotReceive()
-            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     [Theory]
@@ -163,32 +139,6 @@ public sealed class LegacySandboxInventoryTests
             .OnlyContain(request =>
                 new[] { "version", "diagnose", "ls" }.Contains(request.Arguments[0])
             );
-    }
-
-    [Theory]
-    [InlineData("exec")]
-    [InlineData("pipe")]
-    public async Task ExplicitNamesRemainExactAndNeverDiscoverAnotherSandbox(string command)
-    {
-        using var cli = new UserSecretsCliHarness();
-        cli.Provider.GetRequiredService<TrailingArguments>().Values = ["echo", "hello"];
-        cli.Sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(23);
-
-        (await cli.Invoke(command, LegacySandboxFixture.Name)).Should().Be(23);
-
-        await cli
-            .Sbx.Received(1)
-            .ExecAsync(
-                Arg.Is<SbxExecRequest>(request =>
-                    request.Sandbox == LegacySandboxFixture.Name
-                    && request.KeepStandardInputOpen == (command == "pipe")
-                ),
-                Arg.Any<CancellationToken>()
-            );
-        await cli
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await cli.Sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
     }
 
     private static List<ProcessRequest> UseRealSbx(

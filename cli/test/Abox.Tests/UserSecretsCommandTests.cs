@@ -7,7 +7,7 @@ using Fixture = Abox.Tests.UserSecretsCliHarness;
 
 namespace Abox.Tests;
 
-public sealed class UserSecretsCommandTests
+public sealed partial class UserSecretsCommandTests
 {
     [Theory]
     [InlineData(null)]
@@ -51,20 +51,6 @@ public sealed class UserSecretsCommandTests
     }
 
     [Fact]
-    public async Task ConfiguredDefaultLocationIsUsedWhenLocationIsOmitted()
-    {
-        using var fixture = new Fixture();
-        fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
-        fixture.Store("sample", "{}");
-
-        (await fixture.RunDefault()).Should().Be(0);
-
-        await fixture
-            .Sbx.Received(1)
-            .FindSandboxAsync(SandboxName.For(fixture.Location), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
     public async Task AnUnreadableHostStoreIsAnActionableErrorWithoutWrites()
     {
         using var fixture = new Fixture();
@@ -85,51 +71,6 @@ public sealed class UserSecretsCommandTests
             .And.Contain("permissions")
             .And.NotContain("synthetic-private");
         await fixture.NoWrites();
-    }
-
-    [Fact]
-    public async Task PreflightFailureDoesNotReachTheDestination()
-    {
-        using var fixture = new Fixture();
-        fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
-        fixture.Store("sample", "{}");
-        fixture.Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 50, 0));
-
-        (await fixture.Run()).Should().Be(1);
-
-        await fixture.NoWrites();
-        await fixture
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task CancelledCopyUsesExit130AndExplainsSafeRetryWithoutLeakingCancellationDetails()
-    {
-        using var fixture = new Fixture();
-        fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
-        fixture.Store("sample", "{}");
-        fixture
-            .Sbx.WriteUserSecretsAsync(
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(
-                Task.FromException(
-                    new OperationCanceledException("synthetic-password 123456789 true")
-                )
-            );
-
-        (await fixture.Run("--verbose")).Should().Be(130);
-
-        fixture
-            .Console.AllText.Should()
-            .Contain("retry")
-            .And.Contain("rollback")
-            .And.NotContain("synthetic-password")
-            .And.NotContain("123456789 true");
     }
 
     [Theory]
@@ -186,83 +127,6 @@ public sealed class UserSecretsCommandTests
         (await fixture.Run("--force")).Should().Be(1);
         fixture.Console.AllText.Should().Contain("missing").And.Contain("permissions");
         await fixture.NoWrites();
-    }
-
-    [Fact]
-    public async Task DoesNotCreateOrReplaceAMissingSandbox()
-    {
-        using var fixture = new Fixture();
-        fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
-        fixture.Store("sample", "{}");
-        fixture
-            .Sbx.FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((SandboxInfo?)null);
-
-        (await fixture.Run()).Should().Be(1);
-
-        fixture.Console.AllText.Should().Contain("abox create");
-        await fixture.NoWrites();
-        await fixture
-            .Sbx.DidNotReceive()
-            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
-        await fixture
-            .Sbx.DidNotReceive()
-            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    [Theory]
-    [InlineData("destination")]
-    [InlineData("policy")]
-    [InlineData("transfer")]
-    public async Task TransferAndTargetPreparationFailuresAreValueFreeAndForceDoesNotBypassThem(
-        string failurePhase
-    )
-    {
-        using var fixture = new Fixture();
-        fixture.Configure("""{"squad":"ac","userSecrets":["first","later"]}""");
-        fixture.Store("first", "{}");
-        fixture.Store("later", "{}");
-        if (failurePhase == "destination")
-            fixture
-                .Sbx.ValidateUserSecretsDestinationAsync(
-                    Arg.Any<string>(),
-                    Arg.Any<IReadOnlyList<string>>(),
-                    Arg.Any<CancellationToken>()
-                )
-                .Returns(
-                    Task.FromException(new AboxException("synthetic-password 123456789 true"))
-                );
-        else if (failurePhase == "policy")
-            fixture
-                .Sbx.GetUserSecretsHostPortsAsync(fixture.Name, Arg.Any<CancellationToken>())
-                .Returns(
-                    Task.FromException<IReadOnlyList<int>>(
-                        new AboxException("synthetic-password 123456789 true")
-                    )
-                );
-        else
-            fixture
-                .Sbx.WriteUserSecretsAsync(
-                    Arg.Any<string>(),
-                    "later",
-                    Arg.Any<string>(),
-                    Arg.Any<CancellationToken>()
-                )
-                .Returns(
-                    Task.FromException(new AboxException("synthetic-password 123456789 true"))
-                );
-
-        (await fixture.Run("--force", "--verbose")).Should().Be(1);
-
-        fixture
-            .Console.AllText.Should()
-            .NotContain("synthetic-password")
-            .And.NotContain("123456789 true")
-            .And.Contain("retry");
-        if (failurePhase != "transfer")
-            await fixture.NoWrites();
-        else
-            fixture.Console.AllText.Should().Contain("1 completed").And.Contain("rollback");
     }
 
     [Theory]
