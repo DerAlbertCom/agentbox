@@ -67,8 +67,33 @@ does not skip the workload image build.
    image building. `LocalWorkload` records the unique tag, image content ID,
    Docker context, runtime kit directory and its fingerprint on image builds.
 
-The build lives in `<state dir>/builds/<squad>/<tag>/`. The tag is `latest` unless the
-command or the user configuration says otherwise.
+The build lives in `<state dir>/builds/<team>/<squad>/<tag>/`, with lowercase team
+and squad path segments. The tag is `latest` unless the command or the user
+configuration says otherwise. Teams sharing a squad/tag keep separate generated
+sources, manifests, state mixins and local image selections, including in one
+multi-team build. Separate source projects deliberately using the same team identity
+still share that team's local storage; project identity is not a storage dimension.
+
+Build-store reads check the manifest's squad, tag and explicit team ownership marker
+(`Reference`). If no qualified manifest exists, an old
+`<state dir>/builds/<squad>/<tag>/build.json` is usable only with matching, unambiguous
+ownership. Missing/conflicting ownership, duplicate JSON properties or unreadable
+metadata require rebuilding for the requested team; no directory/source-path
+inference substitutes for provenance. A present but invalid qualified manifest
+never falls back to an older one. Builds write only the new layout: old sources,
+manifests, images and runtime directories are not moved, deleted or relabelled.
+See [team-isolation verification](verification/team-qualified-builds.md) for the
+synthetic coverage and legacy compatibility checks.
+
+Normal and metadata-only builds, local/remote creation and reusable build-store
+access use the same registry-tag grammar: 1–128 ASCII letters, digits, underscores,
+periods or hyphens, starting with a letter, digit or underscore. The selected
+`--tag` or configured `defaultTag` is rejected before tag-derived filesystem access,
+generated script/certificate cleanup or external-tool/runtime operations. Paths,
+separators, whitespace and empty/overlong tags are invalid. An omitted `defaultTag`
+still means `latest`; an explicitly blank default is invalid when selected, not a
+request to fall back to `latest`. Valid explicit tags can override invalid defaults.
+Published reference naming and tag promotion are unchanged.
 
 **Metadata-only preparation:** `--metadata-only` resolves configurations, writes
 generated workload/state sources and saves the manifest, but skips sbx preflight,
@@ -80,7 +105,7 @@ The command reports that no image was built/selected and prints the remote creat
 command. `--no-personal` still excludes personal declarations and captures source
 fingerprints; all existing publication provenance checks remain in force.
 
-This mode explicitly replaces the selected squad/tag manifest and **invalidates
+This mode explicitly replaces the selected team/squad/tag manifest and **invalidates
 any previous local image selection, even with identical inputs**. It does not
 delete existing images, runtime kit directories or sandboxes, and does not retain
 an image whose validity could require Docker checks. To retain another local
@@ -329,6 +354,18 @@ The same user configuration also accepts:
 - `teamsDirectory`: the project's teams directory, `teams` by default.
 - `kitsDirectory`: the kits directory relative to the project root, `kits` by default.
 
+Source discovery searches the start directory and its parents. `build`, `publish`
+and `secrets` start at the current directory; local `create` starts at its resolved
+location. An explicit `--root` overrides that start (local create only), with
+relative paths made absolute before parent search. The discovered team carries
+its owning project root into local kit/shared-workload lookup and build metadata;
+nested invocation directories never become accidental kit roots. Configured nested
+teams/kits directories, own-team-first base lookup, cross-team ambiguity checks
+and personal additions retain the same resolution rules. Team/default selection
+is shared in `AboxConfig`, preserving repeated teams for build/publish and single
+teams for create/secrets. Settings are still loaded only by command actions, not
+for help or internal exec/pipe commands.
+
 `--tag` chooses the published set or local build tag, `latest` by default.
 `--local` opts into local kits and includes their local/personal customizations.
 Pull failures are reported without a silent local fallback.
@@ -353,6 +390,16 @@ from this path, but the first thin build/layer transfer can still take time.
 Frontend resolution, registry-kit metadata and custom mixin recipes can still
 need network/build work; `--local` does not promise fully offline creation or
 prebuild arbitrary mixin recipes. The repository's mixins are declaration-only.
+
+`Kits/StateEntry` owns the shared portable state-path and overlap rules for `.abox`
+resolution, consumed local manifests and bundled published metadata. Creation
+validates the entire stored state list before MCP lookup/registration, state
+directory preparation or sandbox replacement, then mounts only those validated
+entries. Stored paths must be canonical and retain their original derived host
+mapping; they are not repaired on consumption. Sandbox overlap and portable
+host-mapping overlap (including case and Unicode-normalization aliases) are both
+rejected. Valid home-relative, absolute and whole-home mappings retain their
+existing persistence layout. See [the state input rules and mapping examples](authoring.md#state).
 
 Remote create instead consumes the published set's already built/processed
 workload and mixin layers and their merged v3 declarations. It does not pass
@@ -381,14 +428,20 @@ published tag.
    recorded squad; it copies no secrets and changes no squad. When replacement is
    accepted and the folder config has `squad`, requires a known matching sandbox
    record before preparation/replacement. A conflict never silently switches squads.
-4. For a locally created sandbox, offers to replace it when the build of its squad is newer than the one the
+4. For a locally created sandbox, offers to replace it when the build of its recorded
+   team/squad/tag is newer than the one the
    sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
    the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local,
    resolving team sources from the newer build's recorded root (or the sandbox
    location for legacy metadata), so a separate `create --root` project stays usable.
    Accepted replacement uses `SandboxCreator`, including shared user-secret
    preparation/copying. Failed required copying prevents launch. Ordinary run or
-   declining the newer build never reads selected host stores or resyncs secrets.
+    declining the newer build never reads selected host stores or resyncs secrets.
+    Another team's build is never offered or borrowed for a create hint. Unproven or
+    invalid local metadata reports a rebuild instruction without interrupting an
+    existing sandbox's ordinary launch. A teamless legacy record can recover a hint
+    only from an explicitly owned legacy manifest; it does not search other teams'
+    qualified stores or use source paths to guess identity.
 5. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
 6. Asks the runtime where the workspace is (`WORKSPACE_DIR`) and starts the launcher.
@@ -406,7 +459,11 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
 - `list` shows the services the kits ask for, the kits that ask for them, and whether
   the value is stored on the host.
 - `set` asks for the values and stores them. The value goes through the standard input
-  of sbx, so it stays out of the process list and out of the shell history.
+  of sbx as explicit UTF-8 without a BOM or added newline, preserving non-ASCII service
+  and custom secrets independently of the console code page. It stays out of process
+  arguments, environment settings and shell history. Normal redacted diagnostics remain
+  available; this encoding opt-in does not change sensitive-transfer suppression,
+  attached-console streams or raw pipes.
 - `remove` takes the values off the host. Custom secrets are matched by `--host`,
   or by sbx's `--env-name` selector when only `env` was declared; service names
   are used only for service secrets. `list` uses the same custom-secret identity.
@@ -487,8 +544,11 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   any writes, even with empty filters, authoritative host values or force.
   See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
-  before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
-  using sbx policy discovery, retaining originals for deny/force accounting.
+  before writing. `UserSecretsCopy.Target.cs` discovers authorized host ports and
+  prepares targets, retaining originals for deny/force accounting. Pure internal
+  `EndpointAdaptation` handles URL, SQL Server, PostgreSQL, Oracle and recognized
+  split-setting parsing/rewriting using only those ports, resolved effective settings
+  and value-free diagnostic context; it performs no discovery, selection or copying.
   Selected host keys block generated replacements. Eligible appsettings-only
   values produce flat effective-key overrides subject to the same deny/filter
   checks. `UserSecretsCopy.SharedStores.cs` merges generic generated-key candidates
@@ -571,9 +631,9 @@ provenance below describes existing runtime metadata, not a kit lookup.
   authorities, SQL Server comma-port fields (optional `tcp:`), and separate
   Host/Server + Port database fields. Standard URL scheme defaults and the
   PostgreSQL Host default 5432 are eligible only when that same host port is mapped.
-  The private `UserSecretsCopy.Oracle.cs` adapter handles Easy Connect/Plus and
-  structural descriptors, including quoted `Data Source` values. It maps parsed
-  host spans back to the original text, preserving credentials, service/SID names,
+  The internal `EndpointAdaptation.Oracle.cs` implementation handles Easy
+  Connect/Plus and structural descriptors, including quoted `Data Source` values.
+  It maps parsed host spans back to the original text, preserving credentials, service/SID names,
   options, formatting and compound remote/unmapped destinations. Easy Connect's
   default 1521 is eligible only if mapped; descriptors require explicit ports.
 - Preserve named endpoints, including `host.docker.internal`, and their ports
@@ -670,14 +730,25 @@ the assembled repository by their build id (the tags `«id»`, `«id»-kit-N` an
 kit sources: an sbx-kit-src image stays as long as its image id is in the kept set. What
 is left goes with `sbx template rm`, one image at a time, and sbx asks nothing (--force).
 
-With `--full`, the prune reaches for every sbx kit image of a known age, not only the
-stale sets: it removes everything, and what a sandbox uses, sbx refuses and keeps. The
-prune reports what sbx keeps and is happy about it. With `--sbx`, it stops the running
-sandboxes first (`sbx stop`, one per sandbox, the kit builder included).
+With `--full`, the prune reaches for every eligible sbx kit image of a known age and
+id, not only the stale sets, subject to the conservative checks below. What a sandbox
+uses, sbx refuses and keeps; full prune reports those refusals without failing. With
+`--sbx`, it stops the running sandboxes first (`sbx stop`, one per sandbox, the kit
+builder included).
 
-The command never touches secrets, or images of any other repository, and it never
-removes an image whose age or id sbx does not report: prune only throws away what it
-can prove is stale.
+Both modes recognize only the exact repository names `sandbox-kit-assembled` and
+`sbx-kit-src`, either bare or as the final `/`-delimited component of a qualified
+repository (for example `docker.io/library/sbx-kit-src`). Arbitrary suffix matches
+such as `other-sbx-kit-src` do not qualify and cannot influence newest-set selection.
+An image without a reported age or nonblank image id stays in both modes. If any
+assembled image has uncertain metadata, its whole build group (including kit and
+template aliases) stays, and all kit sources stay: the inventory cannot prove which
+sources that retained set may need. Other complete assembled groups can still be
+removed when eligible; normal mode also keeps every group tied for newest.
+
+The command never calls broad `sbx prune` or `sbx reset`, touches secrets or unrelated
+repositories, or removes host-Docker local builds or registry components. All removal
+requests remain individual `sbx template rm` calls, subject to runtime in-use refusals.
 
 ## The files
 
@@ -767,7 +838,8 @@ install step per tool. The versions of one tool are installed in one step, so mi
 keeps them all, and every list is reversed, because mise activates the first entry of
 its list: the last entry of the workload is the default of the image.
 The GitHub token is passed as a BuildKit secret, so it never lands in a layer. The
-generated image has `/home/agent/workspace` as its working directory.
+generated image has `/home/agent/workspace` as its default working directory, not
+a guaranteed runtime workspace mount path.
 Generated Dockerfiles and workload/state descriptors, and copied workload scripts,
 use LF line endings on every host OS. Scripts are copied by file name; two source
 paths with the same file name (case-insensitive for cross-platform builds) are
@@ -869,7 +941,10 @@ For architecture and coding conventions, see the
   for a squad and the team has more than one, it asks which one.
 - **The workspace is where the runtime puts it.** The runtime mounts the folder of the
   host at the same path in the sandbox and says so with `WORKSPACE_DIR`, so the
-  launcher asks for it instead of assuming `/home/agent/workspace`.
+  launcher asks for it instead of assuming `/home/agent/workspace`. The shipped
+  OpenCode and pi guidance also directs agents to enter `WORKSPACE_DIR`, retaining
+  their agent-specific conventions. Both distinguish host proxy credentials from
+  explicitly copied .NET User Secrets in sensitive runtime application files.
 - **The state directories of a squad are mounted from the host.** sbx mounts a host
   directory only where a kit asks for it, so abox writes a mixin that asks for every
   state directory and passes one `--mount` per directory.

@@ -3,6 +3,7 @@ using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
+using Abox.Naming;
 
 namespace Abox.Features.Build;
 
@@ -31,7 +32,7 @@ public sealed class BuildCommand : Command
         var root = new Option<string>("--root")
         {
             Description =
-                "The directory of the project that holds the teams folder. Defaults to the current directory.",
+                "The directory to start searching for team sources. Defaults to the current directory.",
         };
 
         var tag = new Option<string>("--tag")
@@ -71,17 +72,9 @@ public sealed class BuildCommand : Command
                     async () =>
                     {
                         var settings = config.Value;
-                        var named = parseResult.GetValue(teams);
-                        var wanted =
-                            named is { Length: > 0 } ? named
-                            : settings.DefaultTeam is { } fallback ? [fallback]
-                            : [];
-                        if (wanted.Length == 0)
-                        {
-                            throw new AboxException(
-                                "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
-                            );
-                        }
+                        var selectedTag = parseResult.GetValue(tag) ?? settings.DefaultTag;
+                        RegistryImageName.ValidateTag(selectedTag);
+                        var wanted = settings.ResolveTeams(parseResult.GetValue(teams));
 
                         var rootDirectory = Path.GetFullPath(
                             parseResult.GetValue(root) ?? Directory.GetCurrentDirectory()
@@ -91,7 +84,7 @@ public sealed class BuildCommand : Command
                                 .Select(team => resolver.Value.ResolveTeam(rootDirectory, team))
                                 .ToList(),
                             rootDirectory,
-                            parseResult.GetValue(tag) ?? settings.DefaultTag,
+                            selectedTag,
                             !parseResult.GetValue(verify),
                             !parseResult.GetValue(personal),
                             parseResult.GetValue(metadata)

@@ -14,6 +14,8 @@ namespace Abox.Infrastructure;
 /// <param name="StandardInput">The text the child reads from its standard input, or null.</param>
 /// <param name="OutputPolicy">Sensitive calls discard output/errors and use UTF-8/no-BOM stdin.
 /// CapturedSensitive retains metadata for parsing. Both suppress diagnostics and forbid attached streams.</param>
+/// <param name="UseUtf8StandardInput">Write supplied stdin as strict UTF-8 without a BOM,
+/// independently of console encoding. Does not change output diagnostics or inherited streams.</param>
 public sealed record ProcessRequest(
     string FileName,
     IReadOnlyList<string> Arguments,
@@ -21,7 +23,8 @@ public sealed record ProcessRequest(
     string? WorkingDirectory = null,
     IReadOnlyDictionary<string, string>? Environment = null,
     string? StandardInput = null,
-    ProcessOutputPolicy OutputPolicy = ProcessOutputPolicy.Normal
+    ProcessOutputPolicy OutputPolicy = ProcessOutputPolicy.Normal,
+    bool UseUtf8StandardInput = false
 )
 {
     public override string ToString() => "ProcessRequest (arguments, environment and input hidden)";

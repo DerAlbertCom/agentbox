@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
@@ -27,10 +26,7 @@ public sealed class PublishService(
 
     public async Task<int> PublishAsync(PublishRequest request, CancellationToken cancellationToken)
     {
-        if (!Regex.IsMatch(request.Tag, @"\A[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}\z"))
-        {
-            throw new AboxException($"'{request.Tag}' is not a valid registry tag.");
-        }
+        RegistryImageName.ValidateTag(request.Tag);
 
         RejectCaseCollisions(request);
         var builds = request
@@ -45,12 +41,10 @@ public sealed class PublishService(
             throw new AboxException("No squad builds were selected for publication.");
         }
 
-        if (!programs.Exists("docker"))
-        {
-            throw new AboxException(
-                "Publishing v3 kits needs Docker with the Buildx plugin on PATH. Install it and configure a BuildKit builder; see docs/implementation.md."
-            );
-        }
+        OciRegistry.RequireDocker(
+            programs,
+            "Publishing v3 kits needs Docker with the Buildx plugin on PATH. Install it and configure a BuildKit builder; see docs/implementation.md."
+        );
 
         using var temporary = new TemporaryDirectory("abox-publish-", "publication", console);
         var directory = temporary.Path;
@@ -138,21 +132,10 @@ public sealed class PublishService(
     {
         RepositoryName(team.Name, squad);
         var build =
-            store.Load(squad, tag)
+            store.Load(team.Name, squad, tag)
             ?? throw new AboxException(
                 $"No local build of '{squad}:{tag}'. Run 'abox build --team {team.Name} --tag {tag} --no-personal' first."
             );
-        if (
-            build.Squad != squad
-            || build.Tag != tag
-            || build.Reference != ImageName.OfTeam(team.Name, tag)
-        )
-        {
-            throw new AboxException(
-                $"The local build '{squad}:{tag}' is not a build of team '{team.Name}'. Run 'abox build --team {team.Name} --tag {tag} --no-personal' again."
-            );
-        }
-
         if (build.IncludesPersonalConfigurations != false)
         {
             throw new AboxException(
@@ -403,15 +386,9 @@ public sealed class PublishService(
             "--provenance=mode=min",
             "--push",
         ]);
-        if (
-            request.Kind == KitKind.Workload
-            && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN"))
-        )
+        if (request.Kind == KitKind.Workload)
         {
-            arguments.AddRange([
-                "--secret",
-                $"id={WorkloadKitGenerator.GitHubTokenSecret},env=GITHUB_TOKEN",
-            ]);
+            arguments.AddRange(WorkloadKitGenerator.GitHubBuildSecretArguments());
         }
 
         arguments.Add(request.Directory);
@@ -450,7 +427,7 @@ public sealed class PublishService(
         return pinned;
     }
 
-    internal async Task<IReadOnlyList<JsonElement>> InspectAsync(
+    private async Task<IReadOnlyList<JsonElement>> InspectAsync(
         string reference,
         string kind,
         CancellationToken cancellationToken,

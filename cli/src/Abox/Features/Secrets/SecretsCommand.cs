@@ -72,12 +72,10 @@ public sealed class SecretsCommand : Command
                 await CommandHandling.RunAsync(
                     async () =>
                     {
+                        var request = options.ReadRequest(parseResult, config);
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                             return 1;
-                        return await action(
-                            options.ReadRequest(parseResult, config),
-                            cancellationToken
-                        );
+                        return await action(request, cancellationToken);
                     },
                     console
                 )
@@ -101,7 +99,7 @@ public sealed class SecretsCommand : Command
         private readonly Option<string> root = new("--root")
         {
             Description =
-                "The directory of the project that holds the teams folder. Defaults to the current directory.",
+                "The directory to start searching for team sources. Defaults to the current directory.",
         };
 
         private readonly Option<string[]> service = new("--service")
@@ -127,12 +125,7 @@ public sealed class SecretsCommand : Command
             var wanted = withService ? parseResult.GetValue(service) ?? [] : [];
             if (parseResult.GetValue(squad) is not { } squadName)
                 throw new AboxException("No squad is given. Give --squad <name>.");
-            var teamName =
-                parseResult.GetValue(team)
-                ?? config.Value.DefaultTeam
-                ?? throw new AboxException(
-                    "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
-                );
+            var teamName = config.Value.ResolveTeam(parseResult.GetValue(team));
             return new SecretsRequest(
                 teamName,
                 squadName,

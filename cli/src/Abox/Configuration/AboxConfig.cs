@@ -29,4 +29,16 @@ public sealed class AboxConfig
     /// <summary>The absolute sandbox folder, preferring the command line over the user default.</summary>
     public string ResolveLocation(string? location) =>
         Path.GetFullPath(location ?? DefaultLocation ?? Directory.GetCurrentDirectory());
+
+    /// <summary>The explicitly selected team, otherwise the required user default.</summary>
+    public string ResolveTeam(string? team) =>
+        team
+        ?? DefaultTeam
+        ?? throw new AboxException(
+            "No team is given. Give --team <name> or set 'defaultTeam' in the user configuration."
+        );
+
+    /// <summary>Multi-team commands retain all explicit selections, otherwise the user default.</summary>
+    public IReadOnlyList<string> ResolveTeams(IReadOnlyList<string>? teams) =>
+        teams is { Count: > 0 } ? teams : [ResolveTeam(null)];
 }

@@ -12,7 +12,7 @@ public sealed class SquadResolver(AboxConfig config)
     /// Resolves a team: its folder in the teams folder of the project, and the squads
     /// of it that a team build makes, the ones no other squad names as its base.
     /// </summary>
-    /// <param name="rootDirectory">The directory of the project that holds its teams folder.</param>
+    /// <param name="rootDirectory">The directory to start searching for the team's project.</param>
     /// <param name="teamName">The name of the team.</param>
     public ResolvedTeam ResolveTeam(string rootDirectory, string teamName)
     {
@@ -20,13 +20,16 @@ public sealed class SquadResolver(AboxConfig config)
     }
 
     /// <summary>The folder of a team, in the teams folders of the directory or a parent one.</summary>
-    private string TeamDirectory(string rootDirectory, string teamName)
+    private (string Folder, string RootDirectory) TeamDirectory(
+        string rootDirectory,
+        string teamName
+    )
     {
         foreach (var current in WalkUp(rootDirectory))
         {
             if (TeamFolder(current, teamName) is { } folder)
             {
-                return folder;
+                return (folder, current);
             }
         }
 
@@ -53,8 +56,9 @@ public sealed class SquadResolver(AboxConfig config)
     /// <summary>
     /// The squads of a team are the ones no other squad of it names as its base.
     /// </summary>
-    private ResolvedTeam Plan(string folder)
+    private ResolvedTeam Plan((string Folder, string RootDirectory) location)
     {
+        var (folder, rootDirectory) = location;
         var name = Path.GetFileName(folder);
         var files = Directory.EnumerateFiles(folder, "*.abox").ToList();
         if (files.Count == 0)
@@ -81,16 +85,20 @@ public sealed class SquadResolver(AboxConfig config)
             );
         }
 
-        return new ResolvedTeam(name, folder, squads);
+        return new ResolvedTeam(name, folder, squads) { RootDirectory = rootDirectory };
     }
 
-    public sealed record ResolvedTeam(string Name, string Folder, IReadOnlyList<string> Squads);
+    public sealed record ResolvedTeam(string Name, string Folder, IReadOnlyList<string> Squads)
+    {
+        /// <summary>The owning project root; absent for a remote selection without local sources.</summary>
+        public string? RootDirectory { get; init; }
+    }
 
     /// <summary>
     /// Resolves a squad from the configurations in a project and the personal
     /// configurations of the user.
     /// </summary>
-    /// <param name="rootDirectory">The directory of the project that holds its teams folder.</param>
+    /// <param name="rootDirectory">The directory to start searching for the team's project.</param>
     /// <param name="squadName">The name of the squad.</param>
     /// <param name="personalConfigurations">The personal <c>.abox</c> files of the user.</param>
     public ResolvedSquad Resolve(
@@ -102,7 +110,7 @@ public sealed class SquadResolver(AboxConfig config)
     {
         var team = TeamDirectory(rootDirectory, teamName);
 
-        var projectChain = LoadChain(new ConfigRoot(team, squadName), searchParents: true);
+        var projectChain = LoadChain(new ConfigRoot(team.Folder, squadName), searchParents: true);
         var personalChains = personalConfigurations
             .Select(file =>
                 LoadChain(
@@ -117,9 +125,9 @@ public sealed class SquadResolver(AboxConfig config)
 
         var files = projectChain.Concat(personalChains.SelectMany(chain => chain)).ToList();
 
-        var workload = ResolveWorkload(projectChain, personalChains, rootDirectory);
+        var workload = ResolveWorkload(projectChain, personalChains, team.RootDirectory);
         var parameters = MergeParameters(files);
-        var kits = MergeKits(files, parameters, rootDirectory);
+        var kits = MergeKits(files, parameters, team.RootDirectory);
         var mcp = MergeMcp(files, parameters);
         var state = MergeState(files);
         var secrets = MergeSecrets(files);
@@ -129,7 +137,7 @@ public sealed class SquadResolver(AboxConfig config)
 
         return new ResolvedSquad(
             name,
-            rootDirectory,
+            team.RootDirectory,
             workload,
             kits,
             parameters,
@@ -229,7 +237,7 @@ public sealed class SquadResolver(AboxConfig config)
 
     private static IEnumerable<string> WalkUp(string directory)
     {
-        var current = directory;
+        var current = Path.GetFullPath(directory);
         while (true)
         {
             yield return current;
@@ -451,21 +459,7 @@ public sealed class SquadResolver(AboxConfig config)
                         server.Name,
                         server.Url is null
                             ? null
-                            : ParameterReference.Expand(server.Url, parameters, file.Path),
-                        server.Command is null
-                            ? null
-                            : ParameterReference.Expand(server.Command, parameters, file.Path),
-                        server
-                            .Arguments?.Select(argument =>
-                                ParameterReference.Expand(argument, parameters, file.Path)
-                            )
-                            .ToList(),
-                        server.Headers?.ToDictionary(
-                            header => header.Key,
-                            header =>
-                                ParameterReference.Expand(header.Value, parameters, file.Path),
-                            StringComparer.Ordinal
-                        )
+                            : ParameterReference.Expand(server.Url, parameters, file.Path)
                     )
                 );
             }
@@ -516,20 +510,11 @@ public sealed class SquadResolver(AboxConfig config)
                     "A state directory is declared once."
                 );
 
-                foreach (var existing in entries)
-                {
-                    if (existing.Contains(entry) || entry.Contains(existing))
-                    {
-                        throw new AboxException(
-                            $"The state directories '{existing.SandboxPath}' and '{entry.SandboxPath}' overlap. sbx refuses overlapping host mounts."
-                        );
-                    }
-                }
-
                 entries.Add(entry);
             }
         }
 
+        StateEntry.EnsureDisjoint(entries);
         return entries;
     }
 

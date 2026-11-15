@@ -13,9 +13,6 @@ namespace Abox.Sandboxes;
 /// <summary>A pinned squad set and its authoritative runtime metadata.</summary>
 public sealed record PublishedSquad(string Reference, BuildManifest Metadata);
 
-/// <summary>A resolved platform manifest and its content identity.</summary>
-internal sealed record OciManifest(string Digest, JsonElement Manifest);
-
 /// <summary>Reads authoritative runtime metadata from a processed, digest-pinned squad set.</summary>
 public interface IPublishedSquadSource
 {
@@ -49,12 +46,10 @@ public sealed class PublishedSquadSource(
         CancellationToken cancellationToken
     )
     {
-        if (!programs.Exists("docker"))
-        {
-            throw new AboxException(
-                $"Remote create needs Docker with Buildx to read the published squad metadata. Install Docker and run 'docker login {RegistryImageName.Registry}' with read access; no local build or team sources are needed."
-            );
-        }
+        OciRegistry.RequireDocker(
+            programs,
+            $"Remote create needs Docker with Buildx to read the published squad metadata. Install Docker and run 'docker login {RegistryImageName.Registry}' with read access; no local build or team sources are needed."
+        );
 
         var architecture =
             RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "amd64";
@@ -125,7 +120,9 @@ public sealed class PublishedSquadSource(
         return config;
     }
 
-    internal async Task<OciManifest> ResolveManifestAsync(
+    private sealed record OciManifest(string Digest, JsonElement Manifest);
+
+    private async Task<OciManifest> ResolveManifestAsync(
         string reference,
         string architecture,
         CancellationToken cancellationToken,
@@ -207,7 +204,6 @@ public sealed class PublishedSquadSource(
             createdAt == default
             || state.Any(item => item is null)
             || mcp.Any(item => item is null)
-            || state.DistinctBy(item => item.SandboxPath).Count() != state.Count
             || mcp.DistinctBy(item => item.Name).Count() != mcp.Count
         )
             throw new JsonException("Incomplete or duplicate runtime metadata.");
@@ -247,21 +243,23 @@ public sealed class PublishedSquadSource(
 
     private static void ValidateState(IReadOnlyList<ManifestState> state, JsonElement descriptor)
     {
+        try
+        {
+            StateEntry.EnsureDisjoint(
+                state
+                    .Select(entry => StateEntry.FromStored(entry.SandboxPath, entry.RelativePath))
+                    .ToList()
+            );
+        }
+        catch (AboxException exception)
+        {
+            throw new JsonException("Unsafe or overlapping state paths.", exception);
+        }
+
         foreach (var entry in state)
         {
             if (
-                !SafeRelative(entry.RelativePath)
-                || !entry.SandboxPath.StartsWith('/')
-                || !SafeRelative(entry.SandboxPath[1..])
-                || (
-                    entry.SandboxPath.StartsWith(
-                        StateEntry.SandboxHome + "/",
-                        StringComparison.Ordinal
-                    )
-                        ? entry.SandboxPath[(StateEntry.SandboxHome.Length + 1)..]
-                        : entry.SandboxPath[1..]
-                ) != entry.RelativePath
-                || !descriptor
+                !descriptor
                     .GetProperty("capabilities")
                     .EnumerateArray()
                     .Any(capability =>
@@ -297,18 +295,6 @@ public sealed class PublishedSquadSource(
             }
         }
     }
-
-    private static bool SafeRelative(string value) =>
-        !string.IsNullOrWhiteSpace(value)
-        && !value.Contains('\\')
-        && !value.Contains(':')
-        && value
-            .Split('/')
-            .All(part =>
-                part.Length > 0
-                && part is not ("." or "..")
-                && part.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
-            );
 
     private static string ReadSquadJson(string archive)
     {

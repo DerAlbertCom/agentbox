@@ -184,20 +184,12 @@ public sealed class AboxFile
                 continue;
             }
 
-            entry.RejectUnknownKeys("name", "url", "command", "args", "headers");
+            entry.RejectUnknownKeys("name", "url");
             var name =
                 entry.GetString("name")
                 ?? throw new AboxException($"'{reader.Source}': an mcp entry needs a 'name'.");
 
-            servers.Add(
-                new McpDeclaration(
-                    name,
-                    entry.GetString("url"),
-                    entry.GetString("command"),
-                    entry.GetStringList("args"),
-                    entry.GetStringMap("headers")
-                )
-            );
+            servers.Add(new McpDeclaration(name, entry.GetString("url")));
         }
 
         return servers;

@@ -23,12 +23,12 @@ public sealed class AboxPaths
     /// <summary>The configuration file itself.</summary>
     public string ConfigFile => Path.Combine(ConfigDirectory, ConfigFileName);
 
-    /// <summary>The root of all local builds, one directory per squad and tag.</summary>
+    /// <summary>The root of all local builds, qualified by team, squad and tag.</summary>
     public string BuildsDirectory => Path.Combine(StateDirectory, "builds");
 
     /// <summary>The directory of one local build.</summary>
-    public string BuildDirectory(string squad, string tag) =>
-        Path.Combine(BuildsDirectory, squad, tag);
+    public string BuildDirectory(string team, string squad, string tag) =>
+        Path.Combine(BuildsDirectory, team.ToLowerInvariant(), squad.ToLowerInvariant(), tag);
 
     /// <summary>
     /// Resolves the directories for the current user: XDG variables when they are set to an

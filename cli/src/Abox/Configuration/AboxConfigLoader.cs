@@ -44,7 +44,9 @@ public static class AboxConfigLoader
             DefaultLocation = reader.GetString("defaultLocation"),
             TeamsDirectory = Or(reader.GetString("teamsDirectory"), defaults.TeamsDirectory),
             KitsDirectory = Or(reader.GetString("kitsDirectory"), defaults.KitsDirectory),
-            DefaultTag = Or(reader.GetString("defaultTag"), defaults.DefaultTag),
+            DefaultTag = reader.Has("defaultTag")
+                ? reader.GetString("defaultTag") ?? string.Empty
+                : defaults.DefaultTag,
             PullRepository = pullRepository,
             UserSecretsDenyList = reader.GetStringList("userSecretsDenyList"),
         };

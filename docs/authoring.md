@@ -38,12 +38,16 @@ abox run --location <folder>                 # open the sandbox of the folder
 - `build` makes the kits of the team: the workload and every squad of it that no other
   squad of the team names as its `base`. A squad that others build on comes with the
   squad that inherits from it. The kits go into the build directory
-  (`<state dir>/builds/`). A normal build checks additional local kit declarations
+  (`<state dir>/builds/<team>/<squad>/<tag>/`). Team and squad names are lowercased
+  in this layout, so teams sharing a squad name keep independent sources and images.
+  A normal build checks additional local kit declarations
   with `sbx kit inspect`, passing their resolved arguments, unless `--no-verify` is
   given. Inspection does not build images; sbx 0.51.0 cannot inspect recipe-based
   local kits, which require `--no-verify` and are processed by sbx at creation.
   A normal build always builds the workload image, even with `--no-verify`.
-  `--tag` stores the build under another name than `latest`.
+  `--tag` stores the build under another name than `latest`. Older squad/tag-only
+  manifests remain usable only when their explicit ownership matches the selected
+  team; otherwise rebuild. Old artifacts are not automatically migrated or removed.
 - `create` names the sandbox after the folder it works on and asks before it replaces
   an existing one. Remote create requires `--squad`; only `--local` asks which squad
   of the team to use when it is omitted, and uses the only one without asking.
@@ -60,6 +64,34 @@ abox run --location <folder>                 # open the sandbox of the folder
 
 The user configuration (in the abox config directory) can fix the defaults:
 `defaultTeam` is the team the commands use when they are not asked for one.
+An explicit `--team` replaces that default; `build` and `publish` accept repeated
+`--team` selections, while `create` and `secrets` select one team. Without either
+an explicit team or a default, these commands report the same missing-team error.
+
+### Finding sources from nested folders
+
+`build`, `publish` and `secrets` search for the selected team starting in the current
+directory and continuing through its parents. Local `create` starts at its resolved
+`--location`/`defaultLocation` instead. For each command, `--root <dir>` overrides
+that start directory (`create` requires `--local` with it). Relative roots are
+resolved against the invocation directory before searching parents, just like their
+absolute equivalents; a root need not itself contain the teams folder.
+
+Once the team is found, the project that owns that teams folder also supplies the
+local kits and shared workloads, not the nested invocation folder or sandbox
+location. `teamsDirectory` (default `teams`) and `kitsDirectory` (default `kits`)
+select the configured directories within that owning project, including nested
+paths such as `config/teams` and `shared/kits`. The workload beside the root
+configuration still wins over a shared workload. Personal configuration additions
+use the selected project's kits too. Builds record the owning project root so a
+later local replacement can find the same sources.
+
+For example, from `project/src/app`, with sources under `project/teams` and
+`project/kits`, `abox build --team sample`, `abox publish --team sample` and
+`abox secrets list --team sample --squad ac` use the same project sources as when
+run from `project`. `abox create --local --team sample --squad ac --location .`
+selects the same team's local build. A separate workspace can use
+`abox create --local --team sample --squad ac --location <workspace> --root <project>`.
 
 ## The squad: `.abox`
 
@@ -101,7 +133,7 @@ secrets:                                     # the services the kits ask for
 | `kits` | The kits of the squad. See [Kits](#kits). |
 | `parameters` | Named values. Kits and MCP servers read them with `${{ parameters.NAME }}`. |
 | `mcp` | The MCP servers of every agent. A server without `url` has to be registered on the host already (`sbx mcp add`); one with `url` abox registers itself. |
-| `state` | Directories inside the sandbox that keep their content when the sandbox is replaced. |
+| `state` | Directories inside the sandbox that keep their content when the sandbox is replaced. See [State](#state). |
 | `secrets` | The services whose values are kept on the host. See [Secrets](#secrets). |
 
 **How a squad is found.** The commands take `--team <name>`; the squad is the file of
@@ -151,6 +183,70 @@ capabilities:
 - This repository keeps working kits to copy from: `kits/pi-config` writes an agent
   configuration, `kits/github-enterprise-auth` reaches a host through a credential the
   host holds.
+
+## MCP servers
+
+An `mcp` entry is either a scalar registered-server name or a mapping with `name`
+and an optional `url`:
+
+```yaml
+mcp:
+  - azuredevops
+  - name: elastic
+    url: ${{ parameters.elastic-url }}
+```
+
+A name-only entry must already be registered on the host. For a URL entry, abox
+registers the server if its name is missing; it does not replace an existing host
+registration. URLs support the same parameter references as kit arguments. MCP
+names must be unique across the squad's base chain and personal additions. Local
+build manifests and published squad metadata preserve these names and resolved URLs.
+
+Only `name` and `url` are supported mapping keys. `command`, `args` and `headers`
+are rejected as unknown keys, even when empty: abox does not support launching MCP
+commands or configuring arguments, authentication headers or other transports.
+The error identifies the source `.abox` file and offending `mcp` field before
+generating that squad's build output, registering servers or replacing a sandbox.
+Remove the unsupported fields and use an existing host registration by name, or
+declare a name and URL.
+
+## State
+
+State declarations use sandbox paths, not host paths: `~` means `/home/agent`.
+Use `~`, `~/`, `~/directory` or an absolute Linux path beginning with a single `/`.
+The root `/` is not allowed. Relative paths, `~other-user`, leading `//` (UNC-like
+syntax), backslashes, drive/stream colons and `.` or `..` path segments are rejected.
+Names must be portable across supported hosts: no control characters,
+`< > " | ? *`, trailing dots/spaces or Windows device names such as `CON`, `NUL`,
+`COM1` and `LPT1` (including device names with extensions).
+
+For declarations in `.abox`, surrounding whitespace is trimmed and repeated
+interior forward slashes and trailing slashes are collapsed. For example,
+`~/.config//opencode/state/` means `/home/agent/.config/opencode/state`.
+Stored local manifests and published metadata must already contain the canonical
+absolute sandbox path and its matching host-relative path; invalid stored mappings
+are rejected, never silently repaired. Rebuild a local squad or rebuild/republish
+an invalid published squad.
+
+The existing host layout is preserved under `<abox state dir>/<sandbox>/`:
+
+| Sandbox declaration | Path below the sandbox's host state root |
+|---|---|
+| `~/.config/opencode/state` or `/home/agent/.config/opencode/state` | `.config/opencode/state` |
+| `/var/lib/cache` | `var/lib/cache` |
+| `~`, `~/` or `/home/agent` | `home/agent` (the existing whole-home mapping) |
+
+Every entry must be distinct and non-overlapping both in the sandbox and in its
+host mapping. Host comparisons ignore case and Unicode normalization differences
+on every platform, so a squad cannot work on Linux but alias another entry on
+Windows or macOS. For example, `~/.cache` conflicts with `~/.CACHE/sessions` and
+with `/.cache`, which maps to the same host directory. The whole-home declaration
+cannot be combined with any of its sandbox descendants.
+
+All state declarations are validated before preparing host state directories,
+registering MCP servers or deleting/replacing a sandbox; no mount request is made
+for invalid state. Valid state keeps the same host paths and contents on recreate.
+This does not add protection against malicious concurrent filesystem changes.
 
 ## Secrets
 
