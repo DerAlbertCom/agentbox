@@ -339,6 +339,18 @@ The same user configuration also accepts:
 - `teamsDirectory`: the project's teams directory, `teams` by default.
 - `kitsDirectory`: the kits directory relative to the project root, `kits` by default.
 
+Source discovery searches the start directory and its parents. `build`, `publish`
+and `secrets` start at the current directory; local `create` starts at its resolved
+location. An explicit `--root` overrides that start (local create only), with
+relative paths made absolute before parent search. The discovered team carries
+its owning project root into local kit/shared-workload lookup and build metadata;
+nested invocation directories never become accidental kit roots. Configured nested
+teams/kits directories, own-team-first base lookup, cross-team ambiguity checks
+and personal additions retain the same resolution rules. Team/default selection
+is shared in `AboxConfig`, preserving repeated teams for build/publish and single
+teams for create/secrets. Settings are still loaded only by command actions, not
+for help or internal exec/pipe commands.
+
 `--tag` chooses the published set or local build tag, `latest` by default.
 `--local` opts into local kits and includes their local/personal customizations.
 Pull failures are reported without a silent local fallback.
