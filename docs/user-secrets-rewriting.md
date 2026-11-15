@@ -154,10 +154,15 @@ new artifact or change global policy merely to fill that gap. See the
 [verification evidence and sanitized fixtures](verification/user-secrets/README.md).
 
 Automated tests exercise the production shared-copy and sbx/process seams with
-disposable synthetic host files. To run them:
+disposable synthetic host files. For the integrated #12 story's Debug/Release
+results and runner caveats, see the [combined verification record](verification/user-secrets-endpoint-story.md).
+On the current Windows host, select SDK 10 explicitly for the build and invoke
+the xUnit executable directly:
 
-```sh
-dotnet test --solution cli/agentbox.slnx --filter 'FullyQualifiedName~UserSecretsRewriteTests|FullyQualifiedName~UserSecretsPolicy'
+```powershell
+$sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
+dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.SplitSettingsCommandTests -noLogo -maxThreads 2
 ```
 
 The synthetic-only `RewriteProbe` below can exercise production discovery/copy in
@@ -214,7 +219,7 @@ and Debug probe build. The focused rewrite/policy/CLI suite passed **101 tests**
 with no skips. Those builds had zero warnings/errors; CSharpier and
 `git diff --check` passed. No Release test run was performed for #8.
 
-The latest post-review integrated run, `dotnet test cli/agentbox.slnx -c Debug`,
+The earlier #8 post-review integrated run, `dotnet test cli/agentbox.slnx -c Debug`,
 passed **756 tests**, with **4 explicit native-symlink privilege skips** (760 total),
 zero failures. The focused user-secrets/create/run regression set passed **366
 tests**, with the same **4 skips** (370 total). The Debug solution build had zero

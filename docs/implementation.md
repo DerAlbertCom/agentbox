@@ -589,6 +589,11 @@ govern output; unfiltered appsettings-only metadata supplies split-port eligibil
 See [shared-store verification](verification/user-secrets-shared-stores.md).
 See [Oracle command-level verification](verification/user-secrets-oracle.md).
 See [split-setting command-level verification](verification/user-secrets-split-settings.md).
+Final #12 review fixes and full integrated direct-executable verification are in
+[the combined story record](verification/user-secrets-endpoint-story.md): Debug
+and Release each passed **1168 tests**, with **7 platform skips**, zero failures,
+and zero-warning/error serial SDK 10 builds. Missing-port local Oracle descriptors
+now fail safely when 1521 is mapped; bare whitespace prose remains unchanged.
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force
