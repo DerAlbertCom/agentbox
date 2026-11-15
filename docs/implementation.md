@@ -474,11 +474,13 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   consumers beneath the `FolderConfig` location, excluding artifacts, escaping
   directory links and cycles. It never evaluates MSBuild. Selected project-local
   base/lowercase-development JSON is validated and merged case-insensitively;
-  only selected keys are retained. The prepared snapshots carry project originals
-  in memory, allowing project-only generation without a host secrets file.
+  only selected keys are retained. `PreparedUserSecrets` owns project originals
+  and association metadata in memory, separately from host snapshots, allowing
+  project-only generation without a host secrets file.
   Unmatched stores remain copy-only. Unreadable project XML warns without blocking
-  validated host-only copies, but prevents generation because consumers cannot be
-  established safely. Implicit workspace imports are detected, not evaluated.
+  validated host-only copies. Unreadable XML and possibly selected unresolved IDs
+  both prevent generation because consumers cannot be established safely. Implicit
+  workspace imports are detected, not evaluated.
   See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
   before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
@@ -584,8 +586,8 @@ same **4 skips** (370 total). The Debug solution build had zero warnings/errors;
 CSharpier and `git diff --check` passed. No Release build or tests were run for
 that final-review change.
 
-Issue #13 review-fix verification: **953 passed, zero failures, 7 platform skips**
-(960 total) in both Debug and Release. The skips include two new native file-link
+Issue #13 review-fix verification: **988 passed, zero failures, 7 platform skips**
+(995 total) in both Debug and Release. The skips include two new native file-link
 discovery fixtures that this Windows host cannot create. Both solution builds had
 zero warnings/errors;
 CSharpier and `git diff --check` passed. New command-level coverage includes bounded

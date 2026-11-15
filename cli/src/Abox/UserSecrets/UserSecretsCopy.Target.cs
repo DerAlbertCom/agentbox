@@ -73,7 +73,7 @@ public sealed partial class UserSecretsCopy
                         continue;
                     if (prepared.UnresolvedProjects.Count > 0)
                         throw new AboxException(
-                            $"{DescribeSetting(store.Id, key, project.Project)}: cannot generate overrides because consumers could not be determined for unreadable projects ({string.Join(", ", prepared.UnresolvedProjects.Select(path => JsonSerializer.Serialize(path)))}). Fix their XML/permissions and ordinary-file status, or supply authoritative selected host-secret values for copy-only behavior; no stores were copied."
+                            $"{DescribeSetting(store.Id, key, project.Project)}: cannot generate overrides because consumers could not be determined for projects with unreadable XML or unresolved UserSecretsId associations ({string.Join(", ", prepared.UnresolvedProjects.Select(path => JsonSerializer.Serialize(path)))}). Resolve their associations with unconditional literal IDs or fix their XML/permissions and ordinary-file status, or supply authoritative selected host-secret values for copy-only behavior; no stores were copied."
                         );
                     if (projects.Length > 1)
                         throw new AboxException(
@@ -189,7 +189,7 @@ public sealed partial class UserSecretsCopy
             new(
                 $"{DescribeSetting(id, key, project)}: recognized mapped-local endpoint has an unsupported or ambiguous format. Use a well-formed absolute URL or single-host PostgreSQL connection string with one port; no stores were copied."
             );
-        if (IsUnsupportedPostgresUrl(value, ports, out var hasMappedLocalEndpoint))
+        if (IsMultiHostOrQueryPostgresUrl(value, ports, out var hasMappedLocalEndpoint))
         {
             if (hasMappedLocalEndpoint)
                 throw Unsupported();
@@ -321,7 +321,7 @@ public sealed partial class UserSecretsCopy
         return value;
     }
 
-    private static bool IsUnsupportedPostgresUrl(
+    private static bool IsMultiHostOrQueryPostgresUrl(
         string value,
         HashSet<int> ports,
         out bool hasMappedLocalEndpoint
@@ -333,6 +333,12 @@ public sealed partial class UserSecretsCopy
             return false;
         var authority = url.Groups["authority"].Value;
         var hosts = authority[(authority.LastIndexOf('@') + 1)..].Split(',');
+        var endpoints = hosts.Select(host => PostgresEndpoint().Match(host)).ToArray();
+        var authorityHosts = endpoints
+            .Select(
+                (endpoint, index) => endpoint.Success ? endpoint.Groups["host"].Value : hosts[index]
+            )
+            .ToArray();
         var query = url.Groups["query"]
             .Value.Split('&')
             .Select(part => part.Split('=', 2))
@@ -345,41 +351,57 @@ public sealed partial class UserSecretsCopy
             .Where(part => part.Key.Equals("host", StringComparison.OrdinalIgnoreCase))
             .SelectMany(part => part.Value.Split(','))
             .ToArray();
+        var queryHostAddresses = query
+            .Where(part => part.Key.Equals("hostaddr", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(part => part.Value.Split(','))
+            .ToArray();
+        // libpq connects to hostaddr when supplied; host can still name TLS/authentication.
+        // Empty hostaddr entries fall back to their corresponding host, without a default port.
+        var queryConnectionHosts =
+            queryHostAddresses.Length == 0
+                ? queryHosts
+                : queryHostAddresses
+                    .Select(
+                        (address, index) =>
+                            address.Length > 0
+                                ? address
+                                : queryHosts.ElementAtOrDefault(index)
+                                    ?? authorityHosts.ElementAtOrDefault(index)
+                                    ?? ""
+                    )
+                    .ToArray();
         var queryPorts = query
             .Where(part => part.Key.Equals("port", StringComparison.OrdinalIgnoreCase))
             .SelectMany(part => part.Value.Split(','))
             .ToArray();
-        if (hosts.Length == 1 && queryHosts.Length == 0 && queryPorts.Length == 0)
+        if (hosts.Length == 1 && queryConnectionHosts.Length == 0 && queryPorts.Length == 0)
             return false;
         bool IsMappedPort(string text) =>
             int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
             && ports.Contains(port);
-        var endpoints = hosts.Select(host => PostgresEndpoint().Match(host)).ToArray();
-        // Query host/port options override the authority; never combine an overridden port
-        // with a local host or adapt an authority whose effective endpoint is unmapped.
-        if (queryPorts.Length > 0)
+        // Query connection-host/port options override the authority. Match positional lists
+        // before testing locality, so a remote host's mapped port cannot implicate a local host.
+        var connectionHosts =
+            queryConnectionHosts.Length > 0 ? queryConnectionHosts : authorityHosts;
+        var connectionPorts =
+            queryPorts.Length > 0
+                ? queryPorts
+                : endpoints
+                    .Select(endpoint => endpoint.Success ? endpoint.Groups["port"].Value : "")
+                    .ToArray();
+        for (var index = 0; index < connectionHosts.Length; index++)
         {
-            var localHost =
-                queryHosts.Length > 0
-                    ? queryHosts.Any(IsLoopback)
-                    : hosts.Any(IsLoopback)
-                        || endpoints.Any(endpoint =>
-                            endpoint.Success && IsLoopback(endpoint.Groups["host"].Value)
-                        );
-            hasMappedLocalEndpoint = localHost && queryPorts.Any(IsMappedPort);
+            if (!IsLoopback(connectionHosts[index]))
+                continue;
+            if (connectionPorts.Length == 1)
+                hasMappedLocalEndpoint = IsMappedPort(connectionPorts[0]);
+            else if (connectionPorts.Length == connectionHosts.Length)
+                hasMappedLocalEndpoint = IsMappedPort(connectionPorts[index]);
+            else
+                hasMappedLocalEndpoint = connectionPorts.Any(IsMappedPort);
+            if (hasMappedLocalEndpoint)
+                break;
         }
-        else if (queryHosts.Length > 0)
-            hasMappedLocalEndpoint =
-                queryHosts.Any(IsLoopback)
-                && endpoints.Any(endpoint =>
-                    endpoint.Success && IsMappedPort(endpoint.Groups["port"].Value)
-                );
-        else
-            hasMappedLocalEndpoint = endpoints.Any(endpoint =>
-                endpoint.Success
-                && IsLoopback(endpoint.Groups["host"].Value)
-                && IsMappedPort(endpoint.Groups["port"].Value)
-            );
         // Hostless PostgreSQL URLs have no assumed default port in this bounded model.
         return true;
     }

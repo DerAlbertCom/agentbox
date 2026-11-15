@@ -58,7 +58,10 @@ internal sealed class ProjectSettings(
             UserSecretSelection? selection;
             try
             {
-                selection = SelectStore(root, project, selections, diagnose);
+                var association = ResolveSelectedStore(root, project, selections, diagnose);
+                selection = association.Selection;
+                if (association.Unresolved)
+                    unresolved.Add(Path.GetRelativePath(root, project));
             }
             catch (Exception exception)
                 when (exception is XmlException or IOException or UnauthorizedAccessException)
@@ -76,7 +79,7 @@ internal sealed class ProjectSettings(
         return (result, unresolved);
     }
 
-    private static UserSecretSelection? SelectStore(
+    private static (UserSecretSelection? Selection, bool Unresolved) ResolveSelectedStore(
         string root,
         string project,
         IReadOnlyList<UserSecretSelection> selections,
@@ -96,7 +99,7 @@ internal sealed class ProjectSettings(
         var hasImports =
             document.Descendants().Any(element => element.Name.LocalName == "Import")
             || HasWorkspaceImports(root, project, document);
-        if (
+        var cannotAffectSelection =
             !hasImports
             && declarations.All(declaration =>
                 !declaration.HasElements
@@ -107,9 +110,9 @@ internal sealed class ProjectSettings(
                         StringComparison.OrdinalIgnoreCase
                     )
                 )
-            )
-        )
-            return null;
+            );
+        if (cannotAffectSelection)
+            return (null, false);
         var declaration = declarations.Length == 1 ? declarations[0] : null;
         var id = declaration?.Value.Trim();
         if (
@@ -126,12 +129,15 @@ internal sealed class ProjectSettings(
         )
         {
             diagnose?.Invoke(
-                $"Warning: project {JsonSerializer.Serialize(Path.GetRelativePath(root, project))}: UserSecretsId is computed, imported, conditional, invalid or unresolved and may affect the selected stores. Declare one unconditional literal ID in the project to enable appsettings overrides; MSBuild is never evaluated. Copy-only selections are unchanged."
+                $"Warning: project {JsonSerializer.Serialize(Path.GetRelativePath(root, project))}: UserSecretsId is computed, imported, conditional, invalid or unresolved and may affect the selected stores. Declare one unconditional literal ID in the project to enable appsettings overrides; MSBuild is never evaluated. Its consumers are unknown, so generation is blocked until the association is resolved. Copy-only selections are unchanged."
             );
-            return null;
+            return (null, true);
         }
-        return selections.FirstOrDefault(selection =>
-            selection.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+        return (
+            selections.FirstOrDefault(selection =>
+                selection.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
+            ),
+            false
         );
     }
 

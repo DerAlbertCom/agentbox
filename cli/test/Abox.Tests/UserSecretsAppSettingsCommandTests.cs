@@ -12,6 +12,138 @@ namespace Abox.Tests;
 public sealed class UserSecretsAppSettingsCommandTests
 {
     [Fact]
+    public async Task LiteralUnselectedConsumersDoNotBlockGenerationDespiteImplicitWorkspaceImports()
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        cli.Root.File(
+            "folder/Directory.Build.props",
+            "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+        );
+        cli.Root.File(
+            "folder/Api/Api.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+        );
+        cli.Root.File(
+            "folder/Api/appsettings.json",
+            """{"Endpoint":"http://localhost:8004/path"}"""
+        );
+        cli.Root.File(
+            "folder/Worker/Worker.csproj",
+            "<Project Sdk=\"Microsoft.NET.Sdk\"><PropertyGroup><UserSecretsId>unselected</UserSecretsId></PropertyGroup></Project>"
+        );
+        cli.Root.File("folder/Worker/appsettings.json", "not JSON: definitely unselected consumer");
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 8004 });
+
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+        Written(cli, "sample")
+            .Should()
+            .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
+        cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Worker.csproj");
+    }
+
+    [Theory]
+    [InlineData("implicit-props", false)]
+    [InlineData("implicit-props", true)]
+    [InlineData("implicit-targets", false)]
+    [InlineData("implicit-targets", true)]
+    [InlineData("computed", false)]
+    [InlineData("computed", true)]
+    [InlineData("imported", false)]
+    [InlineData("imported", true)]
+    [InlineData("conditional", false)]
+    [InlineData("conditional", true)]
+    [InlineData("multiple", false)]
+    [InlineData("multiple", true)]
+    public async Task PotentialSelectedConsumersBlockGenerationButPermitAuthoritativeCopies(
+        string association,
+        bool authoritative
+    )
+    {
+        foreach (var verbose in new[] { false, true })
+        {
+            using var cli = new UserSecretsCliHarness();
+            cli.Configure("""{"userSecrets":["first","sample"]}""");
+            cli.Store("first", "{}");
+            cli.Store(
+                "sample",
+                authoritative
+                    ? """{"Endpoint":"http://localhost:8004/authoritative"}"""
+                    : """{"Copied":"synthetic-only"}"""
+            );
+            cli.Root.File(
+                "folder/Api/Api.csproj",
+                "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+            );
+            cli.Root.File(
+                "folder/Api/appsettings.json",
+                """{"Endpoint":"http://localhost:8004/generated?token=synthetic-token"}"""
+            );
+            cli.Root.File(
+                "folder/Worker/Worker.csproj",
+                association switch
+                {
+                    "implicit-props" or "implicit-targets" =>
+                        "<Project Sdk=\"Microsoft.NET.Sdk\" />",
+                    "computed" =>
+                        "<Project><PropertyGroup><UserSecretsId>$(SyntheticPrivateId)</UserSecretsId></PropertyGroup></Project>",
+                    "imported" =>
+                        "<Project><Import Project=\"SyntheticPrivateId.props\" /></Project>",
+                    "conditional" =>
+                        "<Project><PropertyGroup Condition=\"'$(Configuration)' == 'Debug'\"><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>",
+                    _ =>
+                        "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId><UserSecretsId>other</UserSecretsId></PropertyGroup></Project>",
+                }
+            );
+            cli.Root.File("folder/Worker/appsettings.json", "not JSON: never guess an association");
+            if (association is "implicit-props" or "implicit-targets")
+                cli.Root.File(
+                    "folder/Directory.Build."
+                        + (association == "implicit-props" ? "props" : "targets"),
+                    "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup><Target Name=\"SyntheticPrivateId\"><Error Text=\"Do not run\" /></Target></Project>"
+                );
+            var originals = Directory
+                .EnumerateFiles(cli.Location, "*", SearchOption.AllDirectories)
+                .ToDictionary(path => path, File.ReadAllText);
+            cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+                .Returns(new[] { 8004 });
+            var processes = Substitute.For<IProcessRunner>();
+            cli.Services.AddSingleton(processes);
+
+            (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
+                .Should()
+                .Be(authoritative ? 0 : 1, cli.Console.AllText);
+
+            cli.Console.AllText.Should()
+                .Contain("Warning:")
+                .And.Contain("Worker.csproj")
+                .And.Contain("UserSecretsId")
+                .And.NotContain("SyntheticPrivateId")
+                .And.NotContain("synthetic-token")
+                .And.NotContain("/generated")
+                .And.NotContain("/authoritative");
+            if (authoritative)
+                Written(cli, "sample")
+                    .Should()
+                    .Be("""{"Endpoint":"http://host.docker.internal:8004/authoritative"}""");
+            else
+            {
+                await cli.NoWrites();
+                cli.Console.AllText.Should()
+                    .Contain("sample")
+                    .And.Contain("Endpoint")
+                    .And.Contain("consumer")
+                    .And.Contain("association");
+            }
+            foreach (var (path, original) in originals)
+                File.ReadAllText(path).Should().Be(original);
+            processes.ReceivedCalls().Should().BeEmpty();
+        }
+    }
+
+    [Fact]
     public async Task ImplicitImportNamesFollowExistingHostPathComparison()
     {
         using var cli = new UserSecretsCliHarness();
@@ -167,19 +299,34 @@ public sealed class UserSecretsAppSettingsCommandTests
     [InlineData(
         "<PropertyGroup><UserSecretsId>../SyntheticPrivateId</UserSecretsId></PropertyGroup>"
     )]
-    public async Task UnsupportedButDefinitelyUnselectedLiteralIdsDoNotProduceAssociationWarnings(
-        string declaration
-    )
+    [InlineData("")]
+    [InlineData("<Sdk Name=\"Microsoft.NET.Sdk\" />")]
+    [InlineData(
+        "<PropertyGroup><UserSecretsId>unselected</UserSecretsId></PropertyGroup><Import Project=\"SyntheticPrivateId.props\" />"
+    )]
+    public async Task CertainlyUnselectedProjectsDoNotWarnOrPreventGeneration(string declaration)
     {
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", "{}");
         cli.Root.File("folder/Other.csproj", "<Project>" + declaration + "</Project>");
         cli.Root.File("folder/appsettings.json", "not JSON: unrelated configuration");
+        cli.Root.File(
+            "folder/Api/Api.csproj",
+            "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
+        );
+        cli.Root.File(
+            "folder/Api/appsettings.json",
+            """{"Endpoint":"http://localhost:8004/path"}"""
+        );
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 8004 });
 
         (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
 
-        Written(cli, "sample").Should().Be("{}");
+        Written(cli, "sample")
+            .Should()
+            .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Other.csproj");
     }
 
@@ -251,6 +398,18 @@ public sealed class UserSecretsAppSettingsCommandTests
     [InlineData("postgresql:///db?host=localhost")]
     [InlineData("postgresql:///db?host=localhost&port=5000")]
     [InlineData("postgresql:///db?host=remote.test&port=5432")]
+    [InlineData("postgresql:///db?hostaddr=127.0.0.1")]
+    [InlineData("postgresql:///db?hostaddr=127.0.0.1,192.0.2.1&port=5000,5432")]
+    [InlineData("postgresql://remote.test:5000,other.test:5432/db?hostaddr=%3A%3A1,192.0.2.1")]
+    [InlineData("postgresql:///db?hostaddr=%3A%3A1&port=5000&sslmode=require")]
+    [InlineData("postgresql://remote.test:5432/db?hostaddr=192.0.2.1&sslmode=verify-full")]
+    [InlineData("postgresql://remote.test:5432/db?hostaddr=&sslmode=verify-full")]
+    [InlineData("postgresql://localhost:5432/db?hostaddr=192.0.2.1&sslmode=verify-full")]
+    [InlineData("postgresql://localhost:5432/db?host=localhost&hostaddr=192.0.2.1&port=5432")]
+    [InlineData(
+        "postgresql://remote.test:5432/db?hostaddr=127.0.0.1&port=5000&options=-c%20search_path%3Dsynthetic_schema"
+    )]
+    [InlineData("a note about postgresql:///db?hostaddr=127.0.0.1&port=5432")]
     [InlineData("postgresql://remote.test:5432/db?host=localhost&port=5000")]
     [InlineData("postgresql://localhost:5432/db?host=localhost&port=5000")]
     [InlineData("postgresql://localhost:5432/db?host=remote.test&port=5432")]
@@ -275,6 +434,9 @@ public sealed class UserSecretsAppSettingsCommandTests
         );
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 5432 });
+        var originals = Directory
+            .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
+            .ToDictionary(path => path, File.ReadAllBytes);
 
         (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
 
@@ -282,6 +444,8 @@ public sealed class UserSecretsAppSettingsCommandTests
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written.RootElement.GetProperty("Copied").GetString().Should().Be(endpoint);
         cli.Console.AllText.Should().NotContain("unsupported");
+        foreach (var (path, original) in originals)
+            File.ReadAllBytes(path).Should().Equal(original);
     }
 
     [Theory]
@@ -581,6 +745,23 @@ public sealed class UserSecretsAppSettingsCommandTests
     [InlineData("postgresql:///db?port=5432&host=%3A%3A1")]
     [InlineData("postgresql://localhost:5000/db?port=5432")]
     [InlineData("postgresql://remote.test:5432/db?host=localhost")]
+    [InlineData(
+        "postgresql://remote.test/db?hostaddr=127.0.0.1&port=5432&sslmode=require&password=synthetic-password"
+    )]
+    [InlineData(
+        "postgresql://remote.test:5432/db?hostaddr=127.0.0.2&options=-c%20search_path%3Dsynthetic-private"
+    )]
+    [InlineData(
+        "postgresql://remote.test/db?host=remote.test&hostaddr=%3A%3A1&port=5432&application_name=synthetic-private"
+    )]
+    [InlineData("postgresql:///db?hostaddr=0:0:0:0:0:0:0:1&port=5432&password=synthetic-password")]
+    [InlineData(
+        "postgres://synthetic-private:synthetic-password@remote.test:5432/db?hostaddr=::1&sslmode=verify-full"
+    )]
+    [InlineData("postgresql://remote.test:5000/db?hostaddr=127.0.0.1&port=5432")]
+    [InlineData("postgresql:///db?hostaddr=192.0.2.1,%3A%3A1&port=5000,5432")]
+    [InlineData("postgresql://localhost:5432/db?hostaddr=")]
+    [InlineData("postgresql://remote.test:5432/db?host=localhost&hostaddr=")]
     [InlineData("Server=localhost,8004;Server=other,8004")]
     [InlineData("Server=localhost,8004;Host=other;Port=8004")]
     [InlineData("Server=localhost;Port=8004;Port=5432")]
@@ -619,6 +800,9 @@ public sealed class UserSecretsAppSettingsCommandTests
                 cli.Store("sample", JsonSerializer.Serialize(new { Endpoint = endpoint }));
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
                 .Returns(new[] { 80, 8004, 5432 });
+            var originals = Directory
+                .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
+                .ToDictionary(path => path, File.ReadAllBytes);
 
             (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
                 .Should()
@@ -636,6 +820,8 @@ public sealed class UserSecretsAppSettingsCommandTests
                 .And.NotContain("remote.test");
             if (generated)
                 cli.Console.AllText.Should().Contain("Api.csproj");
+            foreach (var (path, original) in originals)
+                File.ReadAllBytes(path).Should().Equal(original);
         }
     }
 
