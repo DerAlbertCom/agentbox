@@ -842,36 +842,8 @@ cli/src/Abox/
     ImageName.cs            the unqualified team reference of a local build
 ```
 
-- The code is arranged by use, not by kind: one folder per command holds the command
-  and its slice registration, with command-specific services alongside them. Shared
-  application orchestration lives in `Sandboxes`, above the technical sbx wrapper.
-  Technical services keep one place each (`Configuration`, `Kits`, `LocalState`,
-  `Launchers`, `Sbx`, `Health`, `Infrastructure`, `Naming`). None of these shared
-  folders imports a command slice from `Abox.Features`.
-- One wrapper class (`SbxClient`) makes every `sbx` call. The flags and the version
-  check live in that one place. One wrapper class (`OciRegistry`) makes every `docker`
-  call. The arguments are always a list, never a shell string.
-- Runtime folder selections and their parsing/matching live in `Configuration`,
-  not the shared copy orchestration. Portable store-ID validation lives in
-  low-level `Naming.UserSecretId`; both configuration parsing and the sbx adapter
-  validate with it. Thus `Configuration` and `Sbx` do not import `UserSecrets` or
-  know its orchestration, while the copy flow can consume both. Reporting remains
-  above the technical sbx wrapper. These are module responsibilities, not a rule
-  that every namespace must be a separate module.
-- Each launcher is one class behind `ILauncher`.
-- Each command is a class that the container builds and that takes its dependencies
-  in its constructor; nothing looks the commands up by hand. The root command holds
-  every command the container has, one per slice.
-- A slice registers itself: `AddAbox` calls one method per slice and that method adds
-  its command and any slice-specific services. Create uses the shared `Sandboxes`
-  orchestration registered by the composition root instead of its own service.
-- The entry point builds a plain service provider, not a host: it does not load
-  `appsettings.json` from the working directory. Commands defer configuration-dependent
-  dependencies until their actions run, so help, `exec` and `pipe` need no user configuration.
-- The services take their dependencies in their constructor, so the tests can hand them
-  a substitute sbx (NSubstitute in the test project).
-- The YAML is read in one place (`YamlReader`), so every file is read the same way and
-  an unknown key is an error everywhere.
+For architecture and coding conventions, see the
+[coding standards](../CODING_STANDARDS.md#architecture).
 
 ## The decisions this version took
 
