@@ -14,7 +14,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class RunServiceTests
+public sealed partial class RunServiceTests
 {
     private readonly TempDirectory _root = new();
     private readonly TestConsole _console = new();
@@ -234,14 +234,17 @@ public sealed class RunServiceTests
             SandboxName.For(_root.Path),
             new SandboxRecord { Squad = "ac", Tag = "release" }
         );
-        _store.Save(
-            new BuildManifest
-            {
-                Squad = "ac",
-                Tag = "release",
-                RootDirectory = _root.Path,
-                Reference = ImageName.OfTeam("other-team", "release"),
-            }
+        _root.File(
+            "state/builds/ac/release/build.json",
+            System.Text.Json.JsonSerializer.Serialize(
+                new BuildManifest
+                {
+                    Squad = "ac",
+                    Tag = "release",
+                    RootDirectory = _root.Path,
+                    Reference = ImageName.OfTeam("other-team", "release"),
+                }
+            )
         );
 
         (await _service.RunAsync(new RunRequest("shell", _root.Path, []), CancellationToken.None))
@@ -409,6 +412,7 @@ public sealed class RunServiceTests
                 Squad = "ac",
                 Tag = "latest",
                 CreatedAt = DateTimeOffset.Now,
+                Reference = ImageName.OfTeam("sample", "latest"),
             }
         );
 

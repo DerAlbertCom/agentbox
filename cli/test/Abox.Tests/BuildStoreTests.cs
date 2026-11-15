@@ -18,9 +18,16 @@ public sealed class BuildStoreTests
     [Fact]
     public void ABuildIsKeptUnderItsSquadAndTag()
     {
-        _store.Save(new BuildManifest { Squad = "ac", Tag = "latest" });
+        _store.Save(
+            new BuildManifest
+            {
+                Squad = "ac",
+                Tag = "latest",
+                Reference = "agentbox-rwest-sample:latest",
+            }
+        );
 
-        var manifest = _store.Load("ac", "latest");
+        var manifest = _store.Load("sample", "ac", "latest");
 
         manifest.Should().NotBeNull();
         manifest!.Squad.Should().Be("ac");
@@ -30,17 +37,17 @@ public sealed class BuildStoreTests
     [Fact]
     public void ABuildThatIsNotThereIsNull()
     {
-        _store.Load("ac", "latest").Should().BeNull();
+        _store.Load("sample", "ac", "latest").Should().BeNull();
     }
 
     [Fact]
     public void ABuildThatIsNotReadableIsAnError()
     {
-        var directory = _store.DirectoryFor("ac", "latest");
+        var directory = _store.DirectoryFor("sample", "ac", "latest");
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "build.json"), "not json");
 
-        var action = () => _store.Load("ac", "latest");
+        var action = () => _store.Load("sample", "ac", "latest");
 
         action.Should().Throw<AboxException>().WithMessage("*not readable*");
     }
@@ -53,6 +60,7 @@ public sealed class BuildStoreTests
             {
                 Squad = "ac",
                 Tag = "latest",
+                Reference = "agentbox-rwest-sample:latest",
                 WorkloadKitDirectory = "/kits/workload",
                 Kits =
                 [
@@ -74,7 +82,7 @@ public sealed class BuildStoreTests
             }
         );
 
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
 
         manifest.WorkloadKitDirectory.Should().Be("/kits/workload");
         manifest.Kits.Should().ContainSingle().Which.Name.Should().Be("pi-config");

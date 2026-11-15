@@ -111,7 +111,7 @@ public sealed class StatePathCreationTests : IDisposable
         SaveBuild([
             new ManifestState { SandboxPath = "/home/agent/.cache", RelativePath = ".cache" },
         ]);
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
         switch (error)
         {
             case "null-list":
@@ -264,7 +264,7 @@ public sealed class StatePathCreationTests : IDisposable
         first.Should().Be(0);
         recreated.Should().Be(0);
         File.ReadAllText(saved).Should().Be("keep this session");
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
         manifest
             .State.Should()
             .ContainSingle()

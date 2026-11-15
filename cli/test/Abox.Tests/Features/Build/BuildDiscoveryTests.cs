@@ -83,8 +83,8 @@ public sealed class BuildDiscoveryTests
 
         // Assert
         exitCode.Should().Be(0, project.Console.AllText);
-        project.LoadBuild("first").Reference.Should().Be("agentbox-rwest-one:release");
-        project.LoadBuild("second").Reference.Should().Be("agentbox-rwest-two:release");
+        project.LoadBuild("first", "one").Reference.Should().Be("agentbox-rwest-one:release");
+        project.LoadBuild("second", "two").Reference.Should().Be("agentbox-rwest-two:release");
         project.LoadBuild().Should().BeNull("explicit selections replace defaultTeam 'sample'");
         project.Runner.ReceivedCalls().Should().BeEmpty();
         project.Sbx.ReceivedCalls().Should().BeEmpty();

@@ -89,7 +89,7 @@ public sealed partial class PublishServiceTests
     public async Task LocalAndRegistryKitsKeepTheirArgumentsAndStateIsIncluded()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         var local = Path.Combine(_root.Path, "local kit");
         Directory.CreateDirectory(local);
         File.WriteAllText(
@@ -221,7 +221,7 @@ public sealed partial class PublishServiceTests
     public async Task LegacyBuildsWithoutAPublishRepositoryMustBeRebuilt()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.PublishRepository = null;
         _store.Save(build);
 
@@ -269,15 +269,21 @@ public sealed partial class PublishServiceTests
     [Fact]
     public async Task ASquadBuildFromAnotherTeamIsNotPublished()
     {
+        // Arrange
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.Reference = "agentbox-rwest-other:latest";
-        _store.Save(build);
+        File.WriteAllText(
+            Path.Combine(_store.DirectoryFor("sample", "ac", "latest"), "build.json"),
+            JsonSerializer.Serialize(build)
+        );
 
+        // Act
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
-            "*not a build of team 'sample'*"
+            "*no proven ownership for team 'sample'*abox build --team sample*"
         );
         _calls.Should().BeEmpty();
     }
@@ -287,7 +293,10 @@ public sealed partial class PublishServiceTests
     {
         SaveBuild("ac");
         File.Delete(
-            Path.Combine(_store.Load("ac", "latest")!.WorkloadKitDirectory, "workload.yaml")
+            Path.Combine(
+                _store.Load("sample", "ac", "latest")!.WorkloadKitDirectory,
+                "workload.yaml"
+            )
         );
 
         var action = () => _service.PublishAsync(Request("ac"), CancellationToken.None);
@@ -362,7 +371,7 @@ public sealed partial class PublishServiceTests
     public async Task TheChosenTagIsUsedForTheLocalBuildAndThePublishedSet()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.Tag = "release-1";
         build.Reference = "agentbox-rwest-sample:release-1";
         _store.Save(build);
@@ -430,7 +439,7 @@ public sealed partial class PublishServiceTests
     public async Task LegacyBuildsWithoutProvenanceAreRejected()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.IncludesPersonalConfigurations = null;
         _store.Save(build);
 
@@ -446,7 +455,7 @@ public sealed partial class PublishServiceTests
     public async Task LegacyBuildsWithoutFingerprintsMustBeRebuilt()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.SourceHashes.Clear();
         _store.Save(build);
 
@@ -461,7 +470,10 @@ public sealed partial class PublishServiceTests
     {
         SaveBuild("ac");
         File.AppendAllText(
-            Path.Combine(_store.Load("ac", "latest")!.WorkloadKitDirectory, "workload.yaml"),
+            Path.Combine(
+                _store.Load("sample", "ac", "latest")!.WorkloadKitDirectory,
+                "workload.yaml"
+            ),
             "description: changed\n"
         );
 
@@ -475,7 +487,7 @@ public sealed partial class PublishServiceTests
     public async Task ConfigurationFilesAndAddedPayloadFilesAreFingerprinted()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.ConfigFiles.Add(_root.File("squad.abox", "workload: sample\n"));
         SaveVerifiedBuild(build);
         File.AppendAllText(build.ConfigFiles[0], "state: [~/.private]\n");
@@ -495,7 +507,10 @@ public sealed partial class PublishServiceTests
     public async Task PublicationUsesSnapshotsNotSourcesChangedAfterValidation()
     {
         SaveBuild("ac");
-        var path = Path.Combine(_store.Load("ac", "latest")!.WorkloadKitDirectory, "workload.yaml");
+        var path = Path.Combine(
+            _store.Load("sample", "ac", "latest")!.WorkloadKitDirectory,
+            "workload.yaml"
+        );
         var original = File.ReadAllText(path);
         _runner
             .RunAsync(
@@ -546,7 +561,7 @@ public sealed partial class PublishServiceTests
     {
         SaveBuild("ac");
         SaveBuild("workload");
-        var second = _store.Load("workload", "latest")!;
+        var second = _store.Load("sample", "workload", "latest")!;
         second.Reference = "agentbox-rwest-sample-ac:latest";
         _store.Save(second);
         var request = new PublishRequest(
@@ -708,7 +723,7 @@ public sealed partial class PublishServiceTests
     public async Task SuppliedLocalBuildPhaseArgumentsAreRejectedBeforeAnyPush()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         var local = Path.Combine(_root.Path, "build-arg-kit");
         Directory.CreateDirectory(local);
         File.WriteAllText(
@@ -738,7 +753,7 @@ public sealed partial class PublishServiceTests
     public async Task SuppliedRegistryBuildPhaseArgumentsAreRejectedBeforeAnyPush()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         build.Kits.Add(
             new ManifestKit
             {
@@ -818,7 +833,7 @@ public sealed partial class PublishServiceTests
         string repository = "mtiae-developer-container-images-local"
     )
     {
-        var workload = Path.Combine(_store.DirectoryFor(squad, "latest"), "workload");
+        var workload = Path.Combine(_store.DirectoryFor("sample", squad, "latest"), "workload");
         Directory.CreateDirectory(workload);
         File.WriteAllText(
             Path.Combine(workload, "workload.yaml"),
@@ -840,7 +855,7 @@ public sealed partial class PublishServiceTests
     public async Task PublishingUsesTheOriginalVerifiedWorkloadNotTheLocalThinRecipe()
     {
         SaveBuild("ac");
-        var build = _store.Load("ac", "latest")!;
+        var build = _store.Load("sample", "ac", "latest")!;
         const string recipe = "FROM example.com/base:1\nRUN install-workload-tools\n";
         File.WriteAllText(Path.Combine(build.WorkloadKitDirectory, "workload.dockerfile"), recipe);
         build.LocalWorkload = LocalWorkloadTest.Artifact(_root);
