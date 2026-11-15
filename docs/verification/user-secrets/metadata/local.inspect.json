@@ -1,0 +1,8 @@
+{
+  "name": "abox-issue5-local-191454a2",
+  "agent": "workload",
+  "state": "running",
+  "created_version": "v0.51.0",
+  "daemon_version": "v0.51.0",
+  "network_policy": { "scope": "global" }
+}

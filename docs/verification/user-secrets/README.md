@@ -1,326 +1,213 @@
 # User-secrets verification spike (#5)
 
-For [#5](https://github.com/DerAlbertCom/agentbox/issues/5), gating
-[#2](https://github.com/DerAlbertCom/agentbox/issues/2). Observed 2026-11-15.
-**Not complete: do not start feature implementation on the assumption that
-the proposed relay/discovery contract works on the supported runtime.**
+Resumed 2026-11-15 from `fbb2a5b`, after the user confirmed the port mapping and
+explicitly asked to continue the tickets. This approves a **change in direction**
+from #2/#8's experimental `host-port@1` relay to the supported
+`host.docker.internal:<published HOST port>` mechanism. Existing named endpoints
+stay unchanged. No hostname-to-port attribution or custom relay is required.
+The [initial attempt](initial-attempt.md) is archived evidence, not current blockers.
 
-Only synthetic values were used. No registry writes, runtime upgrades, global
-settings changes, daemon restarts, or changes to existing user sandboxes were
-performed. The executable fixtures below are verification tools, not an abox
-feature or production-safe arbitrary-file copier.
+Only the bundled synthetic values/id were transferred. No real secret stores,
+registry publication, host/global settings, daemon repair, or existing sandbox
+changes were involved. The pre-existing `agentbox-abox-4F84A` was inspected only
+and was stopped at inspection time; it was not started, replaced or removed.
 
-## Environment and evidence
+## Gate and acceptance
 
-| Component | Observed version |
-|---|---|
-| Host | Windows 11, build 26200, x64; PowerShell 7 |
-| sbx client/server | v0.51.0, revision `7d55286de0c775148b985ed349f760f1eba06203`, API 0.49.0 |
-| Docker Desktop / Engine | 4.99.0 / 29.9.3; Linux amd64 engine |
-| Buildx / BuildKit | 0.38.1 / 0.34.2, `desktop-linux` docker driver |
-| Kit frontend actually executed | 3.0.0-m.11, revision prefix `92835bb7` |
-| .NET SDK / probe runtime | 11.0.100 targeting net10.0 / 10.0.15 |
-| Representative Unix environment | Debian shell-kit filesystem, uid/gid 1000 (`agent`), `/home/agent` |
+| Check | Result |
+| --- | --- |
+| Healthy supported local mechanism | **Pass.** A fresh local sandbox admitted the required `network-policy@1` kit. Direct TCP connected to `host.docker.internal:8004`, `:1521`, `:8006`; LocalStack health returned HTTP 200. No DB credentials or queries. |
+| Supported inspection metadata | **Pass with a different supported command.** `sbx inspect --json` exposes only `network_policy: {scope: global}` here; it is insufficient. `sbx policy ls <name> --source kit --type network --json` returns active, sandbox-scoped provisioned kit rules and the nine literal host ports. No staged-file discovery is necessary for these rules. |
+| Local/template descriptor survival | **Pass.** Local `workload` and `host-access-cape` descriptors survive. The template's inherited `shell/kit.yaml` does not; a `FROM` is not declaration inheritance. |
+| Actual published squad, without host kit sources | **Pass for creation, metadata and transfer.** An existing `mti-ca/ac` set was resolved read-only and created by digest, with no workspace, local kit sources or build manifest. Its `workload`, `config` and merged `set` descriptors survive; `/usr/share/abox/squad.json` is present. |
+| Nonempty host-service declarations in a published squad | **Not demonstrated.** The accessible published set predates the new host-access kit: it declares only `sbx@1` and correctly returns `rules: []` for kit network rules. Its successful TCP reachability through the pre-existing global allow policy is **not** a kit declaration. No new artifact was published. |
+| Effective application-user destination | **Pass in both sandboxes.** Default exec is `agent`, uid/gid 1000, HOME `/home/agent`, APPDATA unset. Actual .NET PathHelper/provider reads the HOME path and, with an explicit APPDATA override, the APPDATA path instead. |
+| Windows noninteractive UTF-8 transfer | **Pass in both.** `sbx exec -i`, no TTY, explicit UTF-8/no BOM; .NET read exit 42 before and 0 after. Raw source bytes/hash preserved. |
+| Unix representative transfer | **Pass in both.** A Unix shell frames and pipes the synthetic file into the same receiver, with APPDATA precedence verified by the actual .NET provider. This is a representative Unix caller, not an independent Unix sbx-host installation. |
+| Secrecy and interrupted input | **Pass for the spike adapter.** Payload/frame only on stdin. Child output is drained to a null sink in ordinary and `--verbose` fixture runs, including scalar/reformatted-scalar failure output. Short/corrupt input exits 65 before rename and preserves the previous file. Directories 0700, file 0600, `agent:agent`. |
 
-All three descriptor fixtures pin frontend image index digest
-`sha256:adbc0d1ea63451871d5d78111120bb29f2fd2b265e63d39c664ae2c3d722c805`.
-The workload and set also pin their published inputs. These are Linux amd64
-fixtures; do not assume the pinned manifests support another architecture.
+**Closure decision:** the obsolete unsupported-relay, unhealthy-runtime and
+hostname-attribution gates are resolved/superseded, not outstanding work.
+The copy/transport approach is now verified on both actual local and published
+sandboxes. The remaining strict end-to-end rewrite acceptance is a published
+squad **carrying a nonempty host-access declaration**: the available set proves
+the empty-inventory case only. Artifact-only/local-set evidence cannot honestly
+prove that missing published-runtime case. Keep #5 open if that full matrix is
+required before #6; either an already-published suitable reference or explicit
+acceptance of the tested local-nonempty/published-empty matrix is needed. No
+GitHub statuses/dependencies were changed by this spike. No runtime upgrade,
+relay probe, global policy change or name-association decision is needed.
 
-### Acceptance status
+## Observed runtime and published identity
 
-| Question | Actual result | Still needed |
-|---|---|---|
-| Does inspection expose host-service mappings? | **Unresolved.** Inspected an incomplete workload-only sbx sandbox; it had no host-service mapping data. That is not evidence about an admitted relay. | Inspect a successfully created sandbox with a required, active relay. Prefer supported JSON if it exposes effective mappings. |
-| Do kit descriptors survive local/published creation, including `FROM`? | **Partially verified.** Local frontend builds plus isolated Docker execution verified set members' descriptors survive, but inherited `FROM` descriptors do not. | Actual local and published squad sbx smoke checks. |
-| Does a declared name reach the loopback relay/container port? | **Blocked.** Installed sbx rejects required `host-port@1` as unsupported. Ordered hosts-file names resolve in the representative container, but no sbx relay connection was demonstrated. | A runtime with demonstrated capability support and a healthy disposable sandbox. |
-| Effective .NET destination and Windows/Unix stdin? | **Representative checks pass, with an important adapter limitation.** .NET read the fixture after explicit UTF-8 Windows stdin and Unix stdin. Raw Unicode through the current `ProcessRunner` was corrupted on Windows CP850; default JSON ASCII escaping worked. | Repeat through real `sbx exec -i`, in the application user's effective environment. |
-| Secrecy and permissions? | **Partial.** Metadata-only receiver emitted no values; directory 0700/file 0600, `agent:agent`; explicit UTF-8 preserved the source hash. Existing verbose diagnostics can expose a JSON scalar fragment; captured output remains raw. | Secret-safe captured-output/error policy and real sbx failure-path verification. |
-| Viable approach, without unsupported assumptions? | Findings and fixtures recorded; suggestions below are **not adopted product decisions**. | Runtime support, hostname attribution decision, and remaining live checks. |
+Windows 11 x64 / PowerShell 7; sbx client/server **v0.51.0** revision
+`7d55286de0c775148b985ed349f760f1eba06203`, API 0.49.0; Docker Engine 29.9.3;
+Buildx 0.38.1; frontend 3.0.0-m.11; SDK 11.0.100, probe runtime **10.0.15**.
 
-## 1. Runtime support and inspection: stop before guessing
-
-Actual local composition with `workload/` and `relay/` exited 1:
-
-```text
-required capability selection rejected ... unsupported capability type com.docker.sandbox/host-port@1
-```
-
-No mapped sandbox was created. Do not make the capability optional to make the
-probe pass: admission after skipping the relay proves nothing about forwarding.
-The current [Docker capability support table][support] does not list
-`host-port@1`. The [release notes][releases] list v0.53.0 as current and say
-v0.52.0 was skipped, but do not establish that v0.53.0 supports this capability.
-An upgrade alone is not a verified resolution; none was attempted.
-
-A separate workload-only create built successfully but exceeded the 120-second
-client timeout and left a stopped task sandbox. `sbx exec <probe> true` exited
-125 with:
+Found using Docker's existing image-reference inventory and read-only registry
+inspection, not by reading Docker credentials or any secret values:
 
 ```text
-503 Service Unavailable: sandbox network proxy is not initialized; restart the daemon after restoring proxy credentials and network policy
+rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac:latest
+linux/amd64 manifest:
+sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954
 ```
 
-`sbx diagnose --format json` nevertheless reported passing daemon,
-authentication and global-network-policy checks. No global repair was attempted.
-That sandbox was removed by its exact task-owned name afterward.
+The staged set retains digest-pinned workload and config mixin references.
+`metadata/published.inspect.json` records its actual sandbox identity. Its bundled squad metadata is schema 1,
+team `mti-ca`, squad `ac`, tag `latest`, CreatedAt
+`2026-11-09T16:27:12.1739555+01:00`, with empty `Kits`, `Mcp` and `State`.
+The workload's staged Dockerfile starts `FROM docker.io/sbx/shell-docker-image`.
+No inherited shell descriptor survives in the published runtime either.
+This reference is consumable under the **existing** allowed release prefix;
+the developer-repository candidate is not allowlisted. No trust setting was changed.
 
-Thus neither a healthy admitted-mapping inspect fixture nor a verified
-runtime-discovery fallback exists yet. The staged files are a **candidate**
-fallback whose artifact survival was checked, not proof of granted/effective
-capabilities. In particular, optional entries/groups may not have been selected,
-and a constituent descriptor can contain unresolved create-phase arguments.
-Do not treat every declaration found in a file as an active grant.
+Task-owned sandboxes exercised and removed afterward:
+`abox-issue5-local-191454a2` and `abox-issue5-published-b36814c0`.
+Sanitized/projection fixtures retain only relevant runtime fields, not secret
+metadata. Downloaded images and normal runtime build caches were not pruned.
 
-`sbx ports` / `port@1` publish a sandbox service **to the host**. They are not
-host-service relay metadata and were not used for this spike.
+## Supported discovery and proposed concise rewrite contract (#8)
 
-## 2. Staging and `FROM` are different composition operations
+1. Use supported JSON, not host kit paths or `/etc/hosts`:
 
-Actual pinned-frontend Docker build/run checks established:
+   ```sh
+   sbx inspect <sandbox> --json
+   sbx policy ls <sandbox> --source kit --type network --protocol tcp --decision allow --created-via provisioned --json
+   sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>
+   ```
 
-- `workload/workload.yaml` builds `FROM` the published shell kit. Only
-  `/usr/share/sandbox/kit/workload/kit.yaml` remains. The shell's `kit.yaml`
-  is absent, while its `kit.dockerfile` is retained.
-- `set/set.yaml` lists pinned published shell and gh kits. The local export
-  contains `shell/kit.yaml`, `gh/kit.yaml`, and `set/kit.yaml`. The merged
-  staged set descriptor has `kind: workload` and digest-pinned `kits`.
-  No host-side component source directories were supplied.
-- No synthetic user-secrets file was a build input or image layer: the receiver
-  and payload were copied/transferred only into a disposable running container.
+   The first command supplies runtime identity, **not** the port inventory.
+   The second supplies active kit rules (observed examples in `metadata/`).
+   Validate sandbox scope/identity, status `active`, resource type `network`,
+   decision `allow`, action `net:connect:tcp` and provisioned provenance. Select
+   only exact `localhost:<integer 1..65535>` resources; deduplicate/sort ports
+   numerically. Do not broaden wildcard/global/manual rules into inferred kit
+   mappings. An empty inventory is legitimate, not an invitation to guess.
+   The final command verifies the current authorization for each candidate;
+   active allow rules alone do not rule out a higher-priority deny. Failure or
+   malformed required metadata must produce a safe actionable error. Policy
+   checks normalize `host.docker.internal:8004` to `localhost:8004`, as observed.
+   They do not prove service availability or prevent later policy changes.
+2. In supported endpoint fields only, replace `localhost`/`127.0.0.1` with
+   `host.docker.internal` **only when the explicit port is in that inventory and
+   currently allowed**. Keep the port unchanged: it is already the host's
+   published port. Preserve already-named hosts (including `host.docker.internal`),
+   unmapped ports and unsupported forms unchanged. Preserve all unrelated
+   credentials, text, URL paths/queries and connection-string fields.
+3. There is **no** `5432 -> 8004`, `4566 -> 8006`, or container-port translation
+   in runtime policy metadata. Thus `localhost:8004` may become
+   `host.docker.internal:8004`, while `localhost:5432` stays unchanged.
+   `Server=localhost,8004` may become `Server=host.docker.internal,8004`;
+   `https://sql.internal:8004` stays unchanged for TLS/SNI. Never infer service
+   identity from comments, `/etc/hosts`, port conventions or Compose files.
+4. The old first-declared-name rule is inapplicable under the approved mechanism:
+   no alias is selected and no named endpoint's port is changed. `sbx ports`
+   remains the opposite direction and is not used.
+5. Apply the deny list to selected **original** values before rewriting; retain
+   the shared copy/force contract and report only keys/counts, never values.
 
-This matches upstream [frontend source][frontend] (`removeInheritedDescriptors`,
-`stageKitSources`) and [set end-to-end tests][set-tests]
-(`TestSetBuildsEndToEnd`, `inheritedSourcesSet`). A recipe inherits content,
-**not** its base kit's declarations. A set retains the sources of its explicitly
-listed components. A local thin workload therefore must carry its own effective
-declarations; scanning inherited recipes or old descriptors is not a solution.
+The nine observed kit ports are `1521, 4317, 4318, 8004, 8005, 8006, 8007,
+13133, 16686`. The host's pre-existing global allow also authorizes `5432`;
+that does **not** add it to this inventory. This distinguishes declared rewrite
+intent from broad ambient reachability. [The kit guide](../../../kits/host-access-cape/README.md)
+documents the independently confirmed host/container inventory; it is not read
+by secret copying. #8 still needs parser/endpoint-form tests and the missing
+published-nonempty smoke if required by its revised acceptance.
 
-These are local exports from published inputs, **not** an actual published
-squad pulled and created by sbx. Read-only attempts to resolve the example
-`docker.io/docker/sbx-kit-team:1.0.0` and `:1.0.2` were denied/unavailable;
-`rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest` was not
-found. Those example names are not evidence that no published squad exists.
-No registry artifact was published to fill this gap.
+## Safe transfer contract for #6
 
-## 3. Loopback and ordered names
+Discover effective uid/user, HOME and APPDATA through default application-user
+exec, not `-u root`, login-shell guesses, or host path reuse. APPDATA takes
+precedence even on Unix: `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json`,
+otherwise `<HOME>/.microsoft/usersecrets/<id>/secrets.json`. Validate empty or
+unusual environments rather than silently guessing. Application-specific
+environment overrides must match the eventual application's environment.
 
-The normative [host-port contract][host-port] is
-`host 127.0.0.1:35431 -> sandbox 127.0.0.1:35432` for this TCP fixture.
-`container: 0`/omitted defaults to `host`, transport defaults to TCP, and
-host family defaults to IPv4. Even an IPv6 host grant has an IPv4 sandbox
-loopback endpoint. Bypass HTTP proxies when testing it.
-
-The capability has **no hostname field** and does not itself write `/etc/hosts`.
-Our fixture separately requests a startup hook that appends:
+The new fixture's stdin frame is decimal UTF-8 byte length, LF, lowercase SHA-256,
+LF, then exact UTF-8 JSON bytes. The fixed-id receiver writes a same-directory
+temporary file under umask 077, checks **both** length and digest, then renames.
+EOF by itself is not a commit signal. The short-frame test first failed against
+an unverified cat/rename receiver (exit 0 instead of 65); framing checks turned
+it green. Both short and same-length corrupt frames now preserve the prior
+readable file and its original SHA-256:
 
 ```text
-127.0.0.1 sql.first.abox.test sql.second.abox.test
-127.0.0.1 unrelated.abox.test
+74 bytes
+999f7ec4049ea51be9bf3f7745a0c73596b3231217773f6a4da7775906d6fb6d
 ```
 
-Running that same hook manually in the disposable Docker container preserved
-textual ordering; `getent hosts` resolved both SQL aliases to 127.0.0.1. This
-checks name resolution only, not a relay. Real sbx startup hooks may run alongside
-the application, so immediate discovery also needs a readiness policy.
+The fixture does not test arbitrary ids, symlink/concurrent-writer defenses,
+cross-store atomicity, or actual host-process cancellation scheduling. Its
+short-frame/EOF case covers truncated stdin, including EOF after interruption;
+production cancellation handling still needs adapter tests. Payloads, frames
+and payload-derived fingerprints must not be logged. The older
+`receive-synthetic.sh` is historical/unframed and **must not** be used as the
+production receiver or as evidence of safe interrupted transfer.
 
-**There is no general port-to-names join in these two data sources.** Every
-loopback service shares 127.0.0.1; `/etc/hosts` contains neither ports nor kit
-ownership. It cannot say whether `unrelated.abox.test` belongs to this service
-or which alias belongs to a second relay. Filesystem glob order, DNS/getent
-order, and arbitrary hook-script parsing cannot recover declaration provenance.
+`SbxTransportProbe` is an opt-in spike executable, **not** abox's production
+adapter. Its `--verbose` exercises an invariant suppression policy, not the
+existing `ProcessOutput` implementation. The existing production encoding and
+scalar-diagnostic issues described in the archive remain concrete #6 work:
+explicit UTF-8 stdin and sensitive output/error handling must be implemented
+and tested at the approved sbx/process seam. This spike demonstrates a viable
+approach without silently changing `abox secrets`.
 
-Suggested resolution for the user's decision: have kit authors stage explicit
-ordered service-name-to-mapping metadata in the artifact, validated against
-runtime-granted mappings and actual hosts-file resolution. Alternatively, agree
-to preserve already-named hosts and use loopback for ambiguous local addresses,
-which changes #2's first-declared-name requirement. No new metadata schema or
-fallback policy is silently introduced by this spike.
+## Reproduce, synthetic only
 
-## 4. Effective .NET path and stdin transfer
-
-The compiled `Probe` calls the actual .NET `PathHelper` and configuration
-provider with only `abox-issue5-synthetic-only`. It never enumerates secret ids
-or prints values. [PathHelper source][path-helper] checks **APPDATA before HOME
-even on Unix**; this is not an XDG data/config path. Discover the effective user
-and environment of the application, not the host user, a root exec, or a guessed
-`/home/agent`. App-specific environment overrides must be accounted for.
-
-Observed in the representative container:
-
-```text
-uid=1000(agent) gid=1000(agent)
-HOME=/home/agent; APPDATA unset
-destination=/home/agent/.microsoft/usersecrets/abox-issue5-synthetic-only/secrets.json
-```
-
-With nonempty `APPDATA=/tmp/abox-issue5-appdata`, the actual .NET destination was
-`/tmp/abox-issue5-appdata/Microsoft/UserSecrets/abox-issue5-synthetic-only/secrets.json`.
-An isolated Windows HOME/APPDATA probe also read its Windows `Microsoft/UserSecrets`
-destination. No real host user-secrets store was read. Empty/missing unusual home
-environments need explicit handling; the shell fixture is not a complete
-replacement for `PathHelper`'s fallback/error semantics.
-
-Red/green smoke: the Unix probe exited **42** before transfer; after transfer it
-exited **0** and verified both a non-ASCII marker and an escaped newline. An
-explicit UTF-8, no-BOM `ProcessStartInfo` stdin writer on Windows preserved all
-74 source bytes, SHA-256
-`999f7ec4049ea51be9bf3f7745a0c73596b3231217773f6a4da7775906d6fb6d`.
-The directory was **0700** and file **0600**, both owned by `agent:agent`.
-A Unix `cat | sh` representative transfer with the APPDATA override passed too.
-
-**Existing adapter limitation:** `ProcessRunner` does not set
-`StandardInputEncoding`. This Windows process used CP850: the receiver exited 0
-but the Unicode file was only 71 bytes, invalid UTF-8, and the .NET probe still
-exited 42. A successful child exit alone does not verify a secret copy.
-Serializing the parsed JSON with System.Text.Json's default ASCII escaping
-preserved the values through that same adapter and the application passed.
-For implementation, explicitly UTF-8 stdin is the preferable transport fix;
-default ASCII-escaped JSON is a demonstrated alternative if its serialization
-contract is retained. Neither fix is implemented in production here.
-
-Use `ArgumentList`, redirected stdin, no TTY, a fixed receiver script, and no
-payload interpolation into shell commands, arguments, or environment variables.
-Do not rely on Windows PowerShell text pipelines to preserve encoding/bytes.
-The receiver uses a same-directory temporary file, restrictive umask and atomic
-rename. It is intentionally limited to the fixture id in a disposable target;
-it does not solve production path/symlink/concurrency/rollback validation.
-
-## 5. Secrecy is not guaranteed by stdin alone
-
-Actual `ProcessOutput` characterization (`TransportProbe`) showed:
-
-```text
-verbose=False; full-json-hidden=True; scalar-diagnostic-visible=False
-verbose=True; full-json-hidden=True; scalar-diagnostic-visible=True
-raw-captured-result-retains-payload=True
-```
-
-Full stdin and full lines are redacted; a child returning just one scalar from
-JSON is not. Escaping/reformatting values can also evade whole-input redaction.
-`ProcessRunner` returns unmodified captured output, and `SbxClient`'s existing
-outcome/error paths can surface it. The attached-console `ExecAsync` is not a
-secret-safe capture boundary. A metadata-only receiver succeeded quietly, but
-that does not prove arbitrary child failure output safe.
-
-The copy ticket should use a sensitive-operation output/error policy that never
-prints raw child output in ordinary **or verbose** mode, including failures,
-while returning safe exit/status/key metadata. Test echoed/reformatted scalar
-fragments, cancellation, and errors at the approved adapter seam. Preserve
-`abox secrets` behavior; do not weaken the invariant to whole-payload redaction.
-
-## Reproduce the completed representative checks
-
-Run from the repository root with PowerShell 7, .NET SDK, Docker and Buildx.
-Choose fresh names. A Docker name collision fails rather than replacing an
-existing container. Builds below load **local** task tags; none pushes.
+PowerShell 7 from repository root; .NET, Docker/Buildx and healthy local sbx.
+Check **every native exit code**, not just the final pipeline command. Choose
+fresh names; never reuse/remove a user sandbox. No registry writes or persistent
+settings changes are needed. Process-local builder environment is used only
+for local source-kit creation.
 
 ```powershell
 $fixture = 'docs/verification/user-secrets'
-$name = 'abox-issue5-unix-' + [guid]::NewGuid().ToString('N').Substring(0,8)
-$image = 'abox-issue5-workload:' + [guid]::NewGuid().ToString('N')
-$setImage = 'abox-issue5-set:' + [guid]::NewGuid().ToString('N')
-$out = Join-Path (Get-Location) ('.abox/issue5-' + [guid]::NewGuid().ToString('N'))
+$local = 'abox-issue5-local-' + [guid]::NewGuid().ToString('N').Substring(0,8)
+$published = 'abox-issue5-published-' + [guid]::NewGuid().ToString('N').Substring(0,8)
+$out = '.abox/issue5-' + [guid]::NewGuid().ToString('N')
+$ref = 'rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954'
 dotnet publish "$fixture/Probe" -c Release -r linux-x64 --self-contained true -o "$out/probe"
-docker buildx build --builder desktop-linux --file "$fixture/workload/workload.yaml" --load --provenance=false --tag $image "$fixture/workload"
-docker run --rm --network none --entrypoint sh $image -c 'test -f /usr/share/sandbox/kit/workload/kit.yaml && test ! -f /usr/share/sandbox/kit/shell/kit.yaml && test -f /usr/share/sandbox/kit/shell/kit.dockerfile'
-docker buildx build --builder desktop-linux --file "$fixture/set/set.yaml" --load --provenance=false --tag $setImage "$fixture/set"
-docker run --rm --network none --entrypoint sh $setImage -c 'test -f /usr/share/sandbox/kit/shell/kit.yaml && test -f /usr/share/sandbox/kit/gh/kit.yaml && test -f /usr/share/sandbox/kit/set/kit.yaml'
-docker run --detach --name $name --network none --user agent --cap-drop ALL --security-opt no-new-privileges --mount "type=bind,source=$out/probe,target=/opt/abox-issue5,readonly" --entrypoint sleep $image infinity
-```
-
-Check every native command's `$LASTEXITCODE`; PowerShell does not stop on native
-errors by default. Once `docker run` succeeds, use `try/finally` for the remaining
-steps so cleanup runs even if a probe fails:
-
-```powershell
+# Scope/save/restore these environment settings in your invoking shell.
+$env:SBX_KIT_BUILDER = 'host'
+$env:BUILDX_BUILDER = 'desktop-linux'
+$env:DOCKER_CONTEXT = 'desktop-linux'
+sbx --no-input create "./$fixture/workload" --kit ./kits/host-access-cape --name $local --cpus 2 --memory 2g --pull never --static-mcp none --no-progress
+sbx --no-input create $ref --name $published --cpus 2 --memory 2g --pull always --static-mcp none --no-progress
+# After verifying these creates succeeded, protect the remaining steps with finally.
 try {
-    docker exec $name /opt/abox-issue5/Probe     # expect 42: no synthetic file yet
-    docker cp "$fixture/receive-synthetic.sh" "${name}:/tmp/abox-issue5-receive.sh"
-    dotnet run --project "$fixture/TransportProbe" -- $name
-    # Expect final success; raw-Unicode read exit can be 42 on Windows CP850.
-    docker exec $name /opt/abox-issue5/Probe     # expect 0, values not printed
-    docker exec $name sh -c 'stat -c "%a %U:%G %n" "$HOME/.microsoft/usersecrets/abox-issue5-synthetic-only" "$HOME/.microsoft/usersecrets/abox-issue5-synthetic-only/secrets.json"'
-    docker cp "$fixture/synthetic.json" "${name}:/tmp/abox-issue5-synthetic.json"
-    docker exec $name sh -c 'cat /tmp/abox-issue5-synthetic.json | APPDATA=/tmp/abox-issue5-appdata sh /tmp/abox-issue5-receive.sh; APPDATA=/tmp/abox-issue5-appdata /opt/abox-issue5/Probe'
+    foreach ($name in $local, $published) {
+        sbx policy ls $name --source kit --type network --json
+        sbx cp "$out/probe" "${name}:/tmp/abox-issue5"
+        sbx cp "$fixture/receive-framed-synthetic.sh" "${name}:/tmp/abox-issue5-receive-framed.sh"
+        dotnet run --project "$fixture/SbxTransportProbe" -- $name --verbose
+        # Expect all nine status checks to pass, including exits 42, 65 and 9.
+        sbx cp "$fixture/synthetic.json" "${name}:/tmp/abox-issue5-synthetic.json"
+        sbx exec $name sh -c 'APPDATA=/tmp/abox-issue5-appdata /tmp/abox-issue5/Probe'
+        # Expect 42 before the representative Unix transfer, then 0:
+        sbx exec $name sh -c '(printf "74\n999f7ec4049ea51be9bf3f7745a0c73596b3231217773f6a4da7775906d6fb6d\n"; cat /tmp/abox-issue5-synthetic.json) | APPDATA=/tmp/abox-issue5-appdata sh /tmp/abox-issue5-receive-framed.sh && APPDATA=/tmp/abox-issue5-appdata /tmp/abox-issue5/Probe'
+    }
 } finally {
-    docker rm --force $name
-    docker image rm $image $setImage
+    sbx rm $local --force
+    sbx rm $published --force
     Remove-Item -Recurse -Force $out
 }
 ```
 
-`TransportProbe` reports existing adapter limitations; it is not a security-test
-pass for the future feature. It only accepts a task-prefixed Docker container
-name and the bundled synthetic payload. Do not point it at user sandboxes.
-
-For exact UTF-8 byte verification, use a `ProcessStartInfo('docker')` writer with
-`UseShellExecute=false`, `RedirectStandardInput/Output/Error=true`, and
-`StandardInputEncoding = new UTF8Encoding(false)`. Add separately
-`exec`, `-i`, `$name`, `sh`, `/tmp/abox-issue5-receive.sh` to `ArgumentList`;
-write `File.ReadAllText(synthetic.json)` to stdin and close it. Drain both output
-streams concurrently, check exit/status, compare `sha256sum` with `Get-FileHash`,
-then run `Probe`. This was separately exercised; the current `ProcessRunner`
-path deliberately remains unchanged so its encoding limitation is reproducible.
-
-## Remaining live verification / decision gate
-
-1. Obtain a runtime which actually admits required `host-port@1` and a healthy
-   task-scoped sandbox. Runtime upgrade/restart/settings repair needs separate
-   user approval; do not silently repair the shared installation.
-2. With a fresh `abox-issue5-*` name and process-local host-builder selection,
-   run `sbx --no-input create ./docs/verification/user-secrets/workload --kit
-   ./docs/verification/user-secrets/relay --name <fresh> --pull never
-   --static-mcp none --no-progress`. On v0.51.0, expect the recorded rejection.
-3. If admitted, capture `sbx inspect <fresh> --json` and the staged descriptors
-   plus `/etc/hosts`. Exclude unrelated credential metadata from retained
-   evidence. Verify effective mappings, selected groups/defaults/args and ordered
-   aliases before selecting inspect or staged-file discovery. Do not invent a
-   JSON schema from the spec.
-4. Start a **synthetic-only**, loopback-only host HTTP responder on free port
-   35431 (fail if occupied). Compare
-   `curl --noproxy '*' --fail --max-time 5 http://127.0.0.1:35432/` and
-   `http://sql.first.abox.test:35432/` from that sandbox with its known marker.
-   An HTTP response from a different host service is not success. Stop only that
-   responder. This connection check has **not** run successfully here.
-5. Repeat metadata, relay and transfer/read/permissions checks on a read-only
-   consumable **already published squad**, with no component source tree or
-   local build manifest. It must include a template-derived workload and mixins.
-   Supply that reference rather than publishing an artifact for this spike.
-6. Repeat explicit UTF-8/ASCII-JSON transfer through real `sbx exec -i` from
-   Windows and a Unix-like host/representative caller, with the real application
-   user/environment and fixed synthetic id. Capture safe failures as well as
-   success. Never allocate `-t` or print the payload.
-7. Decide how names associate with mappings and how to handle unsupported
-   runtimes/ambiguous declarations. Do not change #2's first-name semantics
-   implicitly. Until these gates are resolved, #5 remains **open/incomplete**.
-
-## Primary sources
-
-Upstream source links are pinned to investigation commit
-`06ac386a1b5d570daff36bba4232fb9e71e45d50`; frontend m.11 independently exhibits
-the same descriptor-removal behavior. Runtime product support and the normative
-experimental specification are different evidence.
+For forwarding, use the normal sandbox proxy environment for HTTP:
+`curl --fail --silent --show-error --max-time 5 http://host.docker.internal:8006/_localstack/health --output /dev/null --write-out '%{http_code}\n'`.
+A direct `socket.create_connection(('host.docker.internal', port), 5).close()`
+from Python inside the disposable sandbox verifies TCP only, not authentication.
 
 ## Repository verification
 
-- `dotnet test --solution cli/agentbox.slnx`: **452 passed**, no failures/skips.
-- Release builds of the CLI solution, `Probe`, and `TransportProbe`: succeeded
-  with zero warnings/errors.
-- `dotnet csharpier check cli docs/verification/user-secrets` and
-  `git diff --check`: passed.
-- Opt-in fixture runs: staged-file presence/absence, .NET red/green reads,
-  Windows explicit UTF-8 bytes/hash, CP850 corruption and ASCII-escaped recovery,
-  Unix APPDATA transfer, ownership/modes, hosts-file alias resolution, deliberate
-  child failure diagnostics, and invalid-target-name rejection.
+- `dotnet test --solution cli/agentbox.slnx` in Debug and Release: **452 passed**
+  each, no failures/skips.
+- Release solution and all three probe builds: zero warnings/errors.
+- `dotnet csharpier check cli docs/verification/user-secrets` and `git diff --check`.
+- New live red/green checks above: local and published UTF-8 reads, short/corrupt
+  frame rejection preserving prior bytes, uid/modes, scalar failure suppression,
+  representative Unix APPDATA reads, invalid existing-target rejection (exit 2),
+  exact kit-policy inventory, direct TCP and LocalStack HTTP 200.
 
-These checks do not substitute for the incomplete sbx acceptance rows above.
-Only task-owned disposable containers/sandboxes and local image tags were
-removed. Downloaded public image/build caches were not globally pruned.
-
-[support]: https://docs.docker.com/ai/sandboxes/customize/author/capabilities/
-[releases]: https://docs.docker.com/ai/sandboxes/release-notes/
-[host-port]: https://github.com/docker/sandbox-kit-spec/blob/06ac386a1b5d570daff36bba4232fb9e71e45d50/docs/spec/capabilities/com.docker.sandbox/host-port@1.md
-[frontend]: https://github.com/docker/sandbox-kit-spec/blob/06ac386a1b5d570daff36bba4232fb9e71e45d50/cmd/frontend/build.go
-[set-tests]: https://github.com/docker/sandbox-kit-spec/blob/06ac386a1b5d570daff36bba4232fb9e71e45d50/cmd/frontend/set_e2e_test.go
-[path-helper]: https://github.com/dotnet/runtime/blob/v10.0.0/src/libraries/Microsoft.Extensions.Configuration.UserSecrets/src/PathHelper.cs
+No production copy/rewrite command has been added by #5.

@@ -1,0 +1,25 @@
+{
+  "rules": [
+    {
+      "id": "3ddad2e8-55c8-4fdb-a4b3-2a0d14b6246e",
+      "name": "kit:abox-issue5-local-191454a2",
+      "policy_id": "559a91c9-1b85-4c90-abfb-9ac0db776c6b",
+      "scope": "sandbox:abox-issue5-local-191454a2",
+      "applies_to": "sandbox:abox-issue5-local-191454a2",
+      "resource_type": "network",
+      "decision": "allow",
+      "resources": [
+        "localhost:8004", "localhost:1521", "localhost:8005",
+        "localhost:8006", "localhost:8007", "localhost:13133",
+        "localhost:16686", "localhost:4317", "localhost:4318"
+      ],
+      "origin": "scoped",
+      "layer": "local",
+      "status": "active",
+      "editable": false,
+      "sandbox_id": "abox-issue5-local-191454a2",
+      "provenance": { "created_via": "provisioned", "source": "sandboxes" },
+      "actions": ["net:connect:tcp"]
+    }
+  ]
+}

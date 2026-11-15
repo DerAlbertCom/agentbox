@@ -570,10 +570,13 @@ cli/src/Abox/
 
 ## What is not built yet
 
-- Local .NET user-secrets copying and address rewriting (#2). The
-  [verification spike](verification/user-secrets/README.md) records runtime
-  blockers, descriptor-survival checks, transport fixtures and unresolved
-  hostname attribution; it is not a completed runtime compatibility proof.
+- Local .NET user-secrets copying and address rewriting (#2). The resumed
+  [verification spike](verification/user-secrets/README.md) proves supported
+  kit-policy discovery and synthetic transport in local and published sandboxes.
+  The approved direction uses `host.docker.internal` and unchanged published host
+  ports, not experimental relays or inferred hostnames. The accessible published
+  set has no host-access declarations; its nonempty-policy rewrite case remains
+  unverified. Production UTF-8/sensitive-output transport is still #6 work.
 - Discovering published squads remotely when `--squad` is omitted.
 - Pruning local builds, versioned runtime kits, host-Docker `abox-workload` images
   and registry components. `abox prune` currently removes only sbx template images.

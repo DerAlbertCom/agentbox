@@ -1,0 +1,11 @@
+{
+  "name": "abox-issue5-published-b36814c0",
+  "agent": "ac",
+  "kits": [
+    "rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954"
+  ],
+  "state": "running",
+  "created_version": "v0.51.0",
+  "daemon_version": "v0.51.0",
+  "network_policy": { "scope": "global" }
+}
