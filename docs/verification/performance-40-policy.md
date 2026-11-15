@@ -102,6 +102,8 @@ The ticket-specific suites are:
   Checks remain pending until cleanup finishes. Sources stay unchanged, verbose
   diagnostics are value-free, unused candidates must complete, and a second
   invocation observes a changed effective authorization rather than a cache.
+  A separate composed invocation passes a real CLI cancellation token through
+  command handling into every concurrent policy check and returns exit 130.
 - `Infrastructure/Performance40SensitivePolicyProcessTests.cs`: actual synthetic
   PowerShell/Unix-shell children produce metadata and sensitive-looking scalar
   fragments concurrently. A shared completion gate releases their policy results.
@@ -123,10 +125,12 @@ dotnet csharpier check cli
 git diff --check
 ```
 
-Initial verification: ticket-specific **29 passed**; policy **129 passed**;
-process **31 passed**; command **570 passed, 2 skipped**; full Debug **1675 passed,
+Final verification after merging the latest integration tip (still `7e37db3`;
+Git reported already up to date): ticket-specific **30 passed**; policy **130 passed**;
+process **31 passed**; command **571 passed, 2 skipped**; full Debug **1676 passed,
 7 skipped, zero failures**. The seven capability skips concern native file
 symlinks/receiver symlinks and case-distinct directories on this Windows host;
 they do not count as passing, and no new ticket test was skipped. Release was
 used only for the standalone benchmark; no Release test run or live sandbox
-operation is claimed.
+operation is claimed. The Debug solution and Release benchmark builds had zero
+warnings/errors; CSharpier and whitespace checks passed.
