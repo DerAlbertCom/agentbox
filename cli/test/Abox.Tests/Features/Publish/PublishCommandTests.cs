@@ -212,7 +212,7 @@ public sealed class PublishCommandTests
     private void SaveBuild(string team, string squad, string tag)
     {
         _root.File($"teams/{team}/{squad}.abox", "workload: sample\n");
-        var workload = Path.Combine(_store.DirectoryFor(squad, tag), "workload");
+        var workload = Path.Combine(_store.DirectoryFor(team, squad, tag), "workload");
         Directory.CreateDirectory(workload);
         File.WriteAllText(
             Path.Combine(workload, "workload.yaml"),

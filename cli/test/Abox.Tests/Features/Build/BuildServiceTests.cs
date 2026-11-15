@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class BuildServiceTests
+public sealed partial class BuildServiceTests
 {
     private readonly TempDirectory _root = new();
     private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
@@ -67,8 +67,11 @@ public sealed class BuildServiceTests
         );
 
         // Assert
-        _store.Load("ac", "latest")!.PublishRepository.Should().Be("shared-images-local");
-        _store.Load("bd", "latest")!.PublishRepository.Should().Be("sample-images-local");
+        _store
+            .Load("sample", "ac", "latest")!
+            .PublishRepository.Should()
+            .Be("shared-images-local");
+        _store.Load("sample", "bd", "latest")!.PublishRepository.Should().Be("sample-images-local");
     }
 
     [Fact]
@@ -86,7 +89,7 @@ public sealed class BuildServiceTests
         _root.File("teams/sample/sample.workload", "publishRepository: other-images-local\n");
 
         // Act
-        var check = () => BuildSources.EnsureUnchanged(_store.Load("ac", "latest")!);
+        var check = () => BuildSources.EnsureUnchanged(_store.Load("sample", "ac", "latest")!);
 
         // Assert
         check.Should().Throw<AboxException>().WithMessage("*sources changed*--no-personal*");
@@ -106,7 +109,7 @@ public sealed class BuildServiceTests
         );
 
         // Assert
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
         manifest.IncludesPersonalConfigurations.Should().BeFalse();
         manifest.Kits.Should().BeEmpty();
         manifest.ConfigFiles.Should().NotContain(file => file.Contains("personal.abox"));
@@ -127,7 +130,7 @@ public sealed class BuildServiceTests
             CancellationToken.None
         );
         // Assert
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
         var snapshot = BuildSources.Snapshot(manifest, _root.Directory_("snapshot"));
         var asset = Path.Combine("certificates", "rwe_inspection_certificate_chain.pem");
         File.ReadAllBytes(Path.Combine(snapshot[manifest.WorkloadKitDirectory], asset))
@@ -150,7 +153,7 @@ public sealed class BuildServiceTests
         await _service.BuildAsync(Request(), CancellationToken.None);
 
         // Assert
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
         manifest.IncludesPersonalConfigurations.Should().BeTrue();
         manifest.Kits.Should().ContainSingle().Which.Name.Should().Be("private");
         manifest.SourceHashes.Should().BeEmpty();
@@ -210,7 +213,7 @@ public sealed class BuildServiceTests
 
             // Assert
             exitCode.Should().Be(0);
-            _store.Load("ac", "latest")!.SourceHashes.Should().BeEmpty();
+            _store.Load("sample", "ac", "latest")!.SourceHashes.Should().BeEmpty();
             await _sbx.Received(1)
                 .InspectKitAsync(
                     Path.Combine(_root.Path, "kits", "private"),
@@ -227,7 +230,7 @@ public sealed class BuildServiceTests
             (await action.Should().ThrowAsync<AboxException>()).WithMessage(
                 "*symbolic link or reparse point*"
             );
-            _store.Load("ac", "latest").Should().BeNull();
+            _store.Load("sample", "ac", "latest").Should().BeNull();
         }
     }
 
@@ -244,7 +247,11 @@ public sealed class BuildServiceTests
             .Returns(call =>
             {
                 File.AppendAllText(
-                    Path.Combine(_store.DirectoryFor("ac", "latest"), "workload", "workload.yaml"),
+                    Path.Combine(
+                        _store.DirectoryFor("sample", "ac", "latest"),
+                        "workload",
+                        "workload.yaml"
+                    ),
                     "description: changed during verification\n"
                 );
                 return new SbxOutcome(0, "");
@@ -262,7 +269,7 @@ public sealed class BuildServiceTests
 
         // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*sources changed*");
-        _store.Load("ac", "latest").Should().BeNull();
+        _store.Load("sample", "ac", "latest").Should().BeNull();
     }
 
     private BuildRequest Request() =>
@@ -276,7 +283,7 @@ public sealed class BuildServiceTests
         await _service.BuildAsync(Request() with { Verify = false }, CancellationToken.None);
 
         // Assert
-        var manifest = _store.Load("ac", "latest")!;
+        var manifest = _store.Load("sample", "ac", "latest")!;
         manifest.LocalWorkload.Should().NotBeNull();
         manifest.LocalWorkload!.ImageId.Should().Be(LocalWorkloadTest.ImageId);
         manifest.LocalWorkload.RuntimeKitDirectory.Should().NotBe(manifest.WorkloadKitDirectory);
@@ -303,7 +310,7 @@ public sealed class BuildServiceTests
     {
         // Arrange
         await _service.BuildAsync(Request(), CancellationToken.None);
-        var image = _store.Load("ac", "latest")!.LocalWorkload!;
+        var image = _store.Load("sample", "ac", "latest")!.LocalWorkload!;
         var recipePath = Path.Combine(image.RuntimeKitDirectory, "workload.dockerfile");
         var previousRecipe = File.ReadAllText(recipePath);
         if (changeInputs)
@@ -324,9 +331,9 @@ public sealed class BuildServiceTests
 
         // Assert
         exitCode.Should().Be(0);
-        _store.Load("ac", "latest")!.LocalWorkload.Should().BeNull();
+        _store.Load("sample", "ac", "latest")!.LocalWorkload.Should().BeNull();
         _store
-            .Load("ac", "latest")!
+            .Load("sample", "ac", "latest")!
             .Template.Should()
             .Be(changeInputs ? "example.com/other:2" : "example.com/base:1");
         File.ReadAllText(recipePath).Should().Be(previousRecipe);
