@@ -327,7 +327,7 @@ Project-local `appsettings.json` is combined with lowercase
 `appsettings.development.json` (development wins, keys are case-insensitive).
 Selected host keys always win, but still receive eligible endpoint adaptation.
 Existing exact/wildcard/empty key filters apply to copied **and generated** keys.
-Only eligible URL/PostgreSQL values needing a host change are generated, not the
+Only eligible URL/PostgreSQL/Oracle values needing a host change are generated, not the
 whole appsettings file. A store with no matching project remains copy-only.
 
 Each create/replacement/explicit copy rebuilds the complete destination, removing
@@ -337,7 +337,7 @@ discovered consumer's required effective value, including remote/unmapped values
 that need no rewrite; conflicts stop all selected stores before any write, with
 value-free store/key/project diagnostics. Supply an authoritative selected host
 key, exclude the key, or use separate stores to resolve a conflict. Unknown
-consumers still block generation. Oracle and split settings are follow-ups.
+consumers still block generation. Recognized split settings remain a follow-up.
 This bounded discovery does not simulate
 custom providers, environment/CLI overrides or service readiness. See
 [precedence, discovery, refresh and safety details](docs/user-secrets-appsettings.md).
@@ -375,7 +375,10 @@ http://127.0.0.1:8006/path -> http://host.docker.internal:8006/path
 ```
 
 Named hosts (including `host.docker.internal`) retain their names/ports for
-TLS/SNI. URL/PostgreSQL rewriting includes IPv4/IPv6 loopback. Undeclared ports and
+TLS/SNI. URL/PostgreSQL/Oracle rewriting includes IPv4/IPv6 loopback. Oracle Easy
+Connect and structural descriptors work standalone or inside `Data Source`
+connection-string values, preserving credentials, service/SID identifiers and
+options; only eligible hosts within compound destinations change. Undeclared ports and
 unrelated credentials, fields, paths and queries remain unchanged. Recognized
 mapped-local endpoints with unsafe/ambiguous syntax fail before any destination
 write, rather than silently retaining known broken configuration. Arbitrary text

@@ -551,19 +551,24 @@ first-name selection. See [supported forms, preservation and verification](user-
   fails safely before writes. Do not invent mappings or change policy.
 - Rewrite only supported loopback endpoint fields at an
   inventoried, currently authorized port to `host.docker.internal`, preserving the
-  **same published host port**. URL/PostgreSQL forms include localhost, dotted IPv4
+  **same published host port**. URL/PostgreSQL/Oracle forms include localhost, dotted IPv4
   loopback and IPv6 loopback. Supported forms include absolute URI
   authorities, SQL Server comma-port fields (optional `tcp:`), and separate
   Host/Server + Port database fields. Standard URL scheme defaults and the
   PostgreSQL Host default 5432 are eligible only when that same host port is mapped.
+  The private `UserSecretsCopy.Oracle.cs` adapter handles Easy Connect/Plus and
+  structural descriptors, including quoted `Data Source` values. It maps parsed
+  host spans back to the original text, preserving credentials, service/SID names,
+  options, formatting and compound remote/unmapped destinations. Easy Connect's
+  default 1521 is eligible only if mapped; descriptors require explicit ports.
 - Preserve named endpoints, including `host.docker.internal`, and their ports
   for TLS/SNI. Preserve undeclared ports and unrelated
   credentials/text/fields/paths/queries. A service published as `8004:5432` does not
   justify rewriting `localhost:5432` to port 8004.
   Recognized mapped-local endpoints with unsafe/ambiguous supported syntax now
   fail actionably before writes, without values. Arbitrary/unmapped localhost
-  strings do not fail merely for mentioning localhost. Oracle/split settings are
-  separate follow-ups.
+  strings do not fail merely for mentioning localhost. Recognized split settings
+  remain a separate follow-up.
 - No host kit sources, staged descriptors, `/etc/hosts`, `host-port@1` or `sbx ports`
   are used. `sbx inspect` is insufficient for this inventory. Authorization is not
   proof of service availability or protection against later policy changes.
@@ -573,10 +578,12 @@ first-name selection. See [supported forms, preservation and verification](user-
 Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
 rewriting (#8), creation/replacement integration (#9) and URL/PostgreSQL
 appsettings-derived overrides (#13), and compatible shared-store merging with
-all-consumer conflict protection (#14) are implemented through the shared copy flow.
-Oracle and recognized split-setting support remain follow-ups under #12; they
-use the same format-independent generated-candidate/effective-value safeguards.
+all-consumer conflict protection (#14), and Oracle Easy Connect/descriptor support
+(#15) are implemented through the shared copy flow. Oracle feeds the same
+format-independent generated-candidate/effective-value safeguards; recognized
+split-setting support remains a follow-up under #12.
 See [shared-store verification](verification/user-secrets-shared-stores.md).
+See [Oracle command-level verification](verification/user-secrets-oracle.md).
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force

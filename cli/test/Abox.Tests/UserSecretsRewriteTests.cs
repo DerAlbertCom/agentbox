@@ -80,9 +80,9 @@ public sealed class UserSecretsRewriteTests
     [InlineData("Server=sql.internal,8004;Password=localhost,8004")]
     [InlineData("Server=localhost,5432")]
     [InlineData("Server=localhost\\instance,8004")]
-    [InlineData("Data Source=localhost:8004/database")]
+    [InlineData("Data Source=localhost:5432/database")]
     [InlineData("Password=http://localhost:8004;Path=localhost,8004")]
-    [InlineData("localhost:8004")]
+    [InlineData("localhost:5432")]
     public async Task NamedUndeclaredAndUnsupportedFormsRemainByteForByteUnchanged(string original)
     {
         using var fixture = new CopyFixture();
@@ -100,6 +100,14 @@ public sealed class UserSecretsRewriteTests
         "postgresql://user:p%40ss@host.docker.internal:08004/db?Password=localhost:8004#localhost:8004"
     )]
     [InlineData("tcp://localhost:8004", "tcp://host.docker.internal:8004")]
+    [InlineData(
+        "tcp://user:p%40ss@localhost:8004/path/%2f?q=%26#localhost:8004",
+        "tcp://user:p%40ss@host.docker.internal:8004/path/%2f?q=%26#localhost:8004"
+    )]
+    [InlineData(
+        "tcp://localhost:8004/path/%2f?q=%26#localhost:8004",
+        "tcp://host.docker.internal:8004/path/%2f?q=%26#localhost:8004"
+    )]
     [InlineData(
         "http://localhost:8004/path/%2f?q=%26",
         "http://host.docker.internal:8004/path/%2f?q=%26"

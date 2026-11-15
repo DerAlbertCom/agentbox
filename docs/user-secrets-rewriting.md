@@ -28,7 +28,7 @@ Missing, malformed or unavailable required metadata fails before any store write
 An empty inventory is valid: ambient/manual/global authorization never supplies
 rewrite intent. These commands do not change policy.
 
-For supported URL/PostgreSQL endpoint fields, `localhost` (case-insensitive),
+For supported URL/PostgreSQL/Oracle endpoint fields, `localhost` (case-insensitive),
 dotted IPv4 loopback and IPv6 loopback change to `host.docker.internal`, retaining
 the **same published host port**, and only when that port is inventoried and currently
 authorized. Policy checks do not prove service availability and cannot prevent a
@@ -72,6 +72,45 @@ not arbitrary substring occurrences:
   escapes in other fields are preserved. Semicolons inside quoted values do not
   split fields. Credentials and unrelated fields are never recursively rewritten.
 
+### Oracle Easy Connect and descriptors (#15)
+
+Oracle endpoints use the same flow from either appsettings or selected host
+secrets, not a separate copy mechanism or a restriction to `ConnectionStrings`:
+
+- Easy Connect: `[//]host[:port][/service[:server][/instance]][?options]`, with
+  optional `tcp://` or `tcps://`, decimal explicit ports and bracketed IPv6.
+  The Oracle default 1521 is eligible only when that same host port is mapped;
+  a bare name without a prefix, port or service remains an unresolved TNS alias.
+- Easy Connect Plus comma-separated hosts, shared trailing ports
+  (`localhost,remote.test:1521/service`), per-address ports, and semicolon-separated
+  address lists. Each host's port is resolved within its own group before testing
+  locality. A remote host's mapped port cannot implicate an explicitly unmapped
+  local host. List order, separators, port spelling, service/server/instance
+  identifiers and query options (including quoted scalar values) are retained.
+- Structural `(DESCRIPTION=...)`, `(DESCRIPTION_LIST=...)`, `(ADDRESS=...)` and
+  `(ADDRESS_LIST=...)` descriptors. Only direct `HOST` fields in TCP/TCPS `ADDRESS`
+  entries at an explicitly mapped `PORT` change. Descriptor IPv6 hosts can be bare
+  or bracketed. Address/description lists can mix eligible, remote and unmapped
+  destinations; only eligible hosts change. Service/SID identifiers, credentials,
+  structure, casing, spacing, quotes and all unrelated options remain intact.
+- Either Oracle form inside an Oracle connection string's `Data Source` field,
+  including quoted values with doubled outer quote escapes. Other fields such as
+  `User Id`, `Password` and pooling options are untouched. Endpoint-shaped text
+  inside credentials or prose is not recursively inspected.
+
+Known mapped-local Oracle endpoints fail safely rather than guessing when syntax
+is malformed/ambiguous: duplicate outer fields, competing host/port fields,
+unfinished quoting, unbalanced descriptors, duplicate address host/port/protocol,
+unsupported address protocols, unbracketed Easy Connect IPv6, or proxy/endpoint
+options that make a direct host substitution unsafe. Descriptor parsing is bounded
+to 64 nested levels. TNS alias resolution, JDBC/SQL*Plus login syntax and arbitrary
+Oracle Net files are not evaluated. Remote/unmapped values are preserved rather
+than rejected merely for mentioning localhost. Existing generic TCP URI
+userinfo/escaped-path/fragment support remains with the URL dispatcher.
+
+Configuration tests require no live Oracle instance and do not establish
+authentication/query readiness. See [synthetic Oracle verification](verification/user-secrets-oracle.md).
+
 Recognized mapped-local endpoints that cannot be adapted unambiguously now fail
 before **any** destination write: malformed mapped-local URLs, multiple connection
 hosts/ports, duplicate fields and recognized endpoints with malformed quoting or
@@ -79,9 +118,9 @@ unsupported brace syntax. Diagnostics name the store/key and, for generated
 values, project, but never include the value. `--force` does not bypass this.
 Named endpoints, undeclared ports and arbitrary strings always stay unchanged;
 merely containing `localhost` is not an error. Host aliases, nonliteral/shorthand
-loopback spellings, SQL named instances, Oracle descriptors/Easy Connect, split
-host/port settings, embedded prose/JSON and relative URLs are outside the supported
-shapes. Oracle and explicitly recognized split settings are separate follow-ups.
+loopback spellings, SQL named instances, split host/port settings, embedded
+prose/JSON and relative URLs are outside the supported shapes. Explicitly
+recognized split settings remain a separate follow-up.
 This is deliberately not a generic connection-string normalizer. JSON whitespace,
 comments and escape spelling are not a preservation contract; transfer serializes
 the selected JSON tree and excludes skipped comments. Unchanged string contents

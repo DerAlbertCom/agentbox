@@ -209,8 +209,10 @@ public sealed partial class UserSecretsCopy
     {
         AboxException Unsupported() =>
             new(
-                $"{DescribeSetting(id, key, project)}: recognized mapped-local endpoint has an unsupported or ambiguous format. Use a well-formed absolute URL or single-host PostgreSQL connection string with one port; no stores were copied."
+                $"{DescribeSetting(id, key, project)}: recognized mapped-local endpoint has an unsupported or ambiguous format. Use a well-formed supported URL, database connection string, or Oracle Easy Connect/descriptor endpoint; no stores were copied."
             );
+        if (TryRewriteOracle(value, ports, Unsupported, out var oracle))
+            return oracle;
         if (IsMultiHostOrQueryPostgresUrl(value, ports, out var hasMappedLocalEndpoint))
         {
             if (hasMappedLocalEndpoint)
