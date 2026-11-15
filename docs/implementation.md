@@ -487,8 +487,11 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   any writes, even with empty filters, authoritative host values or force.
   See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
-  before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
-  using sbx policy discovery, retaining originals for deny/force accounting.
+  before writing. `UserSecretsCopy.Target.cs` discovers authorized host ports and
+  prepares targets, retaining originals for deny/force accounting. Pure internal
+  `EndpointAdaptation` handles URL, SQL Server, PostgreSQL, Oracle and recognized
+  split-setting parsing/rewriting using only those ports, resolved effective settings
+  and value-free diagnostic context; it performs no discovery, selection or copying.
   Selected host keys block generated replacements. Eligible appsettings-only
   values produce flat effective-key overrides subject to the same deny/filter
   checks. `UserSecretsCopy.SharedStores.cs` merges generic generated-key candidates
@@ -571,9 +574,9 @@ provenance below describes existing runtime metadata, not a kit lookup.
   authorities, SQL Server comma-port fields (optional `tcp:`), and separate
   Host/Server + Port database fields. Standard URL scheme defaults and the
   PostgreSQL Host default 5432 are eligible only when that same host port is mapped.
-  The private `UserSecretsCopy.Oracle.cs` adapter handles Easy Connect/Plus and
-  structural descriptors, including quoted `Data Source` values. It maps parsed
-  host spans back to the original text, preserving credentials, service/SID names,
+  The internal `EndpointAdaptation.Oracle.cs` implementation handles Easy
+  Connect/Plus and structural descriptors, including quoted `Data Source` values.
+  It maps parsed host spans back to the original text, preserving credentials, service/SID names,
   options, formatting and compound remote/unmapped destinations. Easy Connect's
   default 1521 is eligible only if mapped; descriptors require explicit ports.
 - Preserve named endpoints, including `host.docker.internal`, and their ports

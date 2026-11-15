@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 
 namespace Abox.UserSecrets;
 
-public sealed partial class UserSecretsCopy
+internal static partial class EndpointAdaptation
 {
     private static bool TryRewriteOracle(
         string value,
