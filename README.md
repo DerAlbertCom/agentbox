@@ -16,7 +16,7 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal]` | Prebuilds reusable local workload images with Docker Buildx and prepares the v3 kits of every squad. No registry writes. |
 | `abox build --team <name> --metadata-only` | Maintainer-only source preparation without image builds. Clears local image selection for this tag; not required for remote create. |
 | `abox publish --team <name> [--root <dir>] [--tag <tag>] [--builder <name>]` | Builds and pushes the local kit sets to `rwest.jfrog.io/<publishRepository>`, configured in each workload. Requires Docker Buildx and host registry sign-in. |
-| `abox create --team <name> --squad <name> [--location <path>] [--local] [--root <dir>]` | Pulls a self-contained published squad set, or uses a local prebuild with `--local`. Only local create can ask for an omitted squad; `--root` locates its team sources separately from the sandbox location. |
+| `abox create --team <name> [--squad <name>] [--location <path>] [--local] [--root <dir>]` | Pulls a self-contained published squad set, or uses a local prebuild with `--local`. The folder's `abox.json` can select the squad and opt into user-secret copying. Only local create can ask for an otherwise omitted squad; `--root` locates its team sources separately from the sandbox location. |
 | `abox run [<launcher>] [--location <path>] [-- <argv>...]` | Starts a launcher for the sandbox of a folder. The default launcher is a shell. |
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
@@ -156,9 +156,10 @@ userSecretsDenyList:
 - `teamsDirectory` names the project's teams directory; the default is `teams`.
 - `kitsDirectory` names the kits directory relative to the project root; the default is `kits`.
 - `userSecretsDenyList` is a list of nonempty **literal substrings**, matched
-  case-insensitively against selected original values before any sandbox writes.
+  case-insensitively against selected original values before rewriting or writes.
   It defaults to `[]`: there is no built-in staging/production detection. Add your
-  environment markers here; do not put secret values in configuration.
+  environment markers here; do not put secret values in configuration. This is a
+  policy safeguard, not a detector for arbitrary production credentials.
 
 The file is at `$XDG_CONFIG_HOME/abox/config.yaml` when `XDG_CONFIG_HOME` is an
 absolute path; otherwise it is `~/.config/abox/config.yaml` on Linux/macOS or
@@ -168,30 +169,103 @@ values use the default. It is independent of each workload's `publishRepository`
 
 ### Copying .NET user secrets
 
-Create the sandbox first, then declare only the intended store IDs in **that
-folder's `abox.json`** (not a squad `.abox` file):
+Declare the squad and only the intended stores/keys in **the sandbox folder's
+`abox.json`** (not a squad `.abox` file or the source project selected by `--root`):
 
 ```json
 {
-  "userSecrets": ["5b3e0f6a-1c2d-4e5f-a6b7-c8d9e0f1a2b3", "my-dev-store"]
+  "squad": "ac",
+  "userSecrets": [
+    "5b3e0f6a-1c2d-4e5f-a6b7-c8d9e0f1a2b3",
+    { "id": "my-dev-store", "keys": ["ConnectionStrings:*", "Feature:Enabled"] }
+  ]
 }
 ```
 
+**Trust boundary:** the workspace, including `abox.json`, is writable by the
+sandbox agent. Changes to this file control which host stores/keys the **next**
+create, replacement or on-demand copy reads. Review and trust its current squad,
+IDs and patterns before those operations, including after agent edits. There is
+no separate host-side approval/authorization mechanism. The global deny list does
+not make an untrusted folder safe or guarantee that production secrets cannot enter.
+
 ```sh
+# Initial creation also copies the configured secrets:
+abox create --team sample --location /path/to/project
+# Resync an existing local or published sandbox without recreating it:
 abox user-secrets --location /path/to/project
 # Explicit safety override, only when you have checked the blocked key:
 abox user-secrets --location /path/to/project --force
 ```
 
-Each plain ID selects its **whole store**. An absent/empty `userSecrets` array
-selects nothing; missing/invalid `abox.json` is an on-demand error. Filter objects
-(`{"id":"...","keys":["ConnectionStrings:*"]}`) currently fail rather than
-silently copying everything. IDs must be 1–128 ASCII letters/digits/dots/underscores/
-hyphens, beginning with a letter/digit, without trailing dots or Windows device
-names. Duplicate IDs and duplicate effective .NET keys are rejected
-case-insensitively, including nested/colon-key collisions. The folder JSON is
-strict; store JSON accepts .NET-style comments and trailing commas and must have
-an object root. Nested objects, arrays and scalar types are preserved.
+#### Selection and squad identity
+
+Plain IDs and objects can be mixed. A plain ID or `{"id":"my-dev-store"}` selects
+the **whole store**. A `keys` list selects effective .NET keys, such as
+`ConnectionStrings:Db` for a nested JSON property:
+
+- Matching is full-key, ordinal and case-insensitive. An exact pattern selects
+  only that key; `ConnectionStrings` does not select its descendants.
+- `*` matches zero or more characters, **including `:`**, anywhere in a pattern.
+  `ConnectionStrings:*` includes deeper descendants. Other characters are literal,
+  not regex/glob operators. Overlapping patterns select each key once.
+- `"keys": []` or patterns with no matches select zero keys and **replace that
+  store with `{}`**. They never broaden into a whole-store copy or leave old keys.
+- An absent/empty `userSecrets` array selects no stores and writes nothing.
+  Filtered output uses flat effective keys, preserving array indices and selected
+  values; unfiltered output retains the JSON structure.
+
+IDs must be 1–128 ASCII letters/digits/dots/underscores/hyphens, beginning with a
+letter/digit, without trailing dots or Windows device names. Duplicate IDs and
+duplicate effective .NET keys are rejected case-insensitively, including
+nested/colon-key and array-index collisions, **before filtering**. Invalid patterns
+fail, not widen selection. Folder JSON is strict; store JSON must be a UTF-8 object
+and accepts .NET-style comments/trailing commas. See the
+[full filtering contract](docs/user-secrets-filtering.md) for pattern validation,
+scalar types and empty-container handling.
+
+The optional `squad` selects local or published creation when `--squad` is omitted.
+An explicit option must match case-insensitively; conflicts fail, not override the
+folder. The team still comes from `--team` or `defaultTeam`. With no folder squad,
+existing command selection applies. `run` and on-demand `user-secrets` require a
+known matching sandbox record when a folder squad is present; they never silently
+switch an existing sandbox's squad.
+
+#### Automatic copying and policy
+
+Local/published creation, explicit replacement and an accepted newer-local-build
+replacement from `run` use the **same copy flow** as `abox user-secrets`. Folder
+configuration and all selected host originals are validated **before removal** of
+an existing sandbox. After successful creation, abox saves the truthful new sandbox
+record, then copies secrets **before reporting full success or launching**.
+Target-only discovery/transfer failures can therefore occur after creation.
+
+A folder without `abox.json` retains its existing create/run behavior, without
+user-secret store reads, target discovery or writes. Ordinary `run`, including
+declining a newer-build replacement, does **not** resync secrets. Failed creation,
+declined replacement and cancellation do not start a subsequent copy. Missing or
+invalid `abox.json` is an on-demand error. See the
+[lifecycle and recovery details](docs/user-secrets-lifecycle.md).
+
+All selected originals are snapshotted in memory, parsed and checked against the
+global deny list **before rewriting or any destination write**. Only selected
+scalar values are checked: strings after JSON unescaping, plus number/boolean text;
+null/empty containers have no text. A blocked unmatched value does not prevent a
+safe filtered copy. A block names the store/key, never the value.
+
+`--force` is **on-demand only** and bypasses only matched deny-list policy, not
+invalid configuration/JSON, missing files, squad constraints, metadata/destination
+checks, cancellation or transport errors. The reporting contract is a warning
+after a successful copy **only if selected original values actually matched**;
+passing `--force` with no match is not an override. Actual-match reporting is
+pending the safety fixes noted in [implementation status](docs/implementation.md#user-secrets-integration-status).
+Automatic copying always enforces the list: `--yes` and replacement consent are
+not force. If validation blocks creation, correct the values/selection. For an
+intentional override, explicitly deselect the blocked stores, create, restore the
+selection, then run `abox user-secrets --force`; restoring selection alone does
+not trigger a copy.
+
+#### Paths, transfer and endpoint rewriting
 
 The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when
 `APPDATA` is set, **including on Unix**, otherwise
@@ -204,14 +278,37 @@ must use matching roots. No host paths, local kits or published-source checkout
 are needed inside the sandbox. A stopped sandbox may be started by sbx exec;
 a missing sandbox is never created/replaced by this command.
 
-All selected originals are snapshotted in memory, parsed and checked against the
-global deny list **before any destination write**. Strings are checked after JSON
-unescaping, as are number/boolean text values; null/empty containers have no text.
-A block identifies the store/key, never the value. `--force` reports its use and
-bypasses **only** this deny check, not invalid config/JSON, missing files, unsafe
-paths, cancellation or transport failures. Copying is runtime-only: payloads and
-integrity frames travel over UTF-8/no-BOM stdin, never process arguments, images,
-build inputs or published artifacts. This does not change `abox secrets`.
+Copying is runtime-only: payloads and integrity frames travel over UTF-8/no-BOM
+stdin, never process arguments, images, build inputs or published artifacts. This
+does not change the separate proxy/host-secret command `abox secrets`.
+
+**Endpoint rewriting (#8, pending integration):** the approved contract discovers
+exact kit-declared TCP `localhost:<port>` resources using supported sandbox policy
+metadata and checks each port's **effective** authorization. Only supported URI
+authorities and database connection-string endpoint fields change loopback to
+`host.docker.internal`, keeping the **same published host port**:
+
+```text
+Server=localhost,8004      -> Server=host.docker.internal,8004
+http://127.0.0.1:8006/path -> http://host.docker.internal:8006/path
+```
+
+Named hosts (including `host.docker.internal`) retain their names/ports for
+TLS/SNI. Undeclared ports, unsupported/ambiguous forms and unrelated credentials,
+fields, paths and queries remain unchanged. A service published as `8004:5432`
+does **not** imply a `5432 -> 8004` rewrite. Wildcard/global/manual rules are not
+kit intent; a valid empty inventory means no rewrites. Unavailable/malformed
+required metadata fails before writes, not by guessing. There is no host kit-source,
+`/etc/hosts`, experimental `host-port@1` or `sbx ports` lookup and no policy change.
+Authorization is not proof of service availability or protection against later
+policy changes. The accepted live evidence is **local/nonempty + published/empty
+kit policy**; published/nonempty rewriting remains unverified. See the
+[verification record](docs/verification/user-secrets/README.md).
+
+The normalized-output contract serializes selected JSON data, not raw source text:
+comments are not values, JSON formatting/escape spelling is not preserved, and
+unchanged string contents stay unchanged. **Unfiltered comment removal is pending
+the safety fixes**; do not rely on comments being excluded until they land.
 
 Rerunning replaces the **entire** destination store, removing old keys. The fixed
 receiver checks the byte count and SHA-256 frame before a same-directory atomic
@@ -221,7 +318,9 @@ nonregular files, multiply-linked files and wrong ownership are rejected. The
 sandbox needs `sh` and GNU-compatible coreutils (`stat`, `mktemp`, `sha256sum`,
 `mv -T`, etc.). No TTY or root exec is used.
 
-**Recovery:** validation is all-store, but transfer is atomic **per file**, not a
+#### Recovery and limitations
+
+Validation is all-store, but transfer is atomic **per file**, not a
 cross-store transaction. A later transport failure/cancellation can leave earlier
 stores replaced; even a completed rename can be unconfirmed if its acknowledgement
 is lost. No rollback is claimed. Fix the reported problem and rerun
@@ -234,10 +333,11 @@ Atomic replacement is not crash-durable storage or protection from malicious
 concurrent filesystem changes by the application user/root; sandbox contents and
 memory remain accessible to that user, not encrypted.
 
-Automatic copying on create/replace, key filters and endpoint rewriting are
-separate follow-ups. For now a `squad` string in `abox.json` is accepted for that
-future lifecycle flow but does not choose/change an existing sandbox: the command
-always targets the folder. No URLs or connection strings are rewritten yet.
+If creation succeeded but required copying failed, the sandbox and its new record
+remain; the command fails without a full-success/open message, and `run` does not
+launch. Fix the problem and retry the folder-qualified on-demand command without
+recreating. Live copy verification used Windows sbx v0.51.0; automated Unix paths
+and representative Unix transfer are not independent Unix-host sbx verification.
 
 ### Creating local and published sandboxes
 
@@ -307,7 +407,8 @@ across future sbx upgrades. `sbx settings unset kit.allowedSources` restores the
 current defaults and discards the entire list override, including the added
 repository trust; a later remote create may add its configured repository again.
 
-Give `--squad` explicitly: remote squad discovery is not currently supported.
+Give `--squad` explicitly or set `squad` in the folder's `abox.json`: remote squad
+discovery is not currently supported.
 Missing/invalid bundled metadata, identity/schema mismatches, unsafe state paths,
 missing host-mount declarations and unavailable MCP registrations fail before
 an existing sandbox is removed, even with `--yes`. Older artifacts without the
