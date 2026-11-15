@@ -37,7 +37,24 @@ internal sealed class UserSecretSnapshot
             if (document.RootElement.ValueKind != JsonValueKind.Object)
                 throw new AboxException($"User-secret store '{id}' must contain a JSON object.");
             var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-            ReadValues(document.RootElement, null, values, id);
+            var leaves = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+            ReadValues(document.RootElement, null, values, leaves, id);
+            if (selection.IsFiltered)
+            {
+                // Flat effective keys preserve array indices when earlier items are omitted.
+                var selected = leaves.Where(leaf => selection.Includes(leaf.Key)).ToDictionary();
+                return new UserSecretSnapshot(
+                    id,
+                    JsonSerializer.SerializeToElement(selected),
+                    values
+                        .Where(value => selected.ContainsKey(value.Key))
+                        .ToDictionary(
+                            value => value.Key,
+                            value => value.Value,
+                            StringComparer.OrdinalIgnoreCase
+                        )
+                );
+            }
             return new UserSecretSnapshot(id, document.RootElement, values);
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException)
@@ -52,6 +69,7 @@ internal sealed class UserSecretSnapshot
         JsonElement element,
         string? path,
         Dictionary<string, string?> values,
+        Dictionary<string, JsonElement> leaves,
         string id
     )
     {
@@ -63,13 +81,14 @@ internal sealed class UserSecretSnapshot
                         property.Value,
                         path is null ? property.Name : path + ":" + property.Name,
                         values,
+                        leaves,
                         id
                     );
                 return;
             case JsonValueKind.Array when element.GetArrayLength() > 0:
                 var index = 0;
                 foreach (var item in element.EnumerateArray())
-                    ReadValues(item, path + ":" + index++, values, id);
+                    ReadValues(item, path + ":" + index++, values, leaves, id);
                 return;
             default:
                 if (path is null)
@@ -84,6 +103,7 @@ internal sealed class UserSecretSnapshot
                     throw new AboxException(
                         $"User-secret store '{id}' has duplicate effective .NET configuration keys (case-insensitive). No stores were copied."
                     );
+                leaves.Add(path, element);
                 return;
         }
     }
