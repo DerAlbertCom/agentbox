@@ -22,6 +22,7 @@ public sealed class UserSecretsRewriteCommandTests
         bool verbose
     )
     {
+        // Arrange
         using var root = new TempDirectory();
         var console = new TestConsole();
         var location = root.Directory_("folder");
@@ -62,6 +63,7 @@ public sealed class UserSecretsRewriteCommandTests
         services.AddSingleton(PublishedSquadTest.Source());
         using var provider = services.BuildServiceProvider();
 
+        // Act
         var exit = await provider
             .GetRequiredService<AboxRootCommand>()
             .InvokeAsync([
@@ -69,6 +71,7 @@ public sealed class UserSecretsRewriteCommandTests
                 automatic ? "create" : "user-secrets",
             ]);
 
+        // Assert
         exit.Should().Be(0, console.AllText);
         console
             .AllText.Should()

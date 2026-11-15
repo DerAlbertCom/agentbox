@@ -12,12 +12,15 @@ public sealed class UserSecretsRewriteTests
     [Fact]
     public async Task LocalKitInventoryUsesSortedExactAuthorizedHostPortsWithoutHostKitSources()
     {
+        // Arrange
         using var fixture = new CopyFixture("abox-issue5-local-191454a2");
         fixture.Inventory = File.ReadAllText(RepositoryFile("local.policy.kit.json"));
         fixture.Store("sample", """{"Url":"https://127.0.0.1:8006/path?x=localhost:8004"}""");
 
+        // Act
         await fixture.CopyAsync();
 
+        // Assert
         fixture
             .Value("sample", "Url")
             .Should()
@@ -51,12 +54,15 @@ public sealed class UserSecretsRewriteTests
         string expected
     )
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004);
         fixture.Store("sample", JsonSerializer.Serialize(new { Connection = original }));
 
+        // Act
         await fixture.CopyAsync();
 
+        // Assert
         fixture.Value("sample", "Connection").Should().Be(expected);
     }
 
@@ -76,12 +82,15 @@ public sealed class UserSecretsRewriteTests
     [InlineData("localhost:5432")]
     public async Task NamedUndeclaredAndUnsupportedFormsRemainByteForByteUnchanged(string original)
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004);
         fixture.Store("sample", JsonSerializer.Serialize(new { Endpoint = original }));
 
+        // Act
         await fixture.CopyAsync();
 
+        // Assert
         fixture.Value("sample", "Endpoint").Should().Be(original);
     }
 
@@ -105,24 +114,30 @@ public sealed class UserSecretsRewriteTests
     )]
     public async Task UriRewritingChangesOnlyTheAuthorityHost(string original, string expected)
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004);
         fixture.Store("sample", JsonSerializer.Serialize(new { Endpoint = original }));
 
+        // Act
         await fixture.CopyAsync();
 
+        // Assert
         fixture.Value("sample", "Endpoint").Should().Be(expected);
     }
 
     [Fact]
     public async Task PublishedEmptyInventoryIsValidAndDoesNotUseAmbientAuthorization()
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.Inventory = File.ReadAllText(RepositoryFile("published.policy.kit.json"));
         fixture.Store("sample", """{"Url":"http://localhost:8004"}""");
 
+        // Act
         await fixture.CopyAsync();
 
+        // Assert
         fixture.Value("sample", "Url").Should().Be("http://localhost:8004");
         fixture.CheckedPorts.Should().BeEmpty();
     }
@@ -130,14 +145,17 @@ public sealed class UserSecretsRewriteTests
     [Fact]
     public async Task EffectiveDenyExcludesAnActiveKitAllowAndCandidatesAreDeduplicated()
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8006, 8004, 8006);
         fixture.DeniedPorts.Add(8004);
         fixture.Store("first", """{"Url":"http://localhost:8004"}""");
         fixture.Store("last", """{"Url":"http://localhost:8006"}""");
 
+        // Act
         await fixture.CopyAsync();
 
+        // Assert
         fixture.Value("first", "Url").Should().Be("http://localhost:8004");
         fixture.Value("last", "Url").Should().Be("http://host.docker.internal:8006");
         fixture.CheckedPorts.Should().Equal(8004, 8006);
@@ -160,6 +178,7 @@ public sealed class UserSecretsRewriteTests
     [Fact]
     public async Task OriginalValuesAreDeniedBeforeAnyPolicyLookupOrRewriting()
     {
+        // Arrange
         using var fixture = new CopyFixture(
             config: new AboxConfig { UserSecretsDenyList = ["localhost"] }
         );
@@ -167,7 +186,10 @@ public sealed class UserSecretsRewriteTests
         fixture.Store("first", """{"Password":"synthetic-only"}""");
         fixture.Store("last", """{"Connection":"Server=localhost,8004;Password=synthetic-only"}""");
 
+        // Act
         var copy = () => fixture.CopyAsync();
+
+        // Assert
         var exception = (await copy.Should().ThrowAsync<AboxException>()).Which;
 
         exception
@@ -176,7 +198,11 @@ public sealed class UserSecretsRewriteTests
             .And.Contain("Connection")
             .And.NotContain("synthetic-only");
         fixture.Requests.Should().BeEmpty();
+
+        // Act
         var report = await fixture.CopyAsync(force: true);
+
+        // Assert
         fixture
             .Value("last", "Connection")
             .Should()
@@ -191,6 +217,7 @@ public sealed class UserSecretsRewriteTests
         bool destination
     )
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004, 8006);
         fixture.Store("first", """{"Url":"http://localhost:8004"}""");
@@ -201,7 +228,10 @@ public sealed class UserSecretsRewriteTests
                 ? new ProcessResult(9, "synthetic-password", "123456789 true")
                 : null;
 
+        // Act
         var copy = () => fixture.CopyAsync(force: true);
+
+        // Assert
         var exception = (await copy.Should().ThrowAsync<AboxException>()).Which;
 
         fixture
@@ -215,16 +245,25 @@ public sealed class UserSecretsRewriteTests
     [Fact]
     public async Task APreparedSnapshotIsReusableWithoutMutatingItsOriginalHostValues()
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004);
         fixture.Store("sample", """{"Url":"http://localhost:8004"}""");
         var prepared = await fixture.PrepareAsync();
 
-        await fixture.CopyPreparedAsync(prepared);
-        fixture.Value("sample", "Url").Should().Be("http://host.docker.internal:8004");
-        fixture.DeniedPorts.Add(8004);
+        // Act
         await fixture.CopyPreparedAsync(prepared);
 
+        // Assert
+        fixture.Value("sample", "Url").Should().Be("http://host.docker.internal:8004");
+
+        // Arrange
+        fixture.DeniedPorts.Add(8004);
+
+        // Act
+        await fixture.CopyPreparedAsync(prepared);
+
+        // Assert
         fixture.Value("sample", "Url").Should().Be("http://localhost:8004");
         File.ReadAllText(fixture.SourcePath("sample"))
             .Should()
@@ -234,6 +273,7 @@ public sealed class UserSecretsRewriteTests
     [Fact]
     public async Task NestedStringsAreRewrittenWithoutCopyingSkippedCommentPayloads()
     {
+        // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004);
         fixture.Store(
@@ -245,8 +285,10 @@ public sealed class UserSecretsRewriteTests
             """
         );
 
+        // Act
         await fixture.CopyAsync();
 
+        // Assert
         using var written = JsonDocument.Parse(fixture.Written("sample"));
         var items = written.RootElement.GetProperty("Nested").GetProperty("Items");
         items[0].GetProperty("Url").GetString().Should().Be("http://host.docker.internal:8004");
@@ -260,6 +302,7 @@ public sealed class UserSecretsRewriteTests
     [Fact]
     public async Task MixedFullNestedAndFilteredFlatSnapshotsUseOnlySelectedOriginalValues()
     {
+        // Arrange
         using var fixture = new CopyFixture(
             config: new AboxConfig { UserSecretsDenyList = ["synthetic-production"] }
         );
@@ -276,8 +319,10 @@ public sealed class UserSecretsRewriteTests
         fixture.Store("empty", """{"Password":"synthetic-production"}""");
         fixture.KeyPatterns["empty"] = [];
 
+        // Act
         var report = await fixture.CopyAsync();
 
+        // Assert
         using var full = JsonDocument.Parse(fixture.Written("full"));
         full.RootElement.GetProperty("Nested")
             .GetProperty("Url")
@@ -298,6 +343,7 @@ public sealed class UserSecretsRewriteTests
     [Fact]
     public async Task ReportsContainOnlyChangedEffectiveKeysAndKeepOriginalForceAccounting()
     {
+        // Arrange
         using var fixture = new CopyFixture(
             config: new AboxConfig { UserSecretsDenyList = ["localhost"] }
         );
@@ -317,8 +363,10 @@ public sealed class UserSecretsRewriteTests
         fixture.KeyPatterns["flat"] = ["Nested:*"];
         fixture.Store("unchanged", """{"Url":"https://named.internal:8004"}""");
 
+        // Act
         var report = await fixture.CopyAsync(force: true);
 
+        // Assert
         report
             .SafetyOverride.Should()
             .BeTrue(
