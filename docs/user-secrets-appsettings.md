@@ -34,9 +34,19 @@ modified. Settings need not be under `ConnectionStrings`.
 - Search recursively only beneath the resolved folder containing the selected
   `abox.json` (`--location`, `defaultLocation`, then the current folder). The team
   sources selected with `--root` are not the workspace for this search.
-- Exclude `.git`, `bin`, `obj` and `nCrunchTemp_*.csproj` artifacts. Directory links
-  escaping the workspace are not followed. In-workspace links are resolved and
-  deduplicated to prevent cycles and duplicate consumers. Project/configuration
+- Exclude directories named `.git`, `bin`, `obj` or `node_modules`
+  (case-insensitive) anywhere **beneath** the selected workspace root, plus
+  `nCrunchTemp_*.csproj` artifacts. Projects beneath `node_modules` are not
+  consumers for store association or shared-store conflict validation, even if
+  they explicitly name a selected store or contain invalid configuration. Move
+  intended consumers outside dependency trees to include them. Similarly named
+  ordinary directories such as `node_modules-backup` remain included. An explicitly
+  selected root named `node_modules`, or below one, retains its meaning; only
+  excluded descendants relative to that root are skipped.
+- Directory links escaping the workspace are not followed. Both directory names
+  encountered during traversal and resolved targets respect the exclusions, so
+  aliases cannot bypass dependency boundaries. In-workspace links are resolved
+  and deduplicated to prevent cycles and duplicate consumers. Project/configuration
   inputs must be ordinary files, not file links/reparse points.
 - Associate selected stores case-insensitively with one unconditional literal
   `UserSecretsId` declaration in a project's top-level `PropertyGroup`, using the
@@ -172,7 +182,9 @@ appsettings differences for those keys are irrelevant. Existing key filters appl
 before generation and compatibility; they do not authorize any extra keys.
 Unrelated/unresolved projects do not participate or block generation. These checks
 cover all explicit matching consumers within the bounded discovery model above,
-not consumers inferred through MSBuild or hidden in unreadable project XML.
+  not consumers inferred through MSBuild, hidden in unreadable project XML or
+  beneath excluded directories (including `node_modules`). A conflict outside
+  exclusions still blocks copying **every** selected store before any write.
 
 Conflicts identify the store, escaped effective key and affected project paths,
 without values. Resolve them by supplying an intentional authoritative selected

@@ -260,5 +260,8 @@ internal sealed class ProjectSettings(
     }
 
     private static bool IsExcludedDirectory(string name) =>
-        new[] { ".git", "bin", "obj" }.Contains(name, StringComparer.OrdinalIgnoreCase);
+        new[] { ".git", "bin", "obj", "node_modules" }.Contains(
+            name,
+            StringComparer.OrdinalIgnoreCase
+        );
 }
