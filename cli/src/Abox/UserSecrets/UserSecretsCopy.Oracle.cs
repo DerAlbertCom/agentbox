@@ -94,7 +94,8 @@ public sealed partial class UserSecretsCopy
                 source.Start,
                 ports,
                 replacements,
-                out valid
+                out valid,
+                inConnectionString: true
             );
 
         // Decode the outer connection-string quoting only for parsing. Map host spans
@@ -114,7 +115,14 @@ public sealed partial class UserSecretsCopy
         }
         positions.Add(source.Start + source.Length);
         var hosts = new List<(int Start, int Length)>();
-        var recognized = OracleEndpoint(decoded.ToString(), 0, ports, hosts, out valid);
+        var recognized = OracleEndpoint(
+            decoded.ToString(),
+            0,
+            ports,
+            hosts,
+            out valid,
+            inConnectionString: true
+        );
         replacements.AddRange(
             hosts.Select(host =>
                 (positions[host.Start], positions[host.Start + host.Length] - positions[host.Start])
@@ -128,11 +136,19 @@ public sealed partial class UserSecretsCopy
         int offset,
         HashSet<int> ports,
         List<(int Start, int Length)> replacements,
-        out bool valid
+        out bool valid,
+        bool inConnectionString = false
     )
     {
         if (!OracleDescriptorPrefix().IsMatch(value))
-            return OracleEasyConnect(value, offset, ports, replacements, out valid);
+            return OracleEasyConnect(
+                value,
+                offset,
+                ports,
+                replacements,
+                out valid,
+                inConnectionString
+            );
         var parser = new OracleDescriptorParser(value);
         var root = parser.Parse();
         var fullyValid = parser.Complete;
@@ -146,16 +162,19 @@ public sealed partial class UserSecretsCopy
             if (node.Key == "ADDRESS")
             {
                 var hosts = node.Children.Where(child => child.Key == "HOST").ToArray();
-                var mapped = node.Children.Any(child =>
-                    child.Key == "PORT"
-                    && int.TryParse(
-                        value.AsSpan(child.Start, child.Length),
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out var port
-                    )
-                    && ports.Contains(port)
-                );
+                var addressPorts = node.Children.Where(child => child.Key == "PORT").ToArray();
+                // Missing PORT may use Oracle's default. Do not silently accept a
+                // local descriptor when that default is mapped, or guess its protocol semantics.
+                var mapped =
+                    (addressPorts.Length == 0 && ports.Contains(1521))
+                    || addressPorts.Any(child =>
+                        int.TryParse(
+                            value.AsSpan(child.Start, child.Length),
+                            NumberStyles.None,
+                            CultureInfo.InvariantCulture,
+                            out var port
+                        ) && ports.Contains(port)
+                    );
                 var local = hosts
                     .Where(host => IsLoopback(value.Substring(host.Start, host.Length)))
                     .ToArray();
@@ -164,7 +183,7 @@ public sealed partial class UserSecretsCopy
                 var protocols = node.Children.Where(child => child.Key == "PROTOCOL").ToArray();
                 fullyValid &=
                     hosts.Length == 1
-                    && node.Children.Count(child => child.Key == "PORT") == 1
+                    && addressPorts.Length == 1
                     && protocols.Length == 1
                     && (
                         value
@@ -307,7 +326,8 @@ public sealed partial class UserSecretsCopy
         int offset,
         HashSet<int> ports,
         List<(int Start, int Length)> replacements,
-        out bool valid
+        out bool valid,
+        bool inConnectionString
     )
     {
         valid = true;
@@ -323,6 +343,10 @@ public sealed partial class UserSecretsCopy
         if (end < 0)
             end = text.Length;
         var authority = text[start..end];
+        // A bare authority followed by whitespace prose is not an endpoint. Explicit
+        // Data Source/prefix syntax still opts into malformed-endpoint validation.
+        if (!inConnectionString && !prefix.Success && authority.Any(char.IsWhiteSpace))
+            return false;
         if (!prefix.Success && end == text.Length && !authority.Contains(':'))
             return false; // A bare name can be a TNS alias, not an Easy Connect endpoint.
         if (authority.Contains('=') || authority.Contains('('))

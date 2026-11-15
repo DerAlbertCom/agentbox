@@ -97,6 +97,10 @@ secrets, not a separate copy mechanism or a restriction to `ConnectionStrings`:
   or bracketed. Address/description lists can mix eligible, remote and unmapped
   destinations; only eligible hosts change. Service/SID identifiers, credentials,
   structure, casing, spacing, quotes and all unrelated options remain intact.
+  A local `ADDRESS` missing `PORT` is rejected when host port 1521 is mapped:
+  supply an explicit decimal `PORT` rather than relying on protocol-dependent
+  descriptor defaults. No port is inserted or inferred. Remote addresses and
+  missing-port local addresses when 1521 is unmapped remain unchanged.
 - Either Oracle form inside an Oracle connection string's `Data Source` field,
   including quoted values with doubled outer quote escapes. Other fields such as
   `User Id`, `Password` and pooling options are untouched. Endpoint-shaped text
@@ -111,6 +115,9 @@ to 64 nested levels. TNS alias resolution, JDBC/SQL*Plus login syntax and arbitr
 Oracle Net files are not evaluated. Remote/unmapped values are preserved rather
 than rejected merely for mentioning localhost. Existing generic TCP URI
 userinfo/escaped-path/fragment support remains with the URL dispatcher.
+Bare whitespace prose such as `localhost:1521 is the local db` is not an Easy
+Connect authority and remains unchanged. Explicit `Data Source=`/Oracle-prefix
+syntax and endpoint-shaped service suffixes still receive unsafe-format checks.
 
 Configuration tests require no live Oracle instance and do not establish
 authentication/query readiness. See [synthetic Oracle verification](verification/user-secrets-oracle.md).

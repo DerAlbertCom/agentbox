@@ -312,6 +312,32 @@ public sealed class UserSecretsOracleCommandTests
     }
 
     [Theory]
+    [InlineData("localhost:1521 is the local db")]
+    [InlineData("localhost:8080 (worker)")]
+    [InlineData("localhost:1521 is the local db/synthetic-service")]
+    public async Task WhitespaceProseIsNotAnOracleEndpoint(string original)
+    {
+        foreach (var verbose in new[] { false, true })
+        {
+            using var cli = new UserSecretsCliHarness();
+            cli.Configure("""{"userSecrets":["sample"]}""");
+            Project(cli, new { Generated = original });
+            cli.Store("sample", JsonSerializer.Serialize(new { Copied = original }));
+            MappedPorts(cli);
+            var originals = Originals(cli);
+
+            (await cli.Run(verbose ? ["--verbose"] : [])).Should().Be(0, cli.Console.AllText);
+
+            using var written = JsonDocument.Parse(Written(cli, "sample"));
+            written.RootElement.EnumerateObject().Should().ContainSingle();
+            written.RootElement.GetProperty("Copied").GetString().Should().Be(original);
+            cli.Console.AllText.Should().NotContain(original);
+            SafeDiagnostics(cli);
+            Unchanged(originals);
+        }
+    }
+
+    [Theory]
     [InlineData("remote.test:1521/synthetic-service")]
     [InlineData("//localhost:5000/synthetic-service")]
     [InlineData("//[::1]:5000/synthetic-service")]
@@ -326,6 +352,12 @@ public sealed class UserSecretsOracleCommandTests
     )]
     [InlineData("a note about //localhost:1521/synthetic-service")]
     [InlineData("Password='Data Source=localhost:1521/synthetic-service';User Id=synthetic-user")]
+    [InlineData(
+        "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=remote.test))(CONNECT_DATA=(SERVICE_NAME=XE)))"
+    )]
+    [InlineData(
+        "Data Source=\"(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=5000))(ADDRESS=(PROTOCOL=TCPS)(HOST=remote.test))))\""
+    )]
     [InlineData(
         "Data Source=synthetic-alias;Password='(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521)))'"
     )]
@@ -356,6 +388,18 @@ public sealed class UserSecretsOracleCommandTests
     }
 
     [Theory]
+    [InlineData(
+        "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost))(CONNECT_DATA=(SERVICE_NAME=XE)))"
+    )]
+    [InlineData(
+        "Data Source=\"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=\"\"localhost\"\"))(CONNECT_DATA=(SERVICE_NAME=XE)))\";Password='synthetic;password'"
+    )]
+    [InlineData(
+        "(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=remote.test)(PORT=8004))(ADDRESS=(PROTOCOL=TCPS)(HOST=::1))))"
+    )]
+    [InlineData("(ADDRESS=(PROTOCOL=UDP)(HOST=localhost))")]
+    [InlineData("Data Source=localhost:1521 is the local db")]
+    [InlineData("//localhost:1521 is the local db")]
     [InlineData("localhost:1521/synthetic-service bad")]
     [InlineData("//localhost:1521/synthetic-service?retry_count='unterminated")]
     [InlineData("//localhost:1521,,remote.test:5000/synthetic-service")]
@@ -421,6 +465,30 @@ public sealed class UserSecretsOracleCommandTests
             SafeDiagnostics(cli);
             Unchanged(originals);
         }
+    }
+
+    [Theory]
+    [InlineData("(ADDRESS=(PROTOCOL=TCP)(HOST=localhost))")]
+    [InlineData(
+        "Data Source=\"(DESCRIPTION=(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCPS)(HOST=::1))(ADDRESS=(PROTOCOL=TCP)(HOST=remote.test)(PORT=8004))))\""
+    )]
+    public async Task DescriptorsWithoutPortArePreservedWhenDefaultIsUnmapped(string original)
+    {
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        Project(cli, new { Generated = original });
+        cli.Store("sample", JsonSerializer.Serialize(new { Copied = original }));
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 8004 });
+        var originals = Originals(cli);
+
+        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+
+        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        written.RootElement.EnumerateObject().Should().ContainSingle();
+        written.RootElement.GetProperty("Copied").GetString().Should().Be(original);
+        SafeDiagnostics(cli);
+        Unchanged(originals);
     }
 
     [Theory]
