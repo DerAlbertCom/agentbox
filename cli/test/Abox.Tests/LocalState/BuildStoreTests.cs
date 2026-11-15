@@ -18,6 +18,7 @@ public sealed class BuildStoreTests
     [Fact]
     public void ABuildIsKeptUnderItsSquadAndTag()
     {
+        // Arrange
         _store.Save(
             new BuildManifest
             {
@@ -27,8 +28,10 @@ public sealed class BuildStoreTests
             }
         );
 
+        // Act
         var manifest = _store.Load("sample", "ac", "latest");
 
+        // Assert
         manifest.Should().NotBeNull();
         manifest!.Squad.Should().Be("ac");
         manifest.Tag.Should().Be("latest");
@@ -37,24 +40,34 @@ public sealed class BuildStoreTests
     [Fact]
     public void ABuildThatIsNotThereIsNull()
     {
-        _store.Load("sample", "ac", "latest").Should().BeNull();
+        // Arrange: the store has no saved build.
+
+        // Act
+        var manifest = _store.Load("sample", "ac", "latest");
+
+        // Assert
+        manifest.Should().BeNull();
     }
 
     [Fact]
     public void ABuildThatIsNotReadableIsAnError()
     {
+        // Arrange
         var directory = _store.DirectoryFor("sample", "ac", "latest");
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "build.json"), "not json");
 
+        // Act
         var action = () => _store.Load("sample", "ac", "latest");
 
+        // Assert
         action.Should().Throw<AboxException>().WithMessage("*not readable*");
     }
 
     [Fact]
     public void TheKitsAndStateOfABuildSurviveTheRoundTrip()
     {
+        // Arrange
         _store.Save(
             new BuildManifest
             {
@@ -82,8 +95,10 @@ public sealed class BuildStoreTests
             }
         );
 
+        // Act
         var manifest = _store.Load("sample", "ac", "latest")!;
 
+        // Assert
         manifest.WorkloadKitDirectory.Should().Be("/kits/workload");
         manifest.Kits.Should().ContainSingle().Which.Name.Should().Be("pi-config");
         manifest

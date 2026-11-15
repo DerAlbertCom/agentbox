@@ -14,7 +14,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class CreateServiceTests
+public sealed partial class SandboxCreatorTests
 {
     private readonly TempDirectory _root = new();
     private readonly TestConsole _console = new();
@@ -25,7 +25,7 @@ public sealed partial class CreateServiceTests
     private readonly SandboxRecordStore _records;
     private readonly SandboxCreator _service;
 
-    public CreateServiceTests()
+    public SandboxCreatorTests()
     {
         _paths = AboxPaths.For(
             Path.Combine(_root.Path, "config"),
@@ -56,10 +56,13 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task ASandboxIsCreatedFromTheLocalBuild()
     {
+        // Arrange
         SaveBuild();
 
+        // Act
         var exitCode = await _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(0);
         _published.ReceivedCalls().Should().BeEmpty("--local must not pull registry metadata");
         await _sbx.DidNotReceive()
@@ -83,8 +86,10 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task LocalSquadNamesUseTheCanonicalCaseForBuildsAndRecords()
     {
+        // Arrange
         SaveBuild();
 
+        // Act
         var exitCode = await _service.CreateAsync(
             Request() with
             {
@@ -93,6 +98,7 @@ public sealed partial class CreateServiceTests
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         _records.Load(SandboxName.For(_root.Path))!.Squad.Should().Be("ac");
     }
@@ -102,6 +108,7 @@ public sealed partial class CreateServiceTests
     [InlineData("different")]
     public async Task SharedKitArgumentsMustHaveTheSameValue(string value)
     {
+        // Arrange
         SaveBuild();
         var manifest = _store.Load("sample", "ac", "latest")!;
         manifest.Kits.Add(
@@ -116,7 +123,11 @@ public sealed partial class CreateServiceTests
 
         if (value == "team")
         {
-            (await _service.CreateAsync(Request(), CancellationToken.None)).Should().Be(0);
+            // Act
+            var exitCode = await _service.CreateAsync(Request(), CancellationToken.None);
+
+            // Assert
+            exitCode.Should().Be(0);
             await _sbx.Received(1)
                 .CreateAsync(
                     Arg.Is<SbxCreateRequest>(request =>
@@ -127,7 +138,10 @@ public sealed partial class CreateServiceTests
         }
         else
         {
+            // Act
             var action = () => _service.CreateAsync(Request(), CancellationToken.None);
+
+            // Assert
             (await action.Should().ThrowAsync<AboxException>()).WithMessage(
                 "*mode*pi-config*other-kit*"
             );
@@ -143,6 +157,7 @@ public sealed partial class CreateServiceTests
     [InlineData("team-docker-release")]
     public async Task PublishedSetsArePulledFromTheConfiguredRepository(string repository)
     {
+        // Arrange
         SaveBuild(mcp: [new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
         var service = new SandboxCreator(
             _records,
@@ -161,6 +176,7 @@ public sealed partial class CreateServiceTests
             new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
 
+        // Act
         var exitCode = await service.CreateAsync(
             Request() with
             {
@@ -169,6 +185,7 @@ public sealed partial class CreateServiceTests
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .EnsureKitSourceAllowedAsync(
@@ -200,13 +217,16 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task PullFailuresAreReportedWithoutFallingBackToLocalKits()
     {
+        // Arrange
         SaveBuild();
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(1, "registry access denied"));
 
+        // Act
         var action = () =>
             _service.CreateAsync(Request() with { Local = false }, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*registry access denied*");
         await _sbx.Received(1)
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
@@ -226,6 +246,7 @@ public sealed partial class CreateServiceTests
         string error
     )
     {
+        // Arrange
         var service = new SandboxCreator(
             _records,
             _paths,
@@ -244,8 +265,10 @@ public sealed partial class CreateServiceTests
             FolderConfig: null
         );
 
+        // Act
         var action = () => service.CreateAsync(request, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage($"*{error}*");
         await _sbx.DidNotReceive()
             .EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -277,10 +300,16 @@ public sealed partial class CreateServiceTests
         );
 
         // Act
-        (await _service.CreateAsync(Request() with { Local = false }, CancellationToken.None))
-            .Should()
-            .Be(0);
+        var exitCode = await _service.CreateAsync(
+            Request() with
+            {
+                Local = false,
+            },
+            CancellationToken.None
+        );
+
         // Assert
+        exitCode.Should().Be(0);
         await _published
             .Received(1)
             .LoadAsync(Arg.Any<string>(), "sample", "ac", "latest", Arg.Any<CancellationToken>());
@@ -289,6 +318,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task TheOnlySquadOfTheTeamIsUsedWithoutAsking()
     {
+        // Arrange
         SaveBuild();
         var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
@@ -299,8 +329,10 @@ public sealed partial class CreateServiceTests
             Local: true
         );
 
+        // Act
         var exitCode = await _service.CreateAsync(request, CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(0);
         _console.AllText.Should().NotContain("Which squad");
         _records.Load(SandboxName.For(_root.Path))!.Squad.Should().Be("ac");
@@ -309,6 +341,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task TheSquadIsAskedForWhenTheTeamHasMoreThanOne()
     {
+        // Arrange
         SaveBuild();
         _console.Picks.Add(0);
         var request = new SandboxCreationRequest(
@@ -320,8 +353,10 @@ public sealed partial class CreateServiceTests
             Local: true
         );
 
+        // Act
         var exitCode = await _service.CreateAsync(request, CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(0);
         _console.AllText.Should().Contain("Which squad of the team 'sample'");
         _records.Load(SandboxName.For(_root.Path))!.Squad.Should().Be("ac");
@@ -330,8 +365,12 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task ABuildThatIsNotThereIsAnError()
     {
+        // Arrange: no local build has been saved in the fixture's store.
+
+        // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("abox build --team sample");
@@ -340,13 +379,16 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task AnExistingSandboxIsReplacedAfterConfirmation()
     {
+        // Arrange
         SaveBuild();
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
 
+        // Act
         var exitCode = await _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1).RemoveSandboxAsync(name, Arg.Any<CancellationToken>());
         _console.AllText.Should().Contain("already exists");
@@ -355,14 +397,17 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task AnExistingSandboxIsKeptWhenTheAnswerIsNo()
     {
+        // Arrange
         SaveBuild();
         _console.Answer = false;
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
 
+        // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("not replaced");
@@ -377,6 +422,7 @@ public sealed partial class CreateServiceTests
     [InlineData(true)]
     public async Task DecliningReplacementDoesNotRegisterMcpOrCreateStateDirectories(bool local)
     {
+        // Arrange
         var mcp = new List<ManifestMcp>
         {
             new() { Name = "elastic", Url = "https://example.com/mcp" },
@@ -397,9 +443,11 @@ public sealed partial class CreateServiceTests
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
 
+        // Act
         var action = () =>
             service.CreateAsync(Request() with { Local = local }, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*not replaced*");
         await _sbx.DidNotReceive()
             .AddMcpServerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -413,6 +461,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task McpRegistrationFailureAfterConsentDoesNotRemoveTheExistingSandbox()
     {
+        // Arrange
         SaveBuild([new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
@@ -424,8 +473,10 @@ public sealed partial class CreateServiceTests
                 return new SbxOutcome(1, "registration failed");
             });
 
+        // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*could not be registered*"
         );
@@ -437,12 +488,16 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task AllMcpRegistrationsAreValidatedReadOnlyBeforeAskingForReplacement()
     {
+        // Arrange
         SaveBuild([
             new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
             new ManifestMcp { Name = "missing" },
         ]);
+
+        // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*missing*not registered*");
         await _sbx.DidNotReceive()
             .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -457,10 +512,13 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task TheStateDirectoriesAreKeptOnTheHostUnderTheNameOfTheSandbox()
     {
+        // Arrange
         SaveBuild();
 
+        // Act
         await _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         var name = SandboxName.For(_root.Path);
         var hostPath = Path.Combine(_paths.StateDirectory, name, ".config", "opencode", "state");
         Directory.Exists(hostPath).Should().BeTrue();
@@ -479,10 +537,13 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task TheMcpServersAreRegisteredWhenTheyHaveAnUrl()
     {
+        // Arrange
         SaveBuild(mcp: [new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
 
+        // Act
         await _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         await _sbx.Received(1)
             .AddMcpServerAsync("elastic", "https://example.com/mcp", Arg.Any<CancellationToken>());
         await _sbx.Received(1)
@@ -497,10 +558,13 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task AnMcpServerWithoutAnUrlHasToBeRegisteredAlready()
     {
+        // Arrange
         SaveBuild(mcp: [new ManifestMcp { Name = "elastic" }]);
 
+        // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("not registered");
@@ -509,10 +573,13 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task TheRecordOfTheSandboxIsKept()
     {
+        // Arrange
         SaveBuild();
 
+        // Act
         await _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         var record = _records.Load(SandboxName.For(_root.Path));
         record.Should().NotBeNull();
         record!.Squad.Should().Be("ac");
@@ -532,13 +599,16 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task OldLocalManifestsAreRejectedWithoutTouchingAnExistingSandbox()
     {
+        // Arrange
         SaveBuild();
         var build = _store.Load("sample", "ac", "latest")!;
         build.LocalWorkload = null;
         _store.Save(build);
 
+        // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*no prebuilt local workload*abox build*without --metadata-only*"
         );
@@ -551,6 +621,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task ChangedThinKitFailsBeforeReplacementRatherThanBuildingSources()
     {
+        // Arrange
         SaveBuild();
         var build = _store.Load("sample", "ac", "latest")!;
         File.AppendAllText(
@@ -558,9 +629,11 @@ public sealed partial class CreateServiceTests
             "RUN install-again\n"
         );
 
+        // Act
         var action = () =>
             _service.CreateAsync(Request() with { AssumeYes = true }, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*runtime kit changed*");
         await _sbx.DidNotReceive()
             .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -571,6 +644,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task RemoteCreationConsumesOnlyThePublishedSetEvenWithoutALocalImage()
     {
+        // Arrange
         SaveBuild();
         var build = _store.Load("sample", "ac", "latest")!;
         Directory.Delete(build.LocalWorkload!.RuntimeKitDirectory, recursive: true);
@@ -588,6 +662,7 @@ public sealed partial class CreateServiceTests
             new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
 
+        // Act
         var exitCode = await service.CreateAsync(
             Request() with
             {
@@ -596,6 +671,7 @@ public sealed partial class CreateServiceTests
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         await runner
             .DidNotReceive()
@@ -616,6 +692,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task MetadataOnlyPreparationDoesNotEnableLocalCreateOrSupplyRemoteMetadata()
     {
+        // Arrange
         _root.File(
             "teams/sample/ac.abox",
             "workload: sample\nkits:\n  - name: probe\n    args:\n      mode: team\nstate: [~/.probe-state]\nmcp: [elastic]\n"
@@ -662,6 +739,7 @@ public sealed partial class CreateServiceTests
             new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
 
+        // Act
         var exitCode = await service.CreateAsync(
             Request() with
             {
@@ -671,6 +749,7 @@ public sealed partial class CreateServiceTests
             CancellationToken.None
         );
 
+        // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
             .CreateAsync(
@@ -687,11 +766,15 @@ public sealed partial class CreateServiceTests
             );
         runner.ReceivedCalls().Should().BeEmpty();
         programs.ReceivedCalls().Should().BeEmpty();
+
+        // Arrange
         _sbx.ClearReceivedCalls();
 
+        // Act
         var local = () =>
             service.CreateAsync(Request() with { Team = team }, CancellationToken.None);
 
+        // Assert
         (await local.Should().ThrowAsync<AboxException>()).WithMessage(
             "*no prebuilt local workload*abox build --team sample --tag latest*without --metadata-only*"
         );
@@ -701,9 +784,19 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task RemoteCreateNeedsNoLocalBuildAndUsesPublishedState()
     {
-        (await _service.CreateAsync(Request() with { Local = false }, CancellationToken.None))
-            .Should()
-            .Be(0);
+        // Arrange: the fixture has published metadata but no local build.
+
+        // Act
+        var exitCode = await _service.CreateAsync(
+            Request() with
+            {
+                Local = false,
+            },
+            CancellationToken.None
+        );
+
+        // Assert
+        exitCode.Should().Be(0);
         await _sbx.Received(1)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
@@ -716,6 +809,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task UnreadablePublishedMetadataCannotDeleteAnExistingSandboxEvenWithYes()
     {
+        // Arrange
         SaveBuild();
         _published
             .LoadAsync(
@@ -732,6 +826,7 @@ public sealed partial class CreateServiceTests
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
 
+        // Act
         var action = () =>
             _service.CreateAsync(
                 Request() with
@@ -742,6 +837,7 @@ public sealed partial class CreateServiceTests
                 CancellationToken.None
             );
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*republish*");
         _sbx.ReceivedCalls()
             .Should()
@@ -758,6 +854,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task RemoteRepositoryTrustIsEnsuredBeforeRegistryWorkAndSandboxReplacement()
     {
+        // Arrange
         var calls = new List<string>();
         _sbx.When(client =>
                 client.EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
@@ -785,6 +882,7 @@ public sealed partial class CreateServiceTests
         _sbx.FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo("existing", "running", DateTimeOffset.UtcNow));
 
+        // Act
         await _service.CreateAsync(
             Request() with
             {
@@ -794,12 +892,14 @@ public sealed partial class CreateServiceTests
             CancellationToken.None
         );
 
+        // Assert
         calls.Should().Equal("trust", "registry", "remove", "create");
     }
 
     [Fact]
     public async Task DeniedRepositoryTrustCannotPullOrRemoveAnExistingSandboxEvenWithYes()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
@@ -808,6 +908,7 @@ public sealed partial class CreateServiceTests
                 throw new AboxException("Administrator policy denies kit.allowedSources update.")
             );
 
+        // Act
         var action = () =>
             _service.CreateAsync(
                 Request() with
@@ -818,6 +919,7 @@ public sealed partial class CreateServiceTests
                 CancellationToken.None
             );
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*Administrator policy*kit.allowedSources*"
         );
@@ -835,6 +937,7 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task MissingPublishedMcpRegistrationFailsBeforeSandboxReplacement()
     {
+        // Arrange
         _published
             .LoadAsync(
                 Arg.Any<string>(),
@@ -850,6 +953,7 @@ public sealed partial class CreateServiceTests
                 )
             );
 
+        // Act
         var action = () =>
             _service.CreateAsync(
                 Request() with
@@ -860,6 +964,7 @@ public sealed partial class CreateServiceTests
                 CancellationToken.None
             );
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*not registered*");
         await _sbx.DidNotReceive()
             .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
@@ -870,10 +975,13 @@ public sealed partial class CreateServiceTests
     [Fact]
     public async Task UnusablePublishedStateDirectoryFailsBeforeSandboxReplacement()
     {
+        // Arrange
         var name = SandboxName.For(_root.Path);
         _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
         _root.File($"state/{name}/.published", "a file blocks the state directory");
+
+        // Act
         var action = () =>
             _service.CreateAsync(
                 Request() with
@@ -884,6 +992,7 @@ public sealed partial class CreateServiceTests
                 CancellationToken.None
             );
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*state director*not replaced*"
         );
