@@ -227,9 +227,11 @@ scalar types and empty-container handling.
 The optional `squad` selects local or published creation when `--squad` is omitted.
 An explicit option must match case-insensitively; conflicts fail, not override the
 folder. The team still comes from `--team` or `defaultTeam`. With no folder squad,
-existing command selection applies. `run` and on-demand `user-secrets` require a
-known matching sandbox record when a folder squad is present; they never silently
-switch an existing sandbox's squad.
+existing command selection applies. On-demand `user-secrets` and accepted `run`
+replacement require a known matching sandbox record when a folder squad is present;
+they never silently switch an existing sandbox's squad. Ordinary `run` (including
+declining replacement) can still open the existing sandbox with a different or
+unknown recorded squad: it copies no secrets and changes no squad.
 
 #### Automatic copying and policy
 

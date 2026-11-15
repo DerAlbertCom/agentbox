@@ -1,18 +1,47 @@
 using System.Text.Json;
-using Abox.Cli;
 using Abox.Configuration;
 using Abox.Infrastructure;
-using Abox.Naming;
 using Abox.Sbx;
 using Abox.UserSecrets;
-using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 using ShellSandbox = Abox.Tests.UserSecretsTransportTests.ShellSandbox;
 
 namespace Abox.Tests;
 
-public sealed class UserSecretsReviewRegressionTests
+public sealed class UserSecretsSafetyTests
 {
+    [Theory]
+    [InlineData("../escape", false)]
+    [InlineData("../escape", true)]
+    [InlineData("CON.txt", false)]
+    [InlineData("CON.txt", true)]
+    [InlineData("sample.", false)]
+    [InlineData("sample.", true)]
+    public async Task TheSbxAdapterIndependentlyRejectsUnsafeStoreIdsBeforeStartingAProcess(
+        string id,
+        bool checkOnly
+    )
+    {
+        using var root = new TempDirectory();
+        var runner = Substitute.For<IProcessRunner>();
+        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+
+        var action = async () =>
+        {
+            if (checkOnly)
+                await client.ValidateUserSecretsDestinationAsync(
+                    "sandbox",
+                    [id],
+                    CancellationToken.None
+                );
+            else
+                await client.WriteUserSecretsAsync("sandbox", id, "{}", CancellationToken.None);
+        };
+
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*Unsafe user-secret ID*");
+        runner.ReceivedCalls().Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
@@ -383,47 +412,24 @@ public sealed class UserSecretsReviewRegressionTests
 
     private sealed class Fixture : IDisposable
     {
-        public TempDirectory Root { get; } = new();
-        public TestConsole Console { get; } = new();
-        public ISbxClient Sbx { get; } = Substitute.For<ISbxClient>();
-        public string Location { get; }
+        private readonly UserSecretsCliHarness cli = new(
+            new AboxConfig { UserSecretsDenyList = ["prod.example"] }
+        );
+        public TempDirectory Root => cli.Root;
+        public TestConsole Console => cli.Console;
+        public ISbxClient Sbx => cli.Sbx;
         public string SourcePath =>
             Path.Combine(Root.Path, "appdata/Microsoft/UserSecrets/sample/secrets.json");
-        private readonly ServiceProvider provider;
 
         public Fixture()
         {
-            Location = Root.Directory_("folder");
-            Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
-            Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
-            Sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
-            Sbx.FindSandboxAsync(SandboxName.For(Location), Arg.Any<CancellationToken>())
-                .Returns(new SandboxInfo(SandboxName.For(Location), "running", null));
-            var programs = Substitute.For<IHostPrograms>();
-            programs.Exists(Arg.Any<string>()).Returns(true);
-            var services = new ServiceCollection().AddAbox(Console, new TrailingArguments());
-            services.AddSingleton(new AboxConfig { UserSecretsDenyList = ["prod.example"] });
-            services.AddSingleton(AboxPaths.For(Root.Path, Root.Path));
-            services.AddSingleton(
-                new UserSecretsHost(Root.Directory_("appdata"), Root.Directory_("home"))
-            );
-            services.AddSingleton(Sbx);
-            services.AddSingleton(programs);
-            provider = services.BuildServiceProvider();
+            cli.Configure("""{"userSecrets":["sample"]}""");
         }
 
-        public void Store(string json) =>
-            Root.File("appdata/Microsoft/UserSecrets/sample/secrets.json", json);
+        public void Store(string json) => cli.Store("sample", json);
 
-        public Task<int> Run(params string[] args) =>
-            provider
-                .GetRequiredService<AboxRootCommand>()
-                .InvokeAsync(["user-secrets", "--location", Location, .. args]);
+        public Task<int> Run(params string[] args) => cli.Run(args);
 
-        public void Dispose()
-        {
-            provider.Dispose();
-            Root.Dispose();
-        }
+        public void Dispose() => cli.Dispose();
     }
 }

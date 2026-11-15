@@ -124,6 +124,7 @@ public sealed class CreateCommand : Command
                             selectedSquad,
                             resolvedLocation,
                             parseResult.GetValue(tag) ?? settings.DefaultTag,
+                            folderConfig,
                             parseResult.GetValue(assumeYes),
                             Local: useLocal
                         );

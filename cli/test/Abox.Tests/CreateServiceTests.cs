@@ -237,7 +237,8 @@ public sealed class CreateServiceTests
             new SquadResolver.ResolvedTeam(team, "teams/sample", [squad]),
             squad,
             _root.Path,
-            tag
+            tag,
+            FolderConfig: null
         );
 
         var action = () => service.CreateAsync(request, CancellationToken.None);
@@ -278,6 +279,7 @@ public sealed class CreateServiceTests
             null,
             _root.Path,
             "latest",
+            FolderConfig: null,
             Local: true
         );
 
@@ -298,6 +300,7 @@ public sealed class CreateServiceTests
             null,
             _root.Path,
             "latest",
+            FolderConfig: null,
             Local: true
         );
 
@@ -505,6 +508,7 @@ public sealed class CreateServiceTests
             "ac",
             _root.Path,
             "latest",
+            FolderConfig: null,
             Local: true
         );
 

@@ -1,7 +1,7 @@
 using System.Security.Cryptography;
 using System.Text;
 using Abox.Infrastructure;
-using Abox.UserSecrets;
+using Abox.Naming;
 
 namespace Abox.Sbx;
 
@@ -14,7 +14,7 @@ public sealed partial class SbxClient
     )
     {
         foreach (var id in ids)
-            UserSecretSelection.ValidateId(id);
+            UserSecretId.Validate(id);
         return RunUserSecretsReceiverAsync(sandbox, "check", ids, null, cancellationToken);
     }
 
@@ -25,7 +25,7 @@ public sealed partial class SbxClient
         CancellationToken cancellationToken
     )
     {
-        UserSecretSelection.ValidateId(id);
+        UserSecretId.Validate(id);
         var bytes = new UTF8Encoding(false, true).GetBytes(json);
         var frame = $"{bytes.Length}\n{Convert.ToHexStringLower(SHA256.HashData(bytes))}\n{json}";
         return RunUserSecretsReceiverAsync(sandbox, "write", [id], frame, cancellationToken);

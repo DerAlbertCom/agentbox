@@ -17,6 +17,7 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
         cancellationToken.ThrowIfCancellationRequested();
         if (folderConfig is null)
             return new PreparedUserSecrets([], false);
+        // Callers can construct settings directly, without the YAML loader's validation.
         if (
             config.UserSecretsDenyList is null
             || config.UserSecretsDenyList.Any(string.IsNullOrWhiteSpace)
@@ -25,7 +26,7 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                 "Global 'userSecretsDenyList' must be a list of nonempty literal substrings; --force does not bypass invalid configuration."
             );
         var stores = new List<UserSecretSnapshot>();
-        foreach (var selection in folderConfig?.UserSecrets ?? [])
+        foreach (var selection in folderConfig.UserSecrets)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string json;

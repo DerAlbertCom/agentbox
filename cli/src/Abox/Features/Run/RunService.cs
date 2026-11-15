@@ -61,8 +61,7 @@ public sealed class RunService(
             return 1;
         }
 
-        folderConfig?.EnsureSandboxSquad(records.Load(name)?.Squad);
-        if (!await ReplaceWithANewerBuildAsync(name, location, cancellationToken))
+        if (!await ReplaceWithANewerBuildAsync(name, location, folderConfig, cancellationToken))
         {
             return 1;
         }
@@ -141,6 +140,7 @@ public sealed class RunService(
     private async Task<bool> ReplaceWithANewerBuildAsync(
         string name,
         string location,
+        FolderConfig? folderConfig,
         CancellationToken cancellationToken
     )
     {
@@ -172,6 +172,7 @@ public sealed class RunService(
             return true;
         }
 
+        folderConfig?.EnsureSandboxSquad(record.Squad);
         var team = resolver.ResolveTeam(
             string.IsNullOrWhiteSpace(manifest.RootDirectory) ? location : manifest.RootDirectory,
             record.Team
@@ -183,6 +184,7 @@ public sealed class RunService(
                     record.Squad,
                     location,
                     record.Tag,
+                    folderConfig,
                     AssumeYes: true,
                     Local: true
                 ),

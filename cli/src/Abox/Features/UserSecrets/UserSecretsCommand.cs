@@ -46,10 +46,9 @@ public sealed class UserSecretsCommand : Command
                             ?? throw new AboxException(
                                 "No abox.json in this folder. Declare 'userSecrets' explicitly before copying."
                             );
+                        var sandbox = SandboxName.For(folder);
                         if (folderConfig.Squad is not null)
-                            folderConfig.EnsureSandboxSquad(
-                                records.Value.Load(SandboxName.For(folder))?.Squad
-                            );
+                            folderConfig.EnsureSandboxSquad(records.Value.Load(sandbox)?.Squad);
                         var prepared = await copy.Value.PrepareAsync(
                             folderConfig,
                             parseResult.GetValue(force),
@@ -57,7 +56,6 @@ public sealed class UserSecretsCommand : Command
                         );
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                             return 1;
-                        var sandbox = SandboxName.For(folder);
                         if (await sbx.FindSandboxAsync(sandbox, cancellationToken) is null)
                             throw new AboxException(
                                 $"There is no sandbox for '{folder}'. Run 'abox create' for this folder first; user-secrets never creates or replaces one."
@@ -82,16 +80,7 @@ public sealed class UserSecretsCommand : Command
                             console.WriteLine(
                                 "Warning: Safety override used (--force): selected original values matched the global deny list; copy completed."
                             );
-                        foreach (var store in report.Stores)
-                        {
-                            console.WriteLine(
-                                $"Copied user-secret store '{store.Id}': {store.KeyCount} keys."
-                            );
-                            if (store.RewrittenKeyCount > 0)
-                                console.WriteLine(
-                                    $"Rewrote user-secret store '{store.Id}': {store.RewrittenKeyCount} keys ({string.Join(", ", store.RewrittenKeys.Select(key => System.Text.Json.JsonSerializer.Serialize(key)))})."
-                                );
-                        }
+                        UserSecretsReportWriter.WriteStores(report, console);
                         if (report.Stores.Count == 0)
                             console.WriteLine("No user-secret stores selected; nothing copied.");
                         return 0;
