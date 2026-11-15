@@ -211,3 +211,83 @@ from Python inside the disposable sandbox verifies TCP only, not authentication.
   exact kit-policy inventory, direct TCP and LocalStack HTTP 200.
 
 No production copy/rewrite command has been added by #5.
+
+## Production copy verification (#6)
+
+The user accepted the local/nonempty + published/empty scope and closed #5; see
+the [parent clarification](https://github.com/DerAlbertCom/agentbox/issues/2#issuecomment-6892259793).
+The missing published/nonempty rewrite case remains a documented limitation,
+not a blocker for #6. No rewrite is implemented by #6.
+
+`CopyProbe` exercises the **production** shared copy and sbx/process adapters,
+not the older spike receiver. It rejects all sandbox names except fresh
+`abox-issue6-<8 hex>` names and creates its own synthetic host files. It does not
+read actual host secret stores or abox configuration. Payload/frame only use
+sensitive stdin, including integrity checks; verbose is enabled throughout.
+
+Verified 2026-11-15 with sbx v0.51.0 in task-owned disposable sandboxes
+`abox-issue6-182f2de6` (local) and `abox-issue6-6808739f` (published, using the
+same digest-pinned reference recorded above, without workspace or host kit
+sources). Both were removed in `finally`; every check passed in both:
+
+- Production Windows UTF-8/no-BOM copy preserved exact Unicode bytes.
+- Effective application-user ownership and directory/file modes were 0700/0600.
+- Short/corrupt frames rejected before rename and retained prior bytes.
+- A destination symlink was rejected before writes; its target stayed unchanged.
+- An explicit application-user APPDATA environment took precedence over HOME.
+- All checks passed with verbose enabled and no raw child output emitted.
+
+Repository verification for #6: **517 passed** each in Debug and Release, no
+failures/skips; Release solution and `CopyProbe` builds had zero warnings/errors.
+`dotnet csharpier check cli docs/verification/user-secrets` and `git diff --check`
+passed. The full automated run is a Windows-host run; the Unix shell transfer is
+representative, not a separately installed Unix sbx-host verification.
+
+Automated tests additionally execute the captured production receiver through the
+approved process seam with ordinary disposable files (Git Bash on Windows, `sh`
+on Unix). They cover repeated/narrower whole-file replacement, environment
+precedence, no-create destination validation, nonregular targets, short/corrupt
+input and actual process cancellation during blocked stdin. Command/shared-flow
+tests cover invalid/missing config and stores, unsafe IDs, duplicate effective
+.NET keys, malformed Unicode/UTF-8, later-store validation/deny with zero writes,
+literal/case-insensitive global YAML policy, force narrowness, in-memory snapshots,
+value-free transport failures and cancellation recovery. Process tests verify
+scalar-output suppression and explicit UTF-8 while retaining ordinary behavior.
+
+Reproduce only with a fresh disposable sandbox, without registry publication,
+global settings changes or existing sandbox replacement/removal:
+
+```powershell
+$name = 'abox-issue6-' + [guid]::NewGuid().ToString('N').Substring(0,8)
+$saved = @{}
+foreach ($key in 'SBX_KIT_BUILDER', 'BUILDX_BUILDER', 'DOCKER_CONTEXT') {
+    $saved[$key] = [Environment]::GetEnvironmentVariable($key)
+}
+try {
+    $env:SBX_KIT_BUILDER = 'host'
+    $env:BUILDX_BUILDER = 'desktop-linux'
+    $env:DOCKER_CONTEXT = 'desktop-linux'
+    sbx --no-input create ./docs/verification/user-secrets/workload --name $name --cpus 2 --memory 2g --pull never --static-mcp none --no-progress
+    if ($LASTEXITCODE -ne 0) { throw 'Synthetic sandbox creation failed' }
+    dotnet run --project docs/verification/user-secrets/CopyProbe -c Release -- $name
+    if ($LASTEXITCODE -ne 0) { throw 'Production copy smoke failed' }
+} finally {
+    sbx rm $name --force
+    foreach ($key in $saved.Keys) { [Environment]::SetEnvironmentVariable($key, $saved[$key]) }
+}
+```
+
+For the published case, use a second fresh `$name` and replace only the create
+source with the already-published digest below and `--pull always`; run the same
+probe and `finally` cleanup. No publication or persistent trust change is needed:
+
+```text
+rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954
+```
+
+No cross-store rollback, malicious same-user filesystem-race defense, crash
+durability or already-published/nonempty rewrite proof is claimed. Cancellation
+after a full valid frame may leave that atomic rename committed; interruption
+before it cannot rename truncated data. Host-process cancellation is automated
+through the adapter; this live smoke does not claim a separate real-sbx
+cancellation-scheduling experiment.

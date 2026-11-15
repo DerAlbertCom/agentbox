@@ -23,6 +23,9 @@ public sealed class AboxConfig
     /// <summary>The JFrog repository used to pull published squad kit sets.</summary>
     public string PullRepository { get; init; } = "mtiae-docker-release";
 
+    /// <summary>Case-insensitive literal substrings forbidden in selected original user-secret values.</summary>
+    public IReadOnlyList<string> UserSecretsDenyList { get; init; } = [];
+
     /// <summary>The absolute sandbox folder, preferring the command line over the user default.</summary>
     public string ResolveLocation(string? location) =>
         Path.GetFullPath(location ?? DefaultLocation ?? Directory.GetCurrentDirectory());

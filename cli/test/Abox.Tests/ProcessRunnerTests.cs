@@ -7,6 +7,51 @@ namespace Abox.Tests;
 public sealed class ProcessRunnerTests
 {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SensitiveInputIsUtf8WithoutBomAndAllChildOutputIsDiscardedEvenScalarFragments(
+        bool verbose
+    )
+    {
+        using var root = new TempDirectory();
+        const string input = "{\"Password\":\"Grüße 🔒\",\"Number\":123456789,\"Flag\":true}";
+        var console = new TestConsole();
+        var output = new ProcessOutput(console) { Verbose = verbose };
+        var request = new ProcessRequest(
+            OperatingSystem.IsWindows() ? "powershell" : "sh",
+            OperatingSystem.IsWindows()
+                ?
+                [
+                    "-NoProfile",
+                    "-NonInteractive",
+                    "-Command",
+                    "[Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [IO.File]::WriteAllText('received.json', [Console]::In.ReadToEnd(), [Text.UTF8Encoding]::new($false)); [Console]::Out.WriteLine('Grüße'); [Console]::Error.WriteLine('123456789 true'); exit 9",
+                ]
+                :
+                [
+                    "-c",
+                    "cat > received.json; printf 'Grüße'; printf '123456789 true' >&2; exit 9",
+                ],
+            WorkingDirectory: root.Path,
+            StandardInput: input,
+            OutputPolicy: ProcessOutputPolicy.Sensitive
+        );
+
+        var result = await new ProcessRunner(output).RunAsync(request, CancellationToken.None);
+
+        result.ExitCode.Should().Be(9);
+        result.StandardOutput.Should().BeEmpty();
+        result.StandardError.Should().BeEmpty();
+        console.AllText.Should().BeEmpty();
+        File.ReadAllBytes(Path.Combine(root.Path, "received.json"))
+            .Should()
+            .Equal(System.Text.Encoding.UTF8.GetBytes(input));
+        request.ToString().Should().NotContain("Password").And.NotContain("123456789");
+        output.Write(request, new ProcessResult(9, "Grüße", "123456789 true"));
+        console.AllText.Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData("win32")]
     [InlineData("aggregate")]
     [InlineData("exited")]

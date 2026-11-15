@@ -6,12 +6,14 @@ using Abox.Features.Publish;
 using Abox.Features.Run;
 using Abox.Features.Sandbox;
 using Abox.Features.Secrets;
+using Abox.Features.UserSecrets;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
 using Abox.Sandboxes;
 using Abox.Sbx;
+using Abox.UserSecrets;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Abox.Cli;
@@ -36,6 +38,7 @@ public static class AboxServiceCollection
             .AddCreateFeature()
             .AddRunFeature()
             .AddSecretsFeature()
+            .AddUserSecretsFeature()
             .AddPruneFeature()
             .AddSandboxFeature();
 
@@ -64,6 +67,8 @@ public static class AboxServiceCollection
         services.AddSingleton<IOciRegistry, OciRegistry>();
         services.AddSingleton<IHostPrograms, HostPrograms>();
         services.AddSingleton<ISbxClient, SbxClient>();
+        services.AddSingleton(UserSecretsHost.Create());
+        services.AddSingleton<UserSecretsCopy>();
         services.AddSingleton<Preflight>();
         services.AddSingleton<SquadResolver>();
         services.AddSingleton<BuildStore>();
