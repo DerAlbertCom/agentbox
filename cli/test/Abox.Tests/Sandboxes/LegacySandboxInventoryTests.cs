@@ -18,6 +18,7 @@ public sealed partial class LegacySandboxInventoryTests
         bool explicitLocation
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { DefaultLocation = LegacySandboxFixture.Location },
             existingSandbox: false
@@ -33,10 +34,11 @@ public sealed partial class LegacySandboxInventoryTests
         cli.Sbx.FindSandboxAsync(otherName, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(otherName, "running", null));
 
-        (await cli.Invoke(explicitLocation ? ["run", "--location", other] : ["run"]))
-            .Should()
-            .Be(0);
+        // Act
+        var exitCode = await cli.Invoke(explicitLocation ? ["run", "--location", other] : ["run"]);
 
+        // Assert
+        exitCode.Should().Be(0);
         await cli
             .Sbx.Received(1)
             .ExecAsync(
@@ -57,6 +59,7 @@ public sealed partial class LegacySandboxInventoryTests
         bool legacy
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var preferred = SandboxName.For(LegacySandboxFixture.Location);
         var names = new List<string>
@@ -79,10 +82,11 @@ public sealed partial class LegacySandboxInventoryTests
         );
         var requests = UseRealSbx(cli, _ => new ProcessResult(0, inventory, ""));
 
-        (await cli.Invoke("run", "--location", LegacySandboxFixture.Location))
-            .Should()
-            .Be(current || legacy ? 0 : 1);
+        // Act
+        var exitCode = await cli.Invoke("run", "--location", LegacySandboxFixture.Location);
 
+        // Assert
+        exitCode.Should().Be(current || legacy ? 0 : 1);
         var executions = requests
             .Where(request => request.FileName == "sbx" && request.Arguments[0] == "exec")
             .ToList();
@@ -119,6 +123,7 @@ public sealed partial class LegacySandboxInventoryTests
         string error
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var count = 0;
         var requests = UseRealSbx(
@@ -129,8 +134,11 @@ public sealed partial class LegacySandboxInventoryTests
                     : new ProcessResult(exit, output, error)
         );
 
-        (await cli.Invoke("run", "--location", LegacySandboxFixture.Location)).Should().Be(1);
+        // Act
+        var exitCode = await cli.Invoke("run", "--location", LegacySandboxFixture.Location);
 
+        // Assert
+        exitCode.Should().Be(1);
         count.Should().Be(legacyLookup ? 2 : 1);
         cli.Console.AllText.Should().Contain("sbx ls").And.NotContain("Create it with");
         requests

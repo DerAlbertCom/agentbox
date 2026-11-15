@@ -24,6 +24,7 @@ public sealed class LegacySandboxCompatibilityTests
         bool cancelled
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var legacy = LegacyFolderFixture(cli.Location);
         cli.Configure("""{"userSecrets":[]}""");
@@ -35,19 +36,16 @@ public sealed class LegacySandboxCompatibilityTests
         cli.Sbx.FindSandboxAsync(failureName, Arg.Any<CancellationToken>())
             .Returns(Task.FromException<SandboxInfo?>(error));
 
-        (
-            await cli.Invoke([
-                command,
-                "--location",
-                cli.Location,
-                .. command == "create"
-                    ? new[] { "--team", "sample", "--squad", "ac", "--yes" }
-                    : [],
-            ])
-        )
-            .Should()
-            .Be(cancelled ? 130 : 1);
+        // Act
+        var exitCode = await cli.Invoke([
+            command,
+            "--location",
+            cli.Location,
+            .. command == "create" ? new[] { "--team", "sample", "--squad", "ac", "--yes" } : [],
+        ]);
 
+        // Assert
+        exitCode.Should().Be(cancelled ? 130 : 1);
         if (!legacyLookup)
             await cli.Sbx.DidNotReceive().FindSandboxAsync(legacy, Arg.Any<CancellationToken>());
         await cli
@@ -66,6 +64,7 @@ public sealed class LegacySandboxCompatibilityTests
     [Fact]
     public async Task LegacyRunProbesAndHerdrUseTheExistingActualMachineName()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var legacy = LegacyFolderFixture(cli.Location);
         cli.Sbx.FindSandboxAsync(legacy, Arg.Any<CancellationToken>())
@@ -85,8 +84,11 @@ public sealed class LegacySandboxCompatibilityTests
             ));
         cli.Services.AddSingleton(runner);
 
-        (await cli.Invoke("run", "herdr-app", "--location", cli.Location)).Should().Be(0);
+        // Act
+        var exitCode = await cli.Invoke("run", "herdr-app", "--location", cli.Location);
 
+        // Assert
+        exitCode.Should().Be(0);
         await cli.Sbx.Received(1).HasProgramAsync(legacy, "hc", Arg.Any<CancellationToken>());
         await runner
             .Received(1)
@@ -110,6 +112,7 @@ public sealed class LegacySandboxCompatibilityTests
     [Fact]
     public async Task LegacyDestinationOwnershipRefusalIsStillValueFreeAndCannotWrite()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var legacy = LegacyFolderFixture(cli.Location);
         cli.Sbx.FindSandboxAsync(legacy, Arg.Any<CancellationToken>())
@@ -123,8 +126,11 @@ public sealed class LegacySandboxCompatibilityTests
             )
             .Returns(Task.FromException(new AboxException("wrong owner synthetic-only")));
 
-        (await cli.Run("--force", "--verbose")).Should().Be(1);
+        // Act
+        var exitCode = await cli.Run("--force", "--verbose");
 
+        // Assert
+        exitCode.Should().Be(1);
         await cli.NoWrites();
         cli.Console.AllText.Should().Contain("destination").And.NotContain("synthetic-only");
     }
@@ -136,6 +142,7 @@ public sealed class LegacySandboxCompatibilityTests
         bool consent
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var name = LegacyFolderFixture(cli.Location);
         var paths = AboxPaths.For(cli.Root.Path, cli.Root.Path);
@@ -180,8 +187,11 @@ public sealed class LegacySandboxCompatibilityTests
         cli.Sbx.RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));
 
-        (await cli.Invoke("run", "--location", cli.Location)).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exitCode = await cli.Invoke("run", "--location", cli.Location);
 
+        // Assert
+        exitCode.Should().Be(0, cli.Console.AllText);
         if (consent)
         {
             await cli.Sbx.Received(1).RemoveSandboxAsync(name, Arg.Any<CancellationToken>());
@@ -228,6 +238,7 @@ public sealed class LegacySandboxCompatibilityTests
         bool assumeYes
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var name = LegacyFolderFixture(cli.Location);
         cli.Services.AddSingleton(PublishedSquadTest.Source());
@@ -242,21 +253,20 @@ public sealed class LegacySandboxCompatibilityTests
         cli.Store("sample", "{}");
         var sentinel = cli.Root.File($"{name}/.published/kept.txt", "existing-state");
 
-        (
-            await cli.Invoke([
-                "create",
-                "--team",
-                "sample",
-                "--squad",
-                "ac",
-                "--location",
-                cli.Location,
-                .. assumeYes ? new[] { "--yes" } : [],
-            ])
-        )
-            .Should()
-            .Be(consent || assumeYes ? 0 : 1);
+        // Act
+        var exitCode = await cli.Invoke([
+            "create",
+            "--team",
+            "sample",
+            "--squad",
+            "ac",
+            "--location",
+            cli.Location,
+            .. assumeYes ? new[] { "--yes" } : [],
+        ]);
 
+        // Assert
+        exitCode.Should().Be(consent || assumeYes ? 0 : 1);
         if (!assumeYes)
             cli.Console.AllText.Should()
                 .Contain($"'{name}' already exists")
@@ -308,6 +318,7 @@ public sealed class LegacySandboxCompatibilityTests
         string? recordedSquad
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var name = LegacyFolderFixture(cli.Location);
         cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
@@ -327,8 +338,11 @@ public sealed class LegacySandboxCompatibilityTests
         cli.Sbx.GetUserSecretsHostPortsAsync(name, Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<int>)[8004]);
 
-        (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exitCode = await cli.Run("--verbose");
 
+        // Assert
+        exitCode.Should().Be(0, cli.Console.AllText);
         await cli.Sbx.Received(1).GetUserSecretsHostPortsAsync(name, Arg.Any<CancellationToken>());
         await cli
             .Sbx.Received(1)
@@ -374,6 +388,7 @@ public sealed class LegacySandboxCompatibilityTests
     [InlineData("stopped")]
     public async Task RunReusesTheExactLegacySandboxWithoutCreatingOrAdoptingIt(string status)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var location = LegacySandboxFixture.Location;
         var name = LegacySandboxFixture.Name;
@@ -382,8 +397,11 @@ public sealed class LegacySandboxCompatibilityTests
         cli.Sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>())
             .Returns("/legacy/workspace");
 
-        (await cli.Invoke("run", "--location", location)).Should().Be(0);
+        // Act
+        var exitCode = await cli.Invoke("run", "--location", location);
 
+        // Assert
+        exitCode.Should().Be(0);
         await cli.Sbx.Received(1).GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>());
         await cli
             .Sbx.Received(1)

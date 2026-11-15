@@ -9,7 +9,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class CreateServiceTests
+public sealed partial class SandboxCreatorTests
 {
     [Theory]
     [InlineData(false)]

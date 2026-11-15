@@ -459,21 +459,7 @@ public sealed class SquadResolver(AboxConfig config)
                         server.Name,
                         server.Url is null
                             ? null
-                            : ParameterReference.Expand(server.Url, parameters, file.Path),
-                        server.Command is null
-                            ? null
-                            : ParameterReference.Expand(server.Command, parameters, file.Path),
-                        server
-                            .Arguments?.Select(argument =>
-                                ParameterReference.Expand(argument, parameters, file.Path)
-                            )
-                            .ToList(),
-                        server.Headers?.ToDictionary(
-                            header => header.Key,
-                            header =>
-                                ParameterReference.Expand(header.Value, parameters, file.Path),
-                            StringComparer.Ordinal
-                        )
+                            : ParameterReference.Expand(server.Url, parameters, file.Path)
                     )
                 );
             }

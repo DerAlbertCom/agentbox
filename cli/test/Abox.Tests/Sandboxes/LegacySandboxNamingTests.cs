@@ -35,12 +35,16 @@ public sealed class LegacySandboxNamingTests
     [MemberData(nameof(HistoricalNames))]
     public async Task RunFindsTheHistoricalGeneratedName(string location, string expectedName)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         cli.Sbx.FindSandboxAsync(expectedName, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(expectedName, "running", null));
 
-        (await cli.Invoke("run", "--location", location)).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exitCode = await cli.Invoke("run", "--location", location);
 
+        // Assert
+        exitCode.Should().Be(0, cli.Console.AllText);
         await cli
             .Sbx.Received(1)
             .ExecAsync(
@@ -52,6 +56,7 @@ public sealed class LegacySandboxNamingTests
     [Fact]
     public async Task LinkHashUsesTheFinalTargetButThePrefixUsesTheOriginalLeaf()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var target = cli.Root.Directory_("Final_Target");
         var link = Path.Combine(cli.Root.Path, "Alias_Name");
@@ -77,8 +82,11 @@ public sealed class LegacySandboxNamingTests
             cli.Sbx.FindSandboxAsync(expectedName, Arg.Any<CancellationToken>())
                 .Returns(new SandboxInfo(expectedName, "running", null));
 
-            (await cli.Invoke("run", "--location", link)).Should().Be(0, cli.Console.AllText);
+            // Act
+            var exitCode = await cli.Invoke("run", "--location", link);
 
+            // Assert
+            exitCode.Should().Be(0, cli.Console.AllText);
             await cli
                 .Sbx.Received(1)
                 .ExecAsync(

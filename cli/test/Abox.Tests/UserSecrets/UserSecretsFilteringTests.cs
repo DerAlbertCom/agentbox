@@ -11,6 +11,7 @@ public sealed class UserSecretsFilteringTests
     [Fact]
     public async Task MixedEntriesCopyWholeStoresAndExactSelectedKeysWithoutChangingHostFiles()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(
             """["whole", {"id":"object-whole"}, {"id":"filtered","keys":["Enabled"]}]"""
@@ -24,8 +25,11 @@ public sealed class UserSecretsFilteringTests
         var original = File.ReadAllBytes(source);
         fixture.Store("unlisted", "malformed and never read");
 
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0);
         fixture
             .Writes.Select(write => write.Id)
             .Should()
@@ -44,6 +48,7 @@ public sealed class UserSecretsFilteringTests
     [Fact]
     public async Task PatternsMatchEffectiveKeysIgnoringCaseAcrossSegmentsWithoutDuplicatingOverlaps()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(
             """[{"id":"sample","keys":["connectionstrings:*","ConnectionStrings:Db","Keycloak:*","Services:2:Token"]}]"""
@@ -60,8 +65,11 @@ public sealed class UserSecretsFilteringTests
             """
         );
 
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0);
         using var payload = JsonDocument.Parse(fixture.Payload("sample"));
         using var expected = JsonDocument.Parse(
             """
@@ -71,11 +79,17 @@ public sealed class UserSecretsFilteringTests
         );
         JsonElement.DeepEquals(payload.RootElement, expected.RootElement).Should().BeTrue();
         fixture.Console.AllText.Should().Contain("4 keys").And.NotContain("synthetic-");
+
+        // Arrange
         var first = fixture.Payload("sample");
         fixture.Configure(
             """[{"id":"sample","keys":["Services:2:Token","KEYCLOAK:*","ConnectionStrings:Db","connectionstrings:*","CONNECTIONSTRINGS:DB"]}]"""
         );
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var reorderedExitCode = await fixture.Run();
+
+        // Assert
+        reorderedExitCode.Should().Be(0);
         fixture.Payload("sample").Should().Be(first);
     }
 
@@ -98,12 +112,16 @@ public sealed class UserSecretsFilteringTests
     [InlineData("[\"sample\",{\"id\":\"SAMPLE\",\"keys\":[]}]")]
     public async Task MalformedSelectionsFailClosedEvenWithForceAndVerbose(string entries)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(entries);
         fixture.Store("sample", """{"Password":"synthetic-private"}""");
 
-        (await fixture.Run("--force", "--verbose")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force", "--verbose");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Writes.Should().BeEmpty();
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
         fixture.Console.AllText.Should().NotBeNullOrWhiteSpace();
@@ -117,19 +135,35 @@ public sealed class UserSecretsFilteringTests
         string emptyPatterns
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Store("sample", """{"Keep":"synthetic-keep","Remove":"synthetic-remove"}""");
         fixture.Configure("""["sample"]""");
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var wholeStoreExitCode = await fixture.Run();
+
+        // Assert
+        wholeStoreExitCode.Should().Be(0);
         fixture.Payload("sample").Should().Contain("Remove");
 
+        // Arrange
         fixture.Configure("""[{"id":"sample","keys":["Keep"]}]""");
-        (await fixture.Run()).Should().Be(0);
+
+        // Act
+        var narrowedExitCode = await fixture.Run();
+
+        // Assert
+        narrowedExitCode.Should().Be(0);
         fixture.Payload("sample").Should().Be("""{"Keep":"synthetic-keep"}""");
 
+        // Arrange
         fixture.Configure("[{\"id\":\"sample\",\"keys\":" + emptyPatterns + "}]");
-        (await fixture.Run("--verbose")).Should().Be(0);
 
+        // Act
+        var emptySelectionExitCode = await fixture.Run("--verbose");
+
+        // Assert
+        emptySelectionExitCode.Should().Be(0);
         fixture.Writes.Should().HaveCount(3);
         fixture.Payload("sample").Should().Be("{}");
         fixture.Console.AllText.Should().Contain("sample': 0 keys").And.NotContain("synthetic-");
@@ -140,6 +174,7 @@ public sealed class UserSecretsFilteringTests
     [InlineData(true)]
     public async Task DenyChecksOnlySelectedOriginalValuesAcrossAllStoresBeforeAnyWrite(bool force)
     {
+        // Arrange
         using var fixture = new Fixture(new AboxConfig { UserSecretsDenyList = ["PrOd.Example"] });
         fixture.Configure("""[{"id":"first","keys":["Safe"]},{"id":"later","keys":["Safe"]}]""");
         fixture.Store(
@@ -151,18 +186,25 @@ public sealed class UserSecretsFilteringTests
             """{"Safe":"synthetic-local","Ignored":"https://PROD.EXAMPLE/unmatched"}"""
         );
 
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var safeExitCode = await fixture.Run();
+
+        // Assert
+        safeExitCode.Should().Be(0);
         fixture.Writes.Should().HaveCount(2);
         fixture.Payload("first").Should().Be("""{"Safe":"synthetic-local"}""");
         fixture.Payload("later").Should().Be("""{"Safe":"synthetic-local"}""");
+
+        // Arrange
         fixture.Writes.Clear();
         fixture.Sbx.ClearReceivedCalls();
         fixture.Store("later", """{"Safe":"https://PROD.EXAMPLE/synthetic-selected"}""");
 
-        (await fixture.Run(force ? ["--force", "--verbose"] : ["--verbose"]))
-            .Should()
-            .Be(force ? 0 : 1);
+        // Act
+        var deniedExitCode = await fixture.Run(force ? ["--force", "--verbose"] : ["--verbose"]);
 
+        // Assert
+        deniedExitCode.Should().Be(force ? 0 : 1);
         if (force)
         {
             fixture.Writes.Should().HaveCount(2);
@@ -195,13 +237,17 @@ public sealed class UserSecretsFilteringTests
     [InlineData("{\"Ignored\":\"\\uD800\"}")]
     public async Task FilteringAndForceDoNotBypassInvalidInputEvenWhenNoKeysMatch(string json)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""["first",{"id":"later","keys":[]}]""");
         fixture.Store("first", "{}");
         fixture.Store("later", json);
 
-        (await fixture.Run("--force", "--verbose")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force", "--verbose");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Writes.Should().BeEmpty();
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
         fixture.Console.AllText.Should().Contain("later").And.NotContain("synthetic-");
@@ -227,14 +273,18 @@ public sealed class UserSecretsFilteringTests
         bool matches
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(
             JsonSerializer.Serialize(new[] { new { id = "sample", keys = new[] { pattern } } })
         );
         fixture.Store("sample", """{"ConnectionStrings:Db":"synthetic-private"}""");
 
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0);
         fixture
             .Payload("sample")
             .Should()
@@ -245,6 +295,7 @@ public sealed class UserSecretsFilteringTests
     [Fact]
     public async Task NonWildcardPatternCharactersAreLiteralAndSelectedJsonScalarTypesArePreserved()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""[{"id":"sample","keys":["Literal:?[]\\.Key","Nested:*"]}]""");
         fixture.Store(
@@ -255,8 +306,11 @@ public sealed class UserSecretsFilteringTests
             """
         );
 
-        (await fixture.Run()).Should().Be(0);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0);
         using var payload = JsonDocument.Parse(fixture.Payload("sample"));
         using var expected = JsonDocument.Parse(
             """
@@ -275,6 +329,7 @@ public sealed class UserSecretsFilteringTests
     [Fact]
     public async Task TheSharedFlowKeepsOnlySelectedOriginalValuesInItsOpaqueSnapshot()
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File(
             "folder/abox.json",
@@ -293,15 +348,22 @@ public sealed class UserSecretsFilteringTests
             sbx
         );
 
+        // Act
         var prepared = await copy.PrepareAsync(
             await FolderConfig.LoadAsync(Path.Combine(root.Path, "folder"), CancellationToken.None),
             false,
             CancellationToken.None
         );
+        // Assert
         sbx.ReceivedCalls().Should().BeEmpty();
+
+        // Arrange
         File.WriteAllText(source, "malformed changed after validation");
+
+        // Act
         var report = await copy.CopyAsync(prepared, "sandbox", CancellationToken.None);
 
+        // Assert
         await sbx.Received(1)
             .WriteUserSecretsAsync(
                 "sandbox",
@@ -317,6 +379,7 @@ public sealed class UserSecretsFilteringTests
     [Fact]
     public async Task FilteredPayloadDoesNotRetainCommentsEvenInsideSelectedEmptyContainers()
     {
+        // Arrange
         using var fixture = new Fixture(new AboxConfig { UserSecretsDenyList = ["prod.example"] });
         fixture.Configure("""[{"id":"sample","keys":["Keep:*"]}]""");
         fixture.Store(
@@ -330,8 +393,11 @@ public sealed class UserSecretsFilteringTests
             """
         );
 
-        (await fixture.Run("--verbose")).Should().Be(0);
+        // Act
+        var exitCode = await fixture.Run("--verbose");
 
+        // Assert
+        exitCode.Should().Be(0);
         fixture
             .Payload("sample")
             .Should()
