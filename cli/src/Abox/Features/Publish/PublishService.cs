@@ -45,12 +45,10 @@ public sealed class PublishService(
             throw new AboxException("No squad builds were selected for publication.");
         }
 
-        if (!programs.Exists("docker"))
-        {
-            throw new AboxException(
-                "Publishing v3 kits needs Docker with the Buildx plugin on PATH. Install it and configure a BuildKit builder; see docs/implementation.md."
-            );
-        }
+        OciRegistry.RequireDocker(
+            programs,
+            "Publishing v3 kits needs Docker with the Buildx plugin on PATH. Install it and configure a BuildKit builder; see docs/implementation.md."
+        );
 
         using var temporary = new TemporaryDirectory("abox-publish-", "publication", console);
         var directory = temporary.Path;
@@ -403,15 +401,9 @@ public sealed class PublishService(
             "--provenance=mode=min",
             "--push",
         ]);
-        if (
-            request.Kind == KitKind.Workload
-            && !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN"))
-        )
+        if (request.Kind == KitKind.Workload)
         {
-            arguments.AddRange([
-                "--secret",
-                $"id={WorkloadKitGenerator.GitHubTokenSecret},env=GITHUB_TOKEN",
-            ]);
+            arguments.AddRange(WorkloadKitGenerator.GitHubBuildSecretArguments());
         }
 
         arguments.Add(request.Directory);
@@ -450,7 +442,7 @@ public sealed class PublishService(
         return pinned;
     }
 
-    internal async Task<IReadOnlyList<JsonElement>> InspectAsync(
+    private async Task<IReadOnlyList<JsonElement>> InspectAsync(
         string reference,
         string kind,
         CancellationToken cancellationToken,

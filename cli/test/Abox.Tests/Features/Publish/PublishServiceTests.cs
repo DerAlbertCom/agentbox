@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class PublishServiceTests
+public sealed partial class PublishServiceTests
 {
     private readonly TempDirectory _root = new();
     private readonly BuildStore _store;
@@ -26,11 +26,15 @@ public sealed class PublishServiceTests
         _service = new PublishService(_store, _programs, new OciRegistry(_runner), _console);
         _programs.Exists("docker").Returns(true);
         _runner
+            .When(runner =>
+                runner.RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            )
+            .Do(call => _calls.Add(call.Arg<ProcessRequest>()));
+        _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
                 var request = call.Arg<ProcessRequest>();
-                _calls.Add(request);
                 var arguments = request.Arguments.ToList();
                 if (arguments.Contains("--file"))
                 {
