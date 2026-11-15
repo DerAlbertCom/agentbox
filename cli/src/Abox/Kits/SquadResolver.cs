@@ -524,20 +524,11 @@ public sealed class SquadResolver(AboxConfig config)
                     "A state directory is declared once."
                 );
 
-                foreach (var existing in entries)
-                {
-                    if (existing.Contains(entry) || entry.Contains(existing))
-                    {
-                        throw new AboxException(
-                            $"The state directories '{existing.SandboxPath}' and '{entry.SandboxPath}' overlap. sbx refuses overlapping host mounts."
-                        );
-                    }
-                }
-
                 entries.Add(entry);
             }
         }
 
+        StateEntry.EnsureDisjoint(entries);
         return entries;
     }
 
