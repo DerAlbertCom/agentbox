@@ -53,8 +53,12 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task SettingsLockUsesTheInjectedStateDirectory()
     {
+        // Arrange: the fixture injects an isolated state directory.
+
+        // Act
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         File.Exists(Path.Combine(_paths.StateDirectory, "locks", "sbx-kit-allowedSources.lock"))
             .Should()
             .BeTrue();
@@ -63,8 +67,12 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task RemoteRepositoryIsAppendedWithoutDroppingOrChangingExistingEntries()
     {
+        // Arrange: the fixture includes ordered, duplicate existing sources.
+
+        // Act
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         _calls[0].FileName.Should().Be("sbx");
         _calls[0].Arguments.Should().Equal("settings", "get", "kit.allowedSources", "--json");
         var write = _calls.Should().ContainSingle(call => call.Arguments[1] == "set").Which;
@@ -89,10 +97,13 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [InlineData("*")]
     public async Task ExistingCoverageDoesNotWriteOrNarrowTheAllowlist(string existing)
     {
+        // Arrange
         _sources = ["docker.io/", existing, "dhi.io/"];
 
+        // Act
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         _calls.Should().ContainSingle().Which.Arguments[1].Should().Be("get");
         _sources.Should().Equal("docker.io/", existing, "dhi.io/");
     }
@@ -100,11 +111,14 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task ASecondCallDoesNotWriteAgain()
     {
+        // Arrange
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
         _calls.Clear();
 
+        // Act
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         _calls.Should().ContainSingle().Which.Arguments[1].Should().Be("get");
     }
 
@@ -118,10 +132,13 @@ public sealed class SbxAllowedSourcesTests : IDisposable
         string existing
     )
     {
+        // Arrange
         _sources = [existing];
 
+        // Act
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         _sources.Should().Equal(existing, Prefix);
         _calls.Should().ContainSingle(call => call.Arguments[1] == "set");
     }
@@ -129,13 +146,16 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task AnEmptyAllowlistGetsOnlyTheConfiguredRepository()
     {
+        // Arrange
         _sources = [];
 
+        // Act
         await _client.EnsureKitSourceAllowedAsync(
             "rwest.jfrog.io/team-docker-dev/",
             CancellationToken.None
         );
 
+        // Assert
         _sources.Should().Equal("rwest.jfrog.io/team-docker-dev/");
     }
 
@@ -170,12 +190,15 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     )]
     public async Task InvalidSettingsFailWithoutAnyWrite(string json)
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, json, ""));
 
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*kit.allowedSources*");
         await _runner
             .DidNotReceive()
@@ -188,12 +211,15 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task FailedSettingsReadsAreReportedWithoutWriting()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(1, "", "administrator policy denies settings access"));
 
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*sbx settings get kit.allowedSources*administrator policy*"
         );
@@ -203,6 +229,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task AdministratorDenialsAreReportedWithoutChangingOtherPolicies()
     {
+        // Arrange
         _runner
             .RunAsync(
                 Arg.Is<ProcessRequest>(request => request.Arguments[1] == "set"),
@@ -210,8 +237,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
             )
             .Returns(new ProcessResult(1, "", "rejected by administrator constraint"));
 
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*kit.allowedSources*administrator constraint*no sandbox was replaced*"
         );
@@ -224,6 +253,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [InlineData(true)]
     public async Task EnvironmentControlledTrustIsNeverOverridden(bool alreadyAllowed)
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -242,8 +272,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
                 )
             );
 
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         if (alreadyAllowed)
         {
             await action();
@@ -260,6 +292,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task ASuccessfulSetThatDoesNotTakeEffectIsNotSilentlyAccepted()
     {
+        // Arrange
         _runner
             .RunAsync(
                 Arg.Is<ProcessRequest>(request => request.Arguments[1] == "set"),
@@ -267,8 +300,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
             )
             .Returns(new ProcessResult(0, "Override saved.", ""));
 
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*evaluated settings*administrator policy*no sandbox was replaced*"
         );
@@ -283,6 +318,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task DelayedEvaluatedSettingsAreCheckedBeforeReturning()
     {
+        // Arrange
         var reads = 0;
         _runner
             .RunAsync(
@@ -305,8 +341,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
                 ""
             ));
 
+        // Act
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         reads.Should().Be(3);
     }
 
@@ -317,6 +355,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [InlineData("*")]
     public async Task PostWriteVerificationUsesTheSameSegmentCoverageRules(string effectivePrefix)
     {
+        // Arrange
         var original = _sources.ToArray();
         var reads = 0;
         _runner
@@ -340,8 +379,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
                 ""
             ));
 
+        // Act
         await _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         reads.Should().Be(2);
     }
 
@@ -352,6 +393,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
         string effectivePrefix
     )
     {
+        // Arrange
         var original = _sources.ToArray();
         var reads = 0;
         _runner
@@ -375,8 +417,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
                 ""
             ));
 
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*evaluated settings*no sandbox was replaced*"
         );
@@ -391,6 +435,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task PostWriteCoverageCannotHideMissingOriginalEntries()
     {
+        // Arrange
         var original = _sources.ToArray();
         var reads = 0;
         _runner
@@ -412,8 +457,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
                 ""
             ));
 
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*did not preserve the allowlist*no sandbox was replaced*"
         );
@@ -422,6 +469,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task ConcurrentAboxClientsMergeRatherThanOverwriteEachOthersAdditions()
     {
+        // Arrange
         var sources = new[] { "docker.io/", "dhi.io/" };
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
@@ -448,6 +496,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
             });
         var other = new SbxClient(_runner, _paths);
 
+        // Act
         await Task.WhenAll(
             _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None),
             other.EnsureKitSourceAllowedAsync(
@@ -456,6 +505,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
             )
         );
 
+        // Assert
         sources
             .Should()
             .BeEquivalentTo("docker.io/", "dhi.io/", Prefix, "rwest.jfrog.io/team-docker-dev/");
@@ -464,6 +514,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [Fact]
     public async Task WaitingForAnotherClientsSettingsLockCanBeCancelled()
     {
+        // Arrange
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var reads = 0;
@@ -494,8 +545,11 @@ public sealed class SbxAllowedSourcesTests : IDisposable
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
             using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
             var other = new SbxClient(_runner, _paths);
+
+            // Act
             var waiting = () => other.EnsureKitSourceAllowedAsync(Prefix, cancellation.Token);
 
+            // Assert
             await waiting.Should().ThrowAsync<OperationCanceledException>();
             reads.Should().Be(1);
         }
@@ -511,6 +565,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [InlineData(true)]
     public async Task FailedOrCancelledUpdatesReleaseTheLockForTheNextClient(bool cancelled)
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
@@ -524,7 +579,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
 
                 return new ProcessResult(1, "", "settings unavailable");
             });
+        // Act
         var first = () => _client.EnsureKitSourceAllowedAsync(Prefix, cancellation.Token);
+
+        // Assert
         if (cancelled)
         {
             await first.Should().ThrowAsync<OperationCanceledException>();
@@ -533,6 +591,7 @@ public sealed class SbxAllowedSourcesTests : IDisposable
         {
             await first.Should().ThrowAsync<AboxException>();
         }
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -552,7 +611,12 @@ public sealed class SbxAllowedSourcesTests : IDisposable
             );
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        await new SbxClient(_runner, _paths).EnsureKitSourceAllowedAsync(Prefix, timeout.Token);
+        // Act
+        var next = () =>
+            new SbxClient(_runner, _paths).EnsureKitSourceAllowedAsync(Prefix, timeout.Token);
+
+        // Assert
+        await next.Should().NotThrowAsync();
     }
 
     [Theory]
@@ -561,8 +625,12 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [InlineData("rwest.jfrog.io/repo/*")]
     public async Task BroadOrWildcardTrustCannotBeIntroduced(string prefix)
     {
+        // Arrange: the theory supplies an overbroad trust prefix.
+
+        // Act
         var action = () => _client.EnsureKitSourceAllowedAsync(prefix, CancellationToken.None);
 
+        // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*repository-scoped prefix*"
         );

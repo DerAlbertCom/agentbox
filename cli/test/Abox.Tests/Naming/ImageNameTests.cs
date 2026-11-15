@@ -7,11 +7,14 @@ public sealed class ImageNameTests
     [Fact]
     public void ALocalTeamReferenceRoundTrips()
     {
-        ImageName
-            .TryParseTeam(ImageName.OfTeam("other-team", "release"), "release", out var team)
-            .Should()
-            .BeTrue();
+        // Arrange
+        var reference = ImageName.OfTeam("other-team", "release");
 
+        // Act
+        var parsed = ImageName.TryParseTeam(reference, "release", out var team);
+
+        // Assert
+        parsed.Should().BeTrue();
         team.Should().Be("other-team");
     }
 
@@ -24,8 +27,13 @@ public sealed class ImageNameTests
     [InlineData("agentbox-other-sample:release")]
     public void OtherReferencesAreNotLocalTeamReferences(string? reference)
     {
-        ImageName.TryParseTeam(reference, "release", out var team).Should().BeFalse();
+        // Arrange: the theory supplies references outside the requested local identity.
 
+        // Act
+        var parsed = ImageName.TryParseTeam(reference, "release", out var team);
+
+        // Assert
+        parsed.Should().BeFalse();
         team.Should().BeNull();
     }
 }

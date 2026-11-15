@@ -10,14 +10,17 @@ public sealed class StateMixinGeneratorTests
     [Fact]
     public void EveryStateDirectoryBecomesAHostMount()
     {
+        // Arrange
         var entries = new[]
         {
             StateEntry.Parse("~/.config/opencode/state"),
             StateEntry.Parse("~/.local/state/shell"),
         };
 
+        // Act
         _generator.Generate(entries, Path.Combine(_root.Path, "state"));
 
+        // Assert
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "state", "state.yaml"));
         descriptor.Should().NotContain("\r");
         CountOccurrences(descriptor, "com.docker.sandbox/host-mount@1").Should().Be(2);
@@ -28,8 +31,12 @@ public sealed class StateMixinGeneratorTests
     [Fact]
     public void AMixinWithoutStateHasNoCapabilities()
     {
+        // Arrange: the generator receives no state entries.
+
+        // Act
         _generator.Generate([], Path.Combine(_root.Path, "state"));
 
+        // Assert
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "state", "state.yaml"));
         descriptor.Should().NotContain("host-mount@1");
     }

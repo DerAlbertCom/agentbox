@@ -13,6 +13,7 @@ public sealed class ProcessRunnerTests
         bool verbose
     )
     {
+        // Arrange
         using var root = new TempDirectory();
         const string input = "{\"Password\":\"Grüße 🔒\",\"Number\":123456789,\"Flag\":true}";
         var console = new TestConsole();
@@ -37,8 +38,10 @@ public sealed class ProcessRunnerTests
             OutputPolicy: ProcessOutputPolicy.Sensitive
         );
 
+        // Act
         var result = await new ProcessRunner(output).RunAsync(request, CancellationToken.None);
 
+        // Assert
         result.ExitCode.Should().Be(9);
         result.StandardOutput.Should().BeEmpty();
         result.StandardError.Should().BeEmpty();
@@ -47,7 +50,11 @@ public sealed class ProcessRunnerTests
             .Should()
             .Equal(System.Text.Encoding.UTF8.GetBytes(input));
         request.ToString().Should().NotContain("Password").And.NotContain("123456789");
+
+        // Act
         output.Write(request, new ProcessResult(9, "Grüße", "123456789 true"));
+
+        // Assert
         console.AllText.Should().BeEmpty();
     }
 
@@ -57,6 +64,7 @@ public sealed class ProcessRunnerTests
     [InlineData("exited")]
     public async Task AKillFailureDoesNotReplaceCancellation(string failure)
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         var killAttempted = false;
@@ -76,8 +84,10 @@ public sealed class ProcessRunnerTests
         );
         var request = LongRunningRequest();
 
+        // Act
         var action = () => runner.RunAsync(request, cancellation.Token);
 
+        // Assert
         await action.Should().ThrowAsync<OperationCanceledException>();
         killAttempted.Should().BeTrue();
     }
@@ -85,17 +95,20 @@ public sealed class ProcessRunnerTests
     [Fact]
     public async Task CancellationDoesNotWaitForeverWhenTheChildSurvivesTheKill()
     {
+        // Arrange
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         Process? child = null;
         var runner = new ProcessRunner(null, process => child = Process.GetProcessById(process.Id));
         try
         {
+            // Act
             var action = () =>
                 runner
                     .RunAsync(LongRunningRequest(), cancellation.Token)
                     .WaitAsync(TimeSpan.FromSeconds(10));
 
+            // Assert
             var exception = await action.Should().ThrowAsync<OperationCanceledException>();
 
             exception.Which.CancellationToken.Should().Be(cancellation.Token);
@@ -133,6 +146,7 @@ public sealed class ProcessRunnerTests
         int exitCode
     )
     {
+        // Arrange
         using var root = new TempDirectory();
         var stdout = string.Concat(
             Enumerable.Repeat("stdout line: " + new string('x', 1024) + "\n", 100)
@@ -160,8 +174,10 @@ public sealed class ProcessRunnerTests
         var console = new TestConsole();
         var output = new ProcessOutput(console) { Verbose = verbose };
 
+        // Act
         var result = await new ProcessRunner(output).RunAsync(request, CancellationToken.None);
 
+        // Assert
         var expectedOutput = stdout.Replace("\n", Environment.NewLine);
         var expectedError = stderr.Replace("\n", Environment.NewLine);
         result.ExitCode.Should().Be(exitCode);
@@ -182,14 +198,17 @@ public sealed class ProcessRunnerTests
     [Fact]
     public async Task TheStandardInputOfTheChildIsWritten()
     {
+        // Arrange
         var request = new ProcessRequest(
             OperatingSystem.IsWindows() ? "cmd" : "sh",
             OperatingSystem.IsWindows() ? ["/c", "sort"] : ["-c", "cat"],
             StandardInput: "the value"
         );
 
+        // Act
         var result = await new ProcessRunner().RunAsync(request, CancellationToken.None);
 
+        // Assert
         result.Succeeded.Should().BeTrue();
         result.StandardOutput.Should().Contain("the value");
     }
@@ -197,6 +216,7 @@ public sealed class ProcessRunnerTests
     [Fact]
     public async Task LargeOutputIsDrainedWhileTheStandardInputIsBeingWritten()
     {
+        // Arrange
         using var root = new TempDirectory();
         var stdout = string.Concat(Enumerable.Repeat(new string('x', 1024) + "\n", 1024));
         root.File("stdout.txt", stdout);
@@ -218,8 +238,10 @@ public sealed class ProcessRunnerTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         try
         {
+            // Act
             var result = await new ProcessRunner().RunAsync(request, cancellation.Token);
 
+            // Assert
             result.Succeeded.Should().BeTrue();
             result.StandardOutput.Should().Be((stdout + stdin).Replace("\n", Environment.NewLine));
             result.StandardError.Should().BeEmpty();
@@ -233,6 +255,7 @@ public sealed class ProcessRunnerTests
     [Fact]
     public async Task CancellingABlockedStandardInputWriteStopsTheChild()
     {
+        // Arrange
         using var root = new TempDirectory();
         using var cancellation = new CancellationTokenSource();
         var request = new ProcessRequest(
@@ -249,6 +272,7 @@ public sealed class ProcessRunnerTests
             WorkingDirectory: root.Path,
             StandardInput: new string('x', 4 * 1024 * 1024)
         );
+        // Act
         var running = new ProcessRunner().RunAsync(request, cancellation.Token);
         try
         {
@@ -263,6 +287,7 @@ public sealed class ProcessRunnerTests
             cancellation.Cancel();
 
             var action = () => running.WaitAsync(timeout.Token);
+            // Assert
             await action.Should().ThrowAsync<OperationCanceledException>();
             child.HasExited.Should().BeTrue();
         }
@@ -300,13 +325,16 @@ public sealed class ProcessRunnerTests
     [Fact]
     public async Task TheArgumentsArePassedOneByOne()
     {
+        // Arrange
         var request = new ProcessRequest(
             OperatingSystem.IsWindows() ? "cmd" : "sh",
             OperatingSystem.IsWindows() ? ["/c", "echo", "a b"] : ["-c", "echo \"$1\"", "sh", "a b"]
         );
 
+        // Act
         var result = await new ProcessRunner().RunAsync(request, CancellationToken.None);
 
+        // Assert
         result.Succeeded.Should().BeTrue();
         result.StandardOutput.Should().Contain("a b");
     }
@@ -314,10 +342,13 @@ public sealed class ProcessRunnerTests
     [Fact]
     public async Task AProgramThatIsNotThereIsAnError()
     {
+        // Arrange
         var request = new ProcessRequest("abox-does-not-exist", []);
 
+        // Act
         var action = () => new ProcessRunner().RunAsync(request, CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("abox-does-not-exist");

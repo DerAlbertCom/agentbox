@@ -9,6 +9,7 @@ public sealed class UserSecretsPolicyProcessTests
     [InlineData(true)]
     public async Task PolicyCaptureRetainsMetadataForParsingWithoutPrintingRawStreams(bool verbose)
     {
+        // Arrange
         var console = new TestConsole();
         var output = new ProcessOutput(console) { Verbose = verbose };
         var request = new ProcessRequest(
@@ -29,8 +30,10 @@ public sealed class UserSecretsPolicyProcessTests
             OutputPolicy: ProcessOutputPolicy.CapturedSensitive
         );
 
+        // Act
         var result = await new ProcessRunner(output).RunAsync(request, CancellationToken.None);
 
+        // Assert
         result.ExitCode.Should().Be(9);
         result.StandardOutput.Trim().Should().Be("""{"rules":[]}""");
         result.StandardError.Should().Contain("synthetic-password 123456789 true");
@@ -40,7 +43,10 @@ public sealed class UserSecretsPolicyProcessTests
     [Fact]
     public async Task PolicyCaptureCannotAttachConsoleOrLeakStartFailures()
     {
+        // Arrange
         var runner = new ProcessRunner();
+
+        // Act
         var attached = () =>
             runner.RunAsync(
                 new ProcessRequest(
@@ -61,6 +67,7 @@ public sealed class UserSecretsPolicyProcessTests
                 CancellationToken.None
             );
 
+        // Assert
         (await attached.Should().ThrowAsync<AboxException>())
             .Which.ToString()
             .Should()
