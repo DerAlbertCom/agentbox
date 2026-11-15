@@ -234,7 +234,7 @@ public sealed class NodeModulesDiscovery39Tests
             "src/node_modules-backup/Api",
             """{"Url":"http://localhost:8004/synthetic-private"}"""
         );
-        var target = outside ? "outside/NoDe_MoDuLeS" : "folder/web/NoDe_MoDuLeS";
+        var target = outside ? "outside/ordinary" : "folder/web/NoDe_MoDuLeS";
         cli.Root.File(
             $"{target}/package/Bad.csproj",
             "<Project><PropertyGroup><UserSecretsId>shared</UserSecretsId></PropertyGroup></Project>"

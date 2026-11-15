@@ -182,9 +182,9 @@ appsettings differences for those keys are irrelevant. Existing key filters appl
 before generation and compatibility; they do not authorize any extra keys.
 Unrelated/unresolved projects do not participate or block generation. These checks
 cover all explicit matching consumers within the bounded discovery model above,
-  not consumers inferred through MSBuild, hidden in unreadable project XML or
-  beneath excluded directories (including `node_modules`). A conflict outside
-  exclusions still blocks copying **every** selected store before any write.
+not consumers inferred through MSBuild, hidden in unreadable project XML or
+beneath excluded directories (including `node_modules`). A conflict outside
+exclusions still blocks copying **every** selected store before any write.
 
 Conflicts identify the store, escaped effective key and affected project paths,
 without values. Resolve them by supplying an intentional authoritative selected
