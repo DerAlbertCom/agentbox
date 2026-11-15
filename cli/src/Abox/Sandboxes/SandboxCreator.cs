@@ -68,6 +68,16 @@ public sealed class SandboxCreator(
         );
         var prepared = await source.LoadAsync(selection, cancellationToken);
         var manifest = prepared.Metadata;
+        var state =
+            manifest
+                .State?.Select(entry =>
+                    StateEntry.FromStored(entry?.SandboxPath, entry?.RelativePath)
+                )
+                .ToList()
+            ?? throw new AboxException(
+                "Missing stored state declarations. Rebuild or republish the squad."
+            );
+        StateEntry.EnsureDisjoint(state);
 
         var mcpToRegister = await FindMcpServersToRegisterAsync(manifest, cancellationToken);
         var existing =
@@ -77,7 +87,7 @@ public sealed class SandboxCreator(
         cancellationToken.ThrowIfCancellationRequested();
         await RegisterMcpServersAsync(mcpToRegister, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
-        var mounts = CreateStateDirectories(name, manifest);
+        var mounts = CreateStateDirectories(name, state);
         cancellationToken.ThrowIfCancellationRequested();
         if (replace)
         {
@@ -185,13 +195,16 @@ public sealed class SandboxCreator(
         }
     }
 
-    private IReadOnlyList<SbxMount> CreateStateDirectories(string name, BuildManifest manifest)
+    private IReadOnlyList<SbxMount> CreateStateDirectories(
+        string name,
+        IReadOnlyList<StateEntry> state
+    )
     {
         var mounts = new List<SbxMount>();
 
-        foreach (var state in manifest.State)
+        foreach (var entry in state)
         {
-            var hostPath = Path.Combine(paths.StateDirectory, name, state.RelativePath);
+            var hostPath = Path.Combine(paths.StateDirectory, name, entry.RelativePath);
             try
             {
                 Directory.CreateDirectory(hostPath);
@@ -204,7 +217,7 @@ public sealed class SandboxCreator(
                     exception
                 );
             }
-            mounts.Add(new SbxMount(hostPath, state.SandboxPath));
+            mounts.Add(new SbxMount(hostPath, entry.SandboxPath));
         }
 
         return mounts;

@@ -204,7 +204,6 @@ public sealed class PublishedSquadSource(
             createdAt == default
             || state.Any(item => item is null)
             || mcp.Any(item => item is null)
-            || state.DistinctBy(item => item.SandboxPath).Count() != state.Count
             || mcp.DistinctBy(item => item.Name).Count() != mcp.Count
         )
             throw new JsonException("Incomplete or duplicate runtime metadata.");
@@ -244,21 +243,23 @@ public sealed class PublishedSquadSource(
 
     private static void ValidateState(IReadOnlyList<ManifestState> state, JsonElement descriptor)
     {
+        try
+        {
+            StateEntry.EnsureDisjoint(
+                state
+                    .Select(entry => StateEntry.FromStored(entry.SandboxPath, entry.RelativePath))
+                    .ToList()
+            );
+        }
+        catch (AboxException exception)
+        {
+            throw new JsonException("Unsafe or overlapping state paths.", exception);
+        }
+
         foreach (var entry in state)
         {
             if (
-                !SafeRelative(entry.RelativePath)
-                || !entry.SandboxPath.StartsWith('/')
-                || !SafeRelative(entry.SandboxPath[1..])
-                || (
-                    entry.SandboxPath.StartsWith(
-                        StateEntry.SandboxHome + "/",
-                        StringComparison.Ordinal
-                    )
-                        ? entry.SandboxPath[(StateEntry.SandboxHome.Length + 1)..]
-                        : entry.SandboxPath[1..]
-                ) != entry.RelativePath
-                || !descriptor
+                !descriptor
                     .GetProperty("capabilities")
                     .EnumerateArray()
                     .Any(capability =>
@@ -294,18 +295,6 @@ public sealed class PublishedSquadSource(
             }
         }
     }
-
-    private static bool SafeRelative(string value) =>
-        !string.IsNullOrWhiteSpace(value)
-        && !value.Contains('\\')
-        && !value.Contains(':')
-        && value
-            .Split('/')
-            .All(part =>
-                part.Length > 0
-                && part is not ("." or "..")
-                && part.IndexOfAny(Path.GetInvalidFileNameChars()) < 0
-            );
 
     private static string ReadSquadJson(string archive)
     {
