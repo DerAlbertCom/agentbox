@@ -251,7 +251,7 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
     `--kit-arg <name>=<value>...` and `--pull never` instead. Both pass
     `--mount <host>:<path>... --static-mcp <names>`.
 8. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the team
-    and the squad it comes from, the build metadata and the pulled reference (if any).
+   and the squad it comes from, the build metadata and the pulled reference (if any).
 9. After successful creation and record save, copies prepared user secrets through
    the shared on-demand flow, before full-success/open output or returning to a
    launcher. A post-create copy failure retains the actual sandbox/new record,
@@ -330,11 +330,11 @@ published tag.
 4. For a locally created sandbox, offers to replace it when the build of its squad is newer than the one the
    sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
    the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local,
-    resolving team sources from the newer build's recorded root (or the sandbox
-    location for legacy metadata), so a separate `create --root` project stays usable.
-    Accepted replacement uses `SandboxCreator`, including shared user-secret
-    preparation/copying. Failed required copying prevents launch. Ordinary run or
-    declining the newer build never reads selected host stores or resyncs secrets.
+   resolving team sources from the newer build's recorded root (or the sandbox
+   location for legacy metadata), so a separate `create --root` project stays usable.
+   Accepted replacement uses `SandboxCreator`, including shared user-secret
+   preparation/copying. Failed required copying prevents launch. Ordinary run or
+   declining the newer build never reads selected host stores or resyncs secrets.
 5. Checks the programs the launcher needs in the sandbox. A missing one means the image
    predates the launcher: the command says to create the sandbox again.
 6. Asks the runtime where the workspace is (`WORKSPACE_DIR`) and starts the launcher.
@@ -465,10 +465,13 @@ claim that the baseline performs rewriting.
 
 **Safety review fixes are also pending integration:** serialize selected JSON data
 rather than transfer raw unfiltered source text (which retains skipped comments),
-isolate no-payload checks from inherited host stdin, and report actual-match-only
-force overrides after successful copying. The desired normalized-output contract
-excludes comments and does not preserve JSON formatting/escape spelling, while
-preserving unchanged string contents. Until those fixes land, do not claim
+isolate no-payload checks from inherited host stdin (omit `exec -i` and close empty
+redirected stdin), and report actual-match-only force overrides after successful
+copying. `SafetyOverride` on the prepared snapshot/successful report must mean a
+selected original value actually matched and was allowed by `--force`, not merely
+that the flag was supplied. The desired normalized-output contract excludes
+comments/trailing commas and does not preserve JSON formatting/escape spelling,
+while preserving unchanged string contents. Until those fixes land, do not claim
 unfiltered comments cannot be copied or that force warnings prove an actual match.
 
 The accepted [verification matrix](verification/user-secrets/README.md) is
