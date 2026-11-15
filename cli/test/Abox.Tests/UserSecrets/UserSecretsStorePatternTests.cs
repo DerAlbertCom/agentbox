@@ -16,13 +16,17 @@ public sealed class UserSecretsStorePatternTests
         bool force
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Store("Cape.A", "{}");
         fixture.Root.Directory_("appdata/Microsoft/UserSecrets/Cape.Z");
 
-        (await fixture.Run(force ? ["--force"] : [])).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run(force ? ["--force"] : []);
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture
             .Console.AllText.Should()
             .Contain("Cape.Z")
@@ -34,6 +38,7 @@ public sealed class UserSecretsStorePatternTests
     [Fact]
     public async Task ExpansionRetainsDeclarationOrderWhenALaterOverlapUnionsAnEarlierStoresKeys()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(
             """{"userSecrets":[{"id":"Zeta.*","keys":["A"]},"solo","Cape.*",{"id":"Zeta.A","keys":["B"]}]}"""
@@ -43,8 +48,11 @@ public sealed class UserSecretsStorePatternTests
         fixture.Store("Zeta.Z", "{}");
         fixture.Store("Zeta.A", """{"A":1,"B":2}""");
 
-        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0, fixture.Console.AllText);
         var writes = Writes(fixture);
         writes.Select(write => write.Id).Should().Equal("Zeta.A", "Zeta.Z", "solo", "Cape.A");
         writes[0].Json.Should().Be("""{"A":1,"B":2}""");
@@ -55,6 +63,7 @@ public sealed class UserSecretsStorePatternTests
     [InlineData(true)]
     public async Task LinkedProfileAncestorsAreAllowedForExactAndPrefixSelections(bool prefix)
     {
+        // Arrange
         using var fixture = new Fixture();
         using var profile = new TempDirectory();
         fixture.Configure(
@@ -79,8 +88,11 @@ public sealed class UserSecretsStorePatternTests
 
         try
         {
-            (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+            // Act
+            var exitCode = await fixture.Run();
 
+            // Assert
+            exitCode.Should().Be(0, fixture.Console.AllText);
             Writes(fixture).Select(write => write.Id).Should().Equal("Cape.Deals");
             fixture.Console.AllText.Should().NotContain("linked-profile-synthetic");
             File.ReadAllText(source).Should().Be("""{"Password":"linked-profile-synthetic"}""");
@@ -99,6 +111,7 @@ public sealed class UserSecretsStorePatternTests
         string decision
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Store("Cape.Deals", """{"Endpoint":"https://localhost:8004/synthetic-private"}""");
@@ -141,10 +154,11 @@ public sealed class UserSecretsStorePatternTests
                 )
             );
 
-        (await fixture.Run("--force", "--verbose"))
-            .Should()
-            .Be(decision == "malformed" ? 1 : 0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run("--force", "--verbose");
 
+        // Assert
+        exitCode.Should().Be(decision == "malformed" ? 1 : 0, fixture.Console.AllText);
         requests.Select(request => request.Arguments[1]).Should().Equal("ls", "check");
         if (decision == "malformed")
             await fixture.NoWrites();
@@ -169,6 +183,7 @@ public sealed class UserSecretsStorePatternTests
     [Fact]
     public async Task MatchingCaseCollidingHostIdsFailRatherThanChoosingAStore()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Store("Cape.Deals", "{}");
@@ -183,8 +198,11 @@ public sealed class UserSecretsStorePatternTests
                     + "This host filesystem cannot create case-distinct synthetic store directories."
             );
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("collide case-insensitively");
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -196,24 +214,34 @@ public sealed class UserSecretsStorePatternTests
         string json
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Store("Cape.A", "{}");
         fixture.Store("Cape.Z", json);
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]
     public async Task OverlengthPrefixesFailBeforeHostEnumeration()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(
             JsonSerializer.Serialize(new { userSecrets = new[] { new string('a', 129) + "*" } })
         );
-        (await fixture.Run("--force")).Should().Be(1);
+
+        // Act
+        var exitCode = await fixture.Run("--force");
+
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("Unsafe user-secret ID pattern");
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -221,24 +249,32 @@ public sealed class UserSecretsStorePatternTests
     [Fact]
     public async Task TerminalStarCanMatchAnEmptySuffixAtTheMaximumActualIdLength()
     {
+        // Arrange
         using var fixture = new Fixture();
         var id = new string('a', 128);
         fixture.Configure(JsonSerializer.Serialize(new { userSecrets = new[] { id + "*" } }));
         fixture.Store(id, "{}");
 
-        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0, fixture.Console.AllText);
         Writes(fixture).Select(write => write.Id).Should().Equal(id);
     }
 
     [Fact]
     public async Task NoMatchPrefixesDoNotMakeMissingExactIdsOptional()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*","missing"]}""");
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("missing").And.Contain("permissions");
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -246,11 +282,15 @@ public sealed class UserSecretsStorePatternTests
     [Fact]
     public async Task RepeatedCaseVariantPrefixSelectionsRemainConfigurationErrors()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*",{"id":"CAPE.*","keys":["A"]}]}""");
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("duplicate");
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -258,12 +298,16 @@ public sealed class UserSecretsStorePatternTests
     [Fact]
     public async Task OverlengthMatchingHostIdsFailStrictActualIdValidation()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Store("Cape." + new string('a', 124), "{}");
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("Unsafe user-secret ID");
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -275,13 +319,17 @@ public sealed class UserSecretsStorePatternTests
         bool absentRoot
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         if (!absentRoot)
             fixture.Store("Other", "not selected JSON");
 
-        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0, fixture.Console.AllText);
         fixture.Console.AllText.Should().Contain("No user-secret stores selected");
         await fixture.NoWrites();
         await fixture
@@ -294,6 +342,7 @@ public sealed class UserSecretsStorePatternTests
     [InlineData(true)]
     public async Task OverlappingIdsAndPrefixesUnionKeysAndCopyEachActualHostIdOnce(bool wholeStore)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(
             wholeStore
@@ -303,8 +352,11 @@ public sealed class UserSecretsStorePatternTests
         fixture.Store("Cape.Deals", """{"A":1,"B":2,"C":3,"Unselected":4}""");
         fixture.Store("cape.position", """{"A":1,"B":2}""");
 
-        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0, fixture.Console.AllText);
         var writes = Writes(fixture);
         writes.Select(write => write.Id).Should().Equal("Cape.Deals", "cape.position");
         using var deals = JsonDocument.Parse(writes[0].Json);
@@ -336,11 +388,15 @@ public sealed class UserSecretsStorePatternTests
         string pattern
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure(JsonSerializer.Serialize(new { userSecrets = new[] { pattern } }));
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture.Console.AllText.Should().Contain("Unsafe user-secret ID pattern");
         fixture.Sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -350,13 +406,17 @@ public sealed class UserSecretsStorePatternTests
     [InlineData("Cape.ü")]
     public async Task MatchingUnsafeHostDirectoryNamesAreNotCopiedOrSilentlySkipped(string id)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Store("Cape.A", "{}");
         fixture.Store(id, """{"Password":"unsafe-synthetic"}""");
 
-        (await fixture.Run("--force")).Should().Be(1);
+        // Act
+        var exitCode = await fixture.Run("--force");
 
+        // Assert
+        exitCode.Should().Be(1);
         fixture
             .Console.AllText.Should()
             .Contain("Unsafe user-secret ID")
@@ -371,15 +431,17 @@ public sealed class UserSecretsStorePatternTests
         bool force
     )
     {
+        // Arrange
         using var fixture = new Fixture(new AboxConfig { UserSecretsDenyList = ["prod.example"] });
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Store("Cape.A", "{}");
         fixture.Store("Cape.Z", """{"Endpoint":"https://PROD.EXAMPLE/synthetic-private"}""");
 
-        (await fixture.Run(force ? ["--force"] : []))
-            .Should()
-            .Be(force ? 0 : 1, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run(force ? ["--force"] : []);
 
+        // Assert
+        exitCode.Should().Be(force ? 0 : 1, fixture.Console.AllText);
         fixture
             .Console.AllText.Should()
             .NotContain("PROD.EXAMPLE")
@@ -405,6 +467,7 @@ public sealed class UserSecretsStorePatternTests
     [InlineData(true)]
     public async Task PrefixEnumerationUsesTheDotNetHostRootAndNeverRecurses(bool unix)
     {
+        // Arrange
         using var fixture = new Fixture(unix: unix);
         fixture.Configure("""{"userSecrets":["Cape.*"]}""");
         fixture.Root.File(
@@ -418,8 +481,11 @@ public sealed class UserSecretsStorePatternTests
         );
         fixture.Store("Unrelated bad name", "invalid unselected JSON");
 
-        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0, fixture.Console.AllText);
         Writes(fixture)
             .Select(write => write.Id)
             .Should()
@@ -436,6 +502,7 @@ public sealed class UserSecretsStorePatternTests
         bool prefix
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         using var outside = new TempDirectory();
         fixture.Configure(
@@ -467,8 +534,11 @@ public sealed class UserSecretsStorePatternTests
 
         try
         {
-            (await fixture.Run("--force")).Should().Be(1, fixture.Console.AllText);
+            // Act
+            var exitCode = await fixture.Run("--force");
 
+            // Assert
+            exitCode.Should().Be(1, fixture.Console.AllText);
             fixture
                 .Console.AllText.Should()
                 .Contain("symbolic link")
@@ -485,6 +555,7 @@ public sealed class UserSecretsStorePatternTests
     [Fact]
     public async Task CapePrefixCopiesEveryMatchingHostStoreIntoTheExistingSandbox()
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Configure("""{"squad":"ac","userSecrets":["Cape.*"]}""");
         fixture.Store("Cape.Position", """{"Selected":"position-synthetic"}""");
@@ -492,8 +563,11 @@ public sealed class UserSecretsStorePatternTests
         fixture.Store("CapeOther", "not selected JSON");
         fixture.Store("Other.Cape.Deals", "not selected JSON");
 
-        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+        // Act
+        var exitCode = await fixture.Run();
 
+        // Assert
+        exitCode.Should().Be(0, fixture.Console.AllText);
         var writes = fixture
             .Sbx.ReceivedCalls()
             .Where(call => call.GetMethodInfo().Name == nameof(ISbxClient.WriteUserSecretsAsync))
