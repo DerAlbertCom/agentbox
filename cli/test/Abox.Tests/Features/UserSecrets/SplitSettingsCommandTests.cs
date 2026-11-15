@@ -10,6 +10,7 @@ public sealed class SplitSettingsCommandTests
     [Fact]
     public async Task RecognizedAppsettingsPairGeneratesOnlyTheHostOverride()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(
@@ -19,8 +20,11 @@ public sealed class SplitSettingsCommandTests
         Mapped(cli);
         var originals = Originals(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
         AssertOriginals(originals);
     }
@@ -37,6 +41,7 @@ public sealed class SplitSettingsCommandTests
     [Fact]
     public async Task HostOnlyFilterUsesCaseInsensitiveDevelopmentPortMetadataWithoutEmittingIt()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":[{"id":"sample","keys":["database_config:host"]}]}""");
         Project(cli, """{"Database_Config":{"Host":"localhost","Port":5000}}""");
@@ -46,8 +51,11 @@ public sealed class SplitSettingsCommandTests
         );
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
     }
 
@@ -73,6 +81,7 @@ public sealed class SplitSettingsCommandTests
         string expected
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("{\"userSecrets\":[{\"id\":\"sample\",\"keys\":" + keys + "}]}");
         Project(
@@ -90,8 +99,11 @@ public sealed class SplitSettingsCommandTests
         Mapped(cli);
         var originals = Originals(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be(expected);
         AssertOriginals(originals);
     }
@@ -109,6 +121,7 @@ public sealed class SplitSettingsCommandTests
         string expected
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":[{"id":"sample","keys":["Database_Config:Host"]}]}""");
         Project(cli, """{"Database_Config":{"Host":"remote-appsettings.test","Port":5000}}""");
@@ -125,8 +138,11 @@ public sealed class SplitSettingsCommandTests
         Mapped(cli);
         var originals = Originals(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli));
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written.RootElement.GetProperty("DATABASE_CONFIG:host").GetString().Should().Be(expected);
@@ -155,6 +171,7 @@ public sealed class SplitSettingsCommandTests
         foreach (var selected in new[] { false, true })
         foreach (var verbose in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["first","sample"]}""");
             cli.Store("first", """{"Valid":"http://localhost:8004/synthetic-private"}""");
@@ -175,10 +192,11 @@ public sealed class SplitSettingsCommandTests
             Mapped(cli);
             var originals = Originals(cli);
 
-            (await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]))
-                .Should()
-                .Be(1, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
 
+            // Assert
+            exit.Should().Be(1, cli.Console.AllText);
             await cli.NoWrites();
             cli.Console.AllText.Should()
                 .Contain("sample")
@@ -210,6 +228,7 @@ public sealed class SplitSettingsCommandTests
         string host
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store(
@@ -228,8 +247,11 @@ public sealed class SplitSettingsCommandTests
         );
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli)
             .Should()
             .Be(
@@ -246,6 +268,7 @@ public sealed class SplitSettingsCommandTests
     [InlineData("\"host.docker.internal\"")]
     public async Task SelectedNonlocalOrNullHostsBlockLowerPriorityLocalhostGeneration(string host)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(cli, """{"Database_Config":{"Host":"localhost","Port":8004}}""");
@@ -253,8 +276,11 @@ public sealed class SplitSettingsCommandTests
         cli.Store("sample", source);
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be(source);
     }
 
@@ -267,14 +293,18 @@ public sealed class SplitSettingsCommandTests
         string expected
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("{\"userSecrets\":[{\"id\":\"sample\",\"keys\":" + keys + "}]}");
         Project(cli, """{"Database_Config":{"Host":"localhost,remote.test","Port":8004}}""");
         cli.Store("sample", """{"Database_Config":{"Host":"localhost","Port":5000}}""");
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be(expected);
     }
 
@@ -298,6 +328,7 @@ public sealed class SplitSettingsCommandTests
         string port
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         var pair =
@@ -309,8 +340,11 @@ public sealed class SplitSettingsCommandTests
         Project(cli, pair);
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be("{}");
         cli.Console.AllText.Should().NotContain("unsupported");
     }
@@ -327,6 +361,7 @@ public sealed class SplitSettingsCommandTests
         string portKey
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         var settings = new Dictionary<string, object> { [section + ":" + hostKey] = "localhost" };
@@ -336,8 +371,11 @@ public sealed class SplitSettingsCommandTests
         cli.Store("sample", JsonSerializer.Serialize(settings));
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         using var written = JsonDocument.Parse(Written(cli));
         written
             .RootElement.GetProperty(section + ":" + hostKey)
@@ -359,6 +397,7 @@ public sealed class SplitSettingsCommandTests
         bool eligible
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(
@@ -377,8 +416,11 @@ public sealed class SplitSettingsCommandTests
         );
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli)
             .Should()
             .Be(eligible ? """{"DATABASE_CONFIG:HOST":"host.docker.internal"}""" : "{}");
@@ -394,6 +436,7 @@ public sealed class SplitSettingsCommandTests
         bool selected
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { UserSecretsDenyList = ["localhost"] }
         );
@@ -404,10 +447,11 @@ public sealed class SplitSettingsCommandTests
             cli.Store("sample", """{"Database_Config:Host":"localhost"}""");
         Mapped(cli);
 
-        (await cli.Run(["--verbose", .. force ? new[] { "--force" } : []]))
-            .Should()
-            .Be(force ? 0 : 1, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run(["--verbose", .. force ? new[] { "--force" } : []]);
 
+        // Assert
+        exit.Should().Be(force ? 0 : 1, cli.Console.AllText);
         if (force)
         {
             Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
@@ -428,6 +472,7 @@ public sealed class SplitSettingsCommandTests
     [InlineData(true)]
     public async Task SplitGenerationRetainsPolicyAndAllStoreDestinationValidation(bool destination)
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first","sample"]}""");
         cli.Store("first", "{}");
@@ -450,8 +495,11 @@ public sealed class SplitSettingsCommandTests
                     )
                 );
 
-        (await cli.Run("--verbose", "--force")).Should().Be(1);
+        // Act
+        var exit = await cli.Run("--verbose", "--force");
 
+        // Assert
+        exit.Should().Be(1);
         await cli.NoWrites();
         cli.Console.AllText.Should()
             .Contain("No stores were copied")
@@ -461,19 +509,30 @@ public sealed class SplitSettingsCommandTests
     [Fact]
     public async Task RecopyDropsStaleGeneratedHostWhenTheEffectivePortStopsBeingMapped()
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         Project(cli, """{"Database_Config":{"Host":"localhost","Port":8004}}""");
         Mapped(cli);
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+
+        // Act
+        var firstExit = await cli.Run();
+
+        // Assert
+        firstExit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
+
+        // Arrange
         cli.Root.File(
             "folder/Api/appsettings.development.json",
             """{"Database_Config:Port":5000}"""
         );
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var refreshExit = await cli.Run();
 
+        // Assert
+        refreshExit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be("{}");
     }
 
@@ -485,6 +544,7 @@ public sealed class SplitSettingsCommandTests
         int port
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":[{"id":"sample","keys":["Database_Config:Port"]}]}""");
         Project(cli, """{"Database_Config":{"Host":"localhost","Port":5000}}""");
@@ -496,8 +556,11 @@ public sealed class SplitSettingsCommandTests
         );
         Mapped(cli);
 
-        (await cli.Run()).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run();
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli).Should().Be("""{"Database_Config:Port":8004}""");
     }
 
@@ -511,6 +574,7 @@ public sealed class SplitSettingsCommandTests
         bool selectedPort
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first","sample"]}""");
         cli.Store("first", "{}");
@@ -532,8 +596,11 @@ public sealed class SplitSettingsCommandTests
         );
         Mapped(cli);
 
-        (await cli.Run("--verbose")).Should().Be(selectedPort ? 0 : 1, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose");
 
+        // Assert
+        exit.Should().Be(selectedPort ? 0 : 1, cli.Console.AllText);
         if (selectedPort)
             Written(cli)
                 .Should()
@@ -570,6 +637,7 @@ public sealed class SplitSettingsCommandTests
     {
         foreach (var reverse in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure(
                 filterPort
@@ -595,10 +663,11 @@ public sealed class SplitSettingsCommandTests
                 .Returns(new[] { 8004, 8006 });
             var originals = Originals(cli);
 
-            (await cli.Run("--verbose", "--force"))
-                .Should()
-                .Be(compatible ? 0 : 1, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run("--verbose", "--force");
 
+            // Assert
+            exit.Should().Be(compatible ? 0 : 1, cli.Console.AllText);
             if (compatible)
                 Written(cli)
                     .Should()
@@ -630,6 +699,7 @@ public sealed class SplitSettingsCommandTests
     {
         foreach (var selected in new[] { false, true })
         {
+            // Arrange
             using var cli = new UserSecretsCliHarness();
             cli.Configure("""{"userSecrets":["sample"]}""");
             var pair = JsonSerializer.Serialize(
@@ -644,8 +714,11 @@ public sealed class SplitSettingsCommandTests
                 cli.Store("sample", pair);
             Mapped(cli);
 
-            (await cli.Run("--verbose")).Should().Be(0, cli.Console.AllText);
+            // Act
+            var exit = await cli.Run("--verbose");
 
+            // Assert
+            exit.Should().Be(0, cli.Console.AllText);
             Written(cli).Should().Be(selected ? pair : "{}");
             cli.Console.AllText.Should()
                 .NotContain("synthetic-private")
@@ -660,6 +733,7 @@ public sealed class SplitSettingsCommandTests
         bool selectedPort
     )
     {
+        // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["first","sample"]}""");
         cli.Store("first", "{}");
@@ -680,8 +754,11 @@ public sealed class SplitSettingsCommandTests
         );
         Mapped(cli);
 
-        (await cli.Run("--verbose", "--force")).Should().Be(0, cli.Console.AllText);
+        // Act
+        var exit = await cli.Run("--verbose", "--force");
 
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
         Written(cli)
             .Should()
             .Be(
