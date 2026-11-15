@@ -55,9 +55,11 @@ accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
    snapshot **all** selected host stores and associated projects' standard
    appsettings, and check selected host originals against the global deny list.
    Missing sources, unreadable/malformed selected files or denied host originals
-   fail before any existing sandbox is removed. Unreadable project XML or possibly
-   selected unresolved IDs warn and permit validated host-only copying, but block
-   generation at target preparation because consumers cannot be established safely.
+   fail before any existing sandbox is removed. Only explicit matching literal
+   project IDs establish appsettings consumers; unrelated/computed/import-only IDs
+   and unreadable project XML are ignored without warnings or blocking generation.
+   Explicit matching but conditional, multiple or malformed declarations fail
+   preparation; see [bounded discovery](user-secrets-appsettings.md#bounded-discovery-not-application-startup).
    A missing host file is allowed when an associated project's appsettings supplies
    configuration. No sandbox metadata or destination access is needed for preparation.
 3. Validate squad/build/state/MCP inputs and obtain replacement consent. Prepare
@@ -67,7 +69,7 @@ accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
    This is exactly the on-demand copy path, including key selection and supported
    policy-based rewriting and appsettings generation; there is no lifecycle-only
    transport. Generation needs runtime policy, so generated-original deny checks,
-   unsafe adaptation and temporary shared-store checks occur here. All stores'
+   unsafe adaptation and all-consumer shared-store compatibility checks occur here. All stores'
    target/destination validation finishes before the first destination write.
 6. Only a successful required copy reports full creation success. `run` launches
    only after that succeeds.
@@ -88,7 +90,7 @@ unchanged.
 Every copy rebuilds each selected destination from current selected host secrets
 and generated overrides, removing stale generated values and destination-only
 edits. Ordinary `run` performs no discovery or refresh. See the bounded discovery,
-precedence, filters and temporary limitations in [appsettings overrides](user-secrets-appsettings.md).
+precedence, filters and shared-store conflict rules in [appsettings overrides](user-secrets-appsettings.md).
 
 ## Failure, cancellation and recovery
 

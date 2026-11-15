@@ -3,7 +3,7 @@ using System.Text.Json;
 
 namespace Abox.Sbx;
 
-// Strictly recognize observed supported policy metadata, never infer kit intent from reachability.
+// Recognize explicit runtime declarations, never infer rewrite intent from reachability.
 internal static class UserSecretsNetworkPolicy
 {
     internal static IReadOnlyList<int> Ports(JsonElement root, string sandbox)
@@ -12,8 +12,10 @@ internal static class UserSecretsNetworkPolicy
         var ports = new SortedSet<int>();
         foreach (var rule in root.GetProperty("rules").EnumerateArray())
         {
-            var name = Text(rule, "name");
             var scope = Text(rule, "scope");
+            if (scope != "sandbox:" + sandbox)
+                continue;
+            var name = Text(rule, "name");
             var appliesTo = Text(rule, "applies_to");
             var type = Text(rule, "resource_type");
             var decision = Text(rule, "decision");
@@ -24,40 +26,77 @@ internal static class UserSecretsNetworkPolicy
             var sandboxId = Text(rule, "sandbox_id");
             var provenance = rule.GetProperty("provenance");
             var createdVia = Text(provenance, "created_via");
-            var source = Text(provenance, "source");
             var actions = Strings(rule, "actions");
             var resources = Strings(rule, "resources");
             if (
-                name != "kit:" + sandbox
-                || scope != "sandbox:" + sandbox
-                || appliesTo != scope
+                appliesTo != scope
                 || sandboxId != sandbox
                 || type != "network"
                 || decision != "allow"
                 || origin != "scoped"
                 || layer != "local"
                 || status != "active"
-                || editable
-                || createdVia != "provisioned"
-                || source != "sandboxes"
                 || !actions.Contains("net:connect:tcp")
             )
                 continue;
+            var provisioned =
+                name == "kit:" + sandbox
+                && !editable
+                && createdVia == "provisioned"
+                && Text(provenance, "source") == "sandboxes";
+            var added =
+                editable
+                && createdVia == "added"
+                && name == Text(rule, "id")
+                && Guid.TryParseExact(name, "D", out _)
+                && Guid.TryParseExact(Text(rule, "policy_id"), "D", out _)
+                && provenance.EnumerateObject().Count() == 1
+                && KnownAddedRuleFields(rule)
+                && actions.Length == 1
+                && resources.Length > 0
+                && resources.All(resource => LocalhostPort(resource) is not null);
+            if (!provisioned && !added)
+                continue;
             foreach (var resource in resources)
-                if (
-                    resource.StartsWith("localhost:", StringComparison.Ordinal)
-                    && int.TryParse(
-                        resource.AsSpan(10),
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out var port
-                    )
-                    && port is >= 1 and <= 65535
-                )
+                if (LocalhostPort(resource) is { } port)
                     ports.Add(port);
         }
         return ports.ToArray();
     }
+
+    // The observed persistent-rule schema has no expiry or conditional constraints.
+    private static bool KnownAddedRuleFields(JsonElement rule) =>
+        rule.EnumerateObject()
+            .All(property =>
+                property.Name
+                    is "id"
+                        or "name"
+                        or "policy_id"
+                        or "scope"
+                        or "applies_to"
+                        or "resource_type"
+                        or "decision"
+                        or "resources"
+                        or "origin"
+                        or "layer"
+                        or "status"
+                        or "editable"
+                        or "sandbox_id"
+                        or "provenance"
+                        or "actions"
+            );
+
+    private static int? LocalhostPort(string resource) =>
+        resource.StartsWith("localhost:", StringComparison.Ordinal)
+        && int.TryParse(
+            resource.AsSpan(10),
+            NumberStyles.None,
+            CultureInfo.InvariantCulture,
+            out var port
+        )
+        && port is >= 1 and <= 65535
+            ? port
+            : null;
 
     internal static bool IsAllowed(JsonElement root, string sandbox, string target)
     {

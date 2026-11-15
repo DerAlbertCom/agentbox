@@ -10,28 +10,25 @@ namespace Abox.UserSecrets;
 // Static, workspace-local configuration only. Never invoke MSBuild or application startup.
 internal sealed class ProjectSettings(
     string project,
-    UserSecretSnapshot settings,
+    UserSecretSnapshot selectedSettings,
+    IReadOnlyDictionary<string, string?> allSettings,
     bool hasAppSettingsSource
 )
 {
     internal string Project { get; } = project;
-    internal UserSecretSnapshot Settings { get; } = settings;
+    internal UserSecretSnapshot SelectedSettings { get; } = selectedSettings;
+    internal IReadOnlyDictionary<string, string?> AllSettings { get; } = allSettings;
     internal bool HasAppSettingsSource { get; } = hasAppSettingsSource;
 
-    internal static async Task<(
-        IReadOnlyList<ProjectSettings> Projects,
-        IReadOnlyList<string> UnresolvedProjects
-    )> ReadAsync(
+    internal static async Task<IReadOnlyList<ProjectSettings>> ReadAsync(
         string workspace,
         IReadOnlyList<UserSecretSelection> selections,
-        CancellationToken cancellationToken,
-        Action<string>? diagnose
+        CancellationToken cancellationToken
     )
     {
         var result = new List<ProjectSettings>();
-        var unresolved = new List<string>();
         if (selections.Count == 0)
-            return (result, unresolved);
+            return result;
         string root;
         string[] projects;
         try
@@ -54,36 +51,28 @@ internal sealed class ProjectSettings(
         foreach (var project in projects)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var display = JsonSerializer.Serialize(Path.GetRelativePath(root, project));
             UserSecretSelection? selection;
             try
             {
-                var association = ResolveSelectedStore(root, project, selections, diagnose);
-                selection = association.Selection;
-                if (association.Unresolved)
-                    unresolved.Add(Path.GetRelativePath(root, project));
+                selection = ResolveSelectedStore(root, project, selections);
             }
             catch (Exception exception)
                 when (exception is XmlException or IOException or UnauthorizedAccessException)
             {
-                unresolved.Add(Path.GetRelativePath(root, project));
-                diagnose?.Invoke(
-                    $"Warning: cannot read project {display} while associating selected stores. Use an ordinary file with readable XML without DTDs, not a file link/reparse point. Its consumers are unknown: validated host copy-only selections remain available, but generated overrides require complete project discovery."
-                );
+                // Unreadable/linked XML cannot establish an explicit selected-ID association.
                 continue;
             }
             if (selection is null)
                 continue;
             result.Add(await ReadSettingsAsync(root, project, selection, cancellationToken));
         }
-        return (result, unresolved);
+        return result;
     }
 
-    private static (UserSecretSelection? Selection, bool Unresolved) ResolveSelectedStore(
+    private static UserSecretSelection? ResolveSelectedStore(
         string root,
         string project,
-        IReadOnlyList<UserSecretSelection> selections,
-        Action<string>? diagnose
+        IReadOnlyList<UserSecretSelection> selections
     )
     {
         EnsureOrdinaryFile(project);
@@ -96,23 +85,13 @@ internal sealed class ProjectSettings(
             .Descendants()
             .Where(element => element.Name.LocalName == "UserSecretsId")
             .ToArray();
-        var hasImports =
-            document.Descendants().Any(element => element.Name.LocalName == "Import")
-            || HasWorkspaceImports(root, project, document);
-        var cannotAffectSelection =
-            !hasImports
-            && declarations.All(declaration =>
-                !declaration.HasElements
-                && !new[] { "$(", "@(", "%(" }.Any(declaration.Value.Contains)
-                && !selections.Any(selection =>
-                    selection.Id.Equals(
-                        declaration.Value.Trim(),
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                )
-            );
-        if (cannotAffectSelection)
-            return (null, false);
+        var selection = selections.FirstOrDefault(selection =>
+            declarations.Any(declaration =>
+                selection.Id.Equals(declaration.Value.Trim(), StringComparison.OrdinalIgnoreCase)
+            )
+        );
+        if (selection is null)
+            return null;
         var declaration = declarations.Length == 1 ? declarations[0] : null;
         var id = declaration?.Value.Trim();
         if (
@@ -128,17 +107,11 @@ internal sealed class ProjectSettings(
                 .Any(element => element.Attribute("Condition") is not null)
         )
         {
-            diagnose?.Invoke(
-                $"Warning: project {JsonSerializer.Serialize(Path.GetRelativePath(root, project))}: UserSecretsId is computed, imported, conditional, invalid or unresolved and may affect the selected stores. Declare one unconditional literal ID in the project to enable appsettings overrides; MSBuild is never evaluated. Its consumers are unknown, so generation is blocked until the association is resolved. Copy-only selections are unchanged."
+            throw new AboxException(
+                $"Project {JsonSerializer.Serialize(Path.GetRelativePath(root, project))}, store '{selection.Id}': matching UserSecretsId must be one unconditional literal declaration in a top-level PropertyGroup. Fix conditional, multiple or malformed declarations; MSBuild is never evaluated. No stores were copied."
             );
-            return (null, true);
         }
-        return (
-            selections.FirstOrDefault(selection =>
-                selection.Id.Equals(id, StringComparison.OrdinalIgnoreCase)
-            ),
-            false
-        );
+        return selection;
     }
 
     private static async Task<ProjectSettings> ReadSettingsAsync(
@@ -168,7 +141,7 @@ internal sealed class ProjectSettings(
                     new UTF8Encoding(false, true),
                     cancellationToken
                 );
-                snapshot = UserSecretSnapshot.Parse(selection, json);
+                snapshot = UserSecretSnapshot.ParseAll(selection.Id, json);
             }
             catch (Exception exception)
                 when (exception
@@ -189,9 +162,14 @@ internal sealed class ProjectSettings(
                 merged.Add(key, value);
             }
         }
+        var allSettings = UserSecretSnapshot.ParseAll(
+            selection.Id,
+            JsonSerializer.Serialize(merged)
+        );
         return new ProjectSettings(
             Path.GetRelativePath(root, project),
-            UserSecretSnapshot.Parse(selection, JsonSerializer.Serialize(merged)),
+            allSettings.SelectKeys(selection),
+            allSettings.Values,
             hasSource
         );
     }
@@ -199,34 +177,6 @@ internal sealed class ProjectSettings(
     private static readonly StringComparer PathComparer = OperatingSystem.IsWindows()
         ? StringComparer.OrdinalIgnoreCase
         : StringComparer.Ordinal;
-
-    private static bool HasWorkspaceImports(string root, string project, XDocument document)
-    {
-        if (
-            document.Root?.Attribute("Sdk") is null
-            && !document.Descendants().Any(element => element.Name.LocalName == "Sdk")
-        )
-            return false;
-        for (
-            var directory = Path.GetDirectoryName(project)!;
-            ;
-            directory = Path.GetDirectoryName(directory)!
-        )
-        {
-            // Detect only the presence of implicit workspace imports, never read/evaluate them.
-            if (
-                Directory
-                    .EnumerateFiles(directory)
-                    .Any(path =>
-                        PathComparer.Equals(Path.GetFileName(path), "Directory.Build.props")
-                        || PathComparer.Equals(Path.GetFileName(path), "Directory.Build.targets")
-                    )
-            )
-                return true;
-            if (PathComparer.Equals(directory, root))
-                return false;
-        }
-    }
 
     private static void EnsureOrdinaryFile(string path)
     {

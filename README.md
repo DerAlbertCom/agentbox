@@ -319,6 +319,10 @@ Selected stores can also receive sandbox-only endpoint overrides from associated
 projects' appsettings, **without editing project files or requiring a host secrets
 file**. Discovery searches only beneath the selected `abox.json` workspace and
 associates literal `UserSecretsId` declarations without running/evaluating MSBuild.
+Only explicit case-insensitive matches to selected IDs participate. Unrelated,
+computed or import-only IDs do not warn or block generation; their appsettings
+are not read. Explicit matching but conditional, multiple or malformed declarations
+fail safely; see [the association rules](docs/user-secrets-appsettings.md#bounded-discovery-not-application-startup).
 It excludes `.git`, `bin`, `obj`, nCrunch artifacts, escaping directory links and
 cycles. Discovery never selects additional stores; store prefixes still expand
 only existing host directories.
@@ -327,14 +331,24 @@ Project-local `appsettings.json` is combined with lowercase
 `appsettings.development.json` (development wins, keys are case-insensitive).
 Selected host keys always win, but still receive eligible endpoint adaptation.
 Existing exact/wildcard/empty key filters apply to copied **and generated** keys.
-Only eligible URL/PostgreSQL values needing a host change are generated, not the
+Only eligible URL/PostgreSQL/Oracle values needing a host change are generated, not the
 whole appsettings file. A store with no matching project remains copy-only.
+The explicit `Database_Config:Host` + `Database_Config:Port` pair is also supported:
+resolve both keys first and emit only the necessary host override. Unselected
+appsettings port metadata can establish eligibility; filtered-out secrets cannot.
+See [recognized split settings](docs/user-secrets-split-settings.md).
 
 Each create/replacement/explicit copy rebuilds the complete destination, removing
-stale generated entries. Ordinary `run` still performs no copy. As a temporary
-fail-closed restriction, generation for a store with multiple discovered consumers
-is rejected; authoritative copy-only secrets are allowed. Oracle, split settings
-and shared-store merging are follow-ups. This bounded discovery does not simulate
+stale generated entries. Ordinary `run` still performs no copy. Projects sharing a
+store merge compatible generated overrides. A generated key must agree with every
+explicitly associated consumer's required effective value, including remote/unmapped values
+that need no rewrite; conflicts stop all selected stores before any write, with
+value-free store/key/project diagnostics. Supply an authoritative selected host
+key, exclude the key, or use separate stores to resolve a conflict. Unreadable XML
+and unresolved IDs establish no association and do not block generation. Split hosts depending on project port metadata
+also require compatible consumer contexts; an authoritative selected host/port pair
+retains copy-only behavior.
+This bounded discovery does not simulate
 custom providers, environment/CLI overrides or service readiness. See
 [precedence, discovery, refresh and safety details](docs/user-secrets-appsettings.md).
 
@@ -360,8 +374,10 @@ stdin, never process arguments, images, build inputs or published artifacts. Thi
 does not change the separate proxy/host-secret command `abox secrets`.
 
 **Endpoint rewriting (#8, implemented):** abox discovers
-exact kit-declared TCP `localhost:<port>` resources using supported sandbox policy
-metadata and checks each port's **effective** authorization. Only supported URI
+exact TCP `localhost:<port>` declarations from the sandbox's current runtime
+network policy, whether provisioned at creation or explicitly added later. It
+checks each port's **effective** authorization. No local kit files, build records
+or artifact lookup are involved. Only supported URI
 authorities and database connection-string endpoint fields change loopback to
 `host.docker.internal`, keeping the **same published host port**:
 
@@ -371,13 +387,18 @@ http://127.0.0.1:8006/path -> http://host.docker.internal:8006/path
 ```
 
 Named hosts (including `host.docker.internal`) retain their names/ports for
-TLS/SNI. URL/PostgreSQL rewriting includes IPv4/IPv6 loopback. Undeclared ports and
+TLS/SNI. URL/PostgreSQL/Oracle rewriting includes IPv4/IPv6 loopback. Oracle Easy
+Connect and structural descriptors work standalone or inside `Data Source`
+connection-string values, preserving credentials, service/SID identifiers and
+options; only eligible hosts within compound destinations change. Undeclared ports and
 unrelated credentials, fields, paths and queries remain unchanged. Recognized
 mapped-local endpoints with unsafe/ambiguous syntax fail before any destination
 write, rather than silently retaining known broken configuration. Arbitrary text
 and unmapped localhost references are not errors. A service published as `8004:5432`
-does **not** imply a `5432 -> 8004` rewrite. Wildcard/global/manual rules are not
-kit intent; a valid empty inventory means no rewrites. Unavailable/malformed
+does **not** imply a `5432 -> 8004` rewrite. Wildcard/global/all-port authorization
+is not rewrite intent; a valid empty inventory means no rewrites. Explicit manual
+declarations must match the supported persistent sandbox-scoped, TCP-only schema;
+unknown lifetime/constraint fields are not inferred. Unavailable/malformed
 required metadata fails before writes, not by guessing. There is no host kit-source,
 `/etc/hosts`, experimental `host-port@1` or `sbx ports` lookup and no policy change.
 Authorization is not proof of service availability or protection against later
@@ -385,6 +406,10 @@ policy changes. The accepted live evidence is **local/nonempty + published/empty
 kit policy**; published/nonempty rewriting remains unverified. See the
 [supported forms and rewrite verification](docs/user-secrets-rewriting.md) and
 [verification record](docs/verification/user-secrets/README.md).
+An explicit `sbx policy allow network --sandbox <sandbox> --protocol tcp localhost:1521`
+can declare a missing host port without kit files or recreation. This is a user
+policy change, never an automatic abox grant; see the
+[scoped-policy contract and QA evidence](docs/verification/user-secrets-scoped-policy.md).
 
 Transfer serializes selected JSON data, not raw source text: destination JSON
 contains no skipped comments or trailing commas. JSON formatting/escape spelling

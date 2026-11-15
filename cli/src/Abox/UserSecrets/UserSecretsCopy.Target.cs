@@ -46,10 +46,11 @@ public sealed partial class UserSecretsCopy
             cancellationToken.ThrowIfCancellationRequested();
             var projects = prepared
                 .Projects.Where(project =>
-                    project.Settings.Id.Equals(store.Id, StringComparison.OrdinalIgnoreCase)
+                    project.SelectedSettings.Id.Equals(store.Id, StringComparison.OrdinalIgnoreCase)
                 )
                 .ToArray();
             var rewritten = new List<string>();
+            var selectedTargets = SelectedSettingTargets(store, projects, ports);
             var values = new Dictionary<string, string?>(
                 store.Values,
                 StringComparer.OrdinalIgnoreCase
@@ -61,31 +62,35 @@ public sealed partial class UserSecretsCopy
                 foreach (var property in store.Root.EnumerateObject())
                 {
                     writer.WritePropertyName(property.Name);
-                    WriteTarget(writer, property.Value, ports, rewritten, store.Id, property.Name);
+                    WriteTarget(writer, property.Value, selectedTargets, rewritten, property.Name);
                 }
+                var projectOverrides = new List<ProjectOverrides>();
                 foreach (var project in projects)
-                foreach (var (key, original) in project.Settings.Values)
                 {
-                    if (store.Values.ContainsKey(key) || original is null)
-                        continue;
-                    var target = RewriteEndpoint(original, ports, store.Id, key, project.Project);
-                    if (target == original)
-                        continue;
-                    if (prepared.UnresolvedProjects.Count > 0)
-                        throw new AboxException(
-                            $"{DescribeSetting(store.Id, key, project.Project)}: cannot generate overrides because consumers could not be determined for projects with unreadable XML or unresolved UserSecretsId associations ({string.Join(", ", prepared.UnresolvedProjects.Select(path => JsonSerializer.Serialize(path)))}). Resolve their associations with unconditional literal IDs or fix their XML/permissions and ordinary-file status, or supply authoritative selected host-secret values for copy-only behavior; no stores were copied."
-                        );
-                    if (projects.Length > 1)
-                        throw new AboxException(
-                            $"User-secret store '{store.Id}', key {JsonSerializer.Serialize(key)}, has multiple discovered consumers ({string.Join(", ", projects.Select(consumer => JsonSerializer.Serialize(consumer.Project)))}). Generating overrides for a shared store is a temporary unsupported case. Supply an authoritative selected host-secret value or use separate stores; no stores were copied."
-                        );
-                    safetyOverride |= CheckOriginal(
-                        store.Id,
-                        key,
-                        original,
-                        prepared.Force,
-                        project.Project
+                    var overrides = BuildProjectOverrides(
+                        project,
+                        store,
+                        ports,
+                        project.SelectedSettings.Values.Where(pair =>
+                            !store.Values.ContainsKey(pair.Key)
+                        )
                     );
+                    // Selected host originals were checked during PrepareAsync. Check every
+                    // generated appsettings original, even when shared consumers agree.
+                    foreach (var key in overrides.GeneratedValues.Keys)
+                    {
+                        safetyOverride |= CheckOriginal(
+                            store.Id,
+                            key,
+                            project.SelectedSettings.Values[key],
+                            prepared.Force,
+                            project.Project
+                        );
+                    }
+                    projectOverrides.Add(overrides);
+                }
+                foreach (var (key, target) in MergeGeneratedOverrides(store.Id, projectOverrides))
+                {
                     writer.WriteString(key, target);
                     values.Add(key, target);
                     rewritten.Add(key);
@@ -120,15 +125,53 @@ public sealed partial class UserSecretsCopy
 
     private static AboxException TargetPreparationFailure() =>
         new(
-            "Cannot prepare user-secret destinations or rewrite policy. No stores were copied. Check 'sbx policy ls <sandbox> --source kit --type network --json' and 'sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>' for complete, valid metadata, and the application user's absolute HOME/APPDATA, ownership, ordinary paths and shell/coreutils; fix the runtime and retry 'abox user-secrets'. No policy was changed; child diagnostics were suppressed."
+            "Cannot prepare user-secret destinations or rewrite policy. No stores were copied. Check 'sbx policy ls <sandbox> --type network --json' and 'sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>' for complete, valid metadata, and the application user's absolute HOME/APPDATA, ownership, ordinary paths and shell/coreutils; fix the runtime and retry 'abox user-secrets'. No policy was changed; child diagnostics were suppressed."
         );
+
+    private static IReadOnlyDictionary<string, string> SelectedSettingTargets(
+        UserSecretSnapshot store,
+        IReadOnlyList<ProjectSettings> projects,
+        HashSet<int> ports
+    )
+    {
+        var targets = new Dictionary<string, string>(
+            SelectedSplitSettings(store, projects, ports),
+            StringComparer.OrdinalIgnoreCase
+        );
+        foreach (var (key, value) in store.Values)
+            if (value is not null && !targets.ContainsKey(key))
+                targets.Add(key, RewriteEndpoint(value, ports, store.Id, key));
+        return targets;
+    }
+
+    private static ProjectOverrides BuildProjectOverrides(
+        ProjectSettings project,
+        UserSecretSnapshot store,
+        HashSet<int> ports,
+        IEnumerable<KeyValuePair<string, string?>> candidates
+    )
+    {
+        // Resolve split ports before deriving desired hosts for shared-store checks.
+        var effective = EffectiveSettings(project, store);
+        var generated = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, original) in candidates)
+        {
+            if (original is null)
+                continue;
+            var target = RewriteSetting(original, ports, store.Id, key, effective, project.Project);
+            if (target == original)
+                continue;
+            effective[key] = target;
+            generated.Add(key, target);
+        }
+        return new ProjectOverrides(project.Project, effective, generated);
+    }
 
     private static void WriteTarget(
         Utf8JsonWriter writer,
         JsonElement value,
-        HashSet<int> ports,
+        IReadOnlyDictionary<string, string> targets,
         List<string> rewritten,
-        string id,
         string? path = null
     )
     {
@@ -142,9 +185,8 @@ public sealed partial class UserSecretsCopy
                     WriteTarget(
                         writer,
                         property.Value,
-                        ports,
+                        targets,
                         rewritten,
-                        id,
                         path is null ? property.Name : path + ":" + property.Name
                     );
                 }
@@ -157,16 +199,15 @@ public sealed partial class UserSecretsCopy
                     WriteTarget(
                         writer,
                         item,
-                        ports,
+                        targets,
                         rewritten,
-                        id,
                         path + ":" + (index++).ToString(CultureInfo.InvariantCulture)
                     );
                 writer.WriteEndArray();
                 break;
             case JsonValueKind.String:
                 var original = value.GetString()!;
-                var target = RewriteEndpoint(original, ports, id, path!);
+                var target = targets[path!];
                 if (target != original)
                     rewritten.Add(path!);
                 writer.WriteStringValue(target);
@@ -187,8 +228,10 @@ public sealed partial class UserSecretsCopy
     {
         AboxException Unsupported() =>
             new(
-                $"{DescribeSetting(id, key, project)}: recognized mapped-local endpoint has an unsupported or ambiguous format. Use a well-formed absolute URL or single-host PostgreSQL connection string with one port; no stores were copied."
+                $"{DescribeSetting(id, key, project)}: recognized mapped-local endpoint has an unsupported or ambiguous format. Use a well-formed supported URL, database connection string, or Oracle Easy Connect/descriptor endpoint; no stores were copied."
             );
+        if (TryRewriteOracle(value, ports, Unsupported, out var oracle))
+            return oracle;
         if (IsMultiHostOrQueryPostgresUrl(value, ports, out var hasMappedLocalEndpoint))
         {
             if (hasMappedLocalEndpoint)
@@ -205,14 +248,7 @@ public sealed partial class UserSecretsCopy
             int port;
             if (match.Groups["port"].Success)
             {
-                if (
-                    !int.TryParse(
-                        match.Groups["port"].Value,
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out port
-                    )
-                )
+                if (!TryParseEndpointPort(match.Groups["port"].Value, out port))
                     return value;
             }
             else if (Uri.TryCreate(value[..match.Length], UriKind.Absolute, out var authority))
@@ -242,10 +278,7 @@ public sealed partial class UserSecretsCopy
         {
             var text = Text(endpoint);
             var sql = SqlEndpoint().Match(text);
-            if (
-                sql.Success
-                && ports.Contains(int.Parse(sql.Groups["port"].Value, CultureInfo.InvariantCulture))
-            )
+            if (sql.Success && IsMappedEndpointPort(sql.Groups["port"].Value, ports))
             {
                 if (
                     !hasSingleUnambiguousHost
@@ -273,13 +306,7 @@ public sealed partial class UserSecretsCopy
                     if (
                         !inline.Success
                         || !IsLoopback(inline.Groups["host"].Value)
-                        || !int.TryParse(
-                            inline.Groups["port"].Value,
-                            NumberStyles.None,
-                            CultureInfo.InvariantCulture,
-                            out var inlinePort
-                        )
-                        || !ports.Contains(inlinePort)
+                        || !IsMappedEndpointPort(inline.Groups["port"].Value, ports)
                     )
                         continue;
                     if (
@@ -298,14 +325,7 @@ public sealed partial class UserSecretsCopy
             var mappedPort =
                 separatePorts.Length == 0
                     ? postgres && ports.Contains(5432)
-                    : portParts.Any(part =>
-                        int.TryParse(
-                            part,
-                            NumberStyles.None,
-                            CultureInfo.InvariantCulture,
-                            out var port
-                        ) && ports.Contains(port)
-                    );
+                    : portParts.Any(part => IsMappedEndpointPort(part, ports));
             if (!hostParts.Any(part => IsLoopback(part.Trim())) || !mappedPort)
                 continue;
             if (
@@ -376,9 +396,7 @@ public sealed partial class UserSecretsCopy
             .ToArray();
         if (hosts.Length == 1 && queryConnectionHosts.Length == 0 && queryPorts.Length == 0)
             return false;
-        bool IsMappedPort(string text) =>
-            int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
-            && ports.Contains(port);
+        bool IsMappedPort(string text) => IsMappedEndpointPort(text, ports);
         // Query connection-host/port options override the authority. Match positional lists
         // before testing locality, so a remote host's mapped port cannot implicate a local host.
         var connectionHosts =
@@ -405,6 +423,13 @@ public sealed partial class UserSecretsCopy
         // Hostless PostgreSQL URLs have no assumed default port in this bounded model.
         return true;
     }
+
+    private static bool TryParseEndpointPort(ReadOnlySpan<char> text, out int port) =>
+        int.TryParse(text, NumberStyles.None, CultureInfo.InvariantCulture, out port)
+        && port is >= 1 and <= 65535;
+
+    private static bool IsMappedEndpointPort(ReadOnlySpan<char> text, HashSet<int> ports) =>
+        TryParseEndpointPort(text, out var port) && ports.Contains(port);
 
     private static string ReplaceHost(string value, int start, int length) =>
         string.Concat(value.AsSpan(0, start), "host.docker.internal", value.AsSpan(start + length));

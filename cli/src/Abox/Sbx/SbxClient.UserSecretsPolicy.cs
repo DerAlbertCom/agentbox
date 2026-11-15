@@ -14,7 +14,7 @@ public sealed partial class SbxClient
         try
         {
             using var inventory = await ReadUserSecretsPolicyAsync(
-                ["policy", "ls", sandbox, "--source", "kit", "--type", "network", "--json"],
+                ["policy", "ls", sandbox, "--type", "network", "--json"],
                 cancellationToken
             );
             var candidates = UserSecretsNetworkPolicy.Ports(inventory.RootElement, sandbox);
@@ -48,7 +48,7 @@ public sealed partial class SbxClient
         catch (Exception)
         {
             throw new AboxException(
-                "Cannot discover authorized user-secret host ports. Check 'sbx policy ls <sandbox> --source kit --type network --json' and 'sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>' for complete, valid sandbox policy metadata; fix the runtime and retry. No policy was changed; child diagnostics were suppressed."
+                "Cannot discover authorized user-secret host ports. Check 'sbx policy ls <sandbox> --type network --json' and 'sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>' for complete, valid sandbox policy metadata; fix the runtime and retry. No policy was changed; child diagnostics were suppressed."
             );
         }
     }

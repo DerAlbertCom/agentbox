@@ -474,21 +474,29 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   consumers beneath the `FolderConfig` location, excluding artifacts, escaping
   directory links and cycles. It never evaluates MSBuild. Selected project-local
   base/lowercase-development JSON is validated and merged case-insensitively;
-  only selected keys are retained. `PreparedUserSecrets` owns project originals
+  only selected keys are eligible for emission. Unfiltered appsettings metadata
+  is retained for recognized split-setting resolution; only selected secrets can
+  override it. `PreparedUserSecrets` owns project originals
   and association metadata in memory, separately from host snapshots, allowing
   project-only generation without a host secrets file.
-  Unmatched stores remain copy-only. Unreadable project XML warns without blocking
-  validated host-only copies. Unreadable XML and possibly selected unresolved IDs
-  both prevent generation because consumers cannot be established safely. Implicit
-  workspace imports are detected, not evaluated.
+  Unmatched stores remain copy-only. Only explicit case-insensitive selected-ID
+  matches participate. Unrelated/computed/import-only IDs and unreadable/linked
+  project XML are ignored without warnings or blocking generation; imports are
+  neither detected nor evaluated. Readable XML explicitly naming a selected ID
+  with conditional, multiple or malformed declarations fails preparation before
+  any writes, even with empty filters, authoritative host values or force.
   See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
   before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
   using sbx policy discovery, retaining originals for deny/force accounting.
   Selected host keys block generated replacements. Eligible appsettings-only
   values produce flat effective-key overrides subject to the same deny/filter
-  checks. A temporary fail-closed check rejects any generation for multiple
-  discovered consumers, but permits authoritative copy-only values. Parsing,
+  checks. `UserSecretsCopy.SharedStores.cs` merges generic generated-key candidates
+  against every consumer's desired effective values, including unchanged consumers.
+  Only generated keys can conflict; host precedence and key filters are resolved
+  first. Identical required values merge once with deterministic key spelling/order;
+  incompatible values fail without a discovery-order winner. All explicit matching
+  consumers participate; unrelated unresolved projects do not block generation. Parsing,
   adaptation, deny, policy and destination checks complete for all stores before
   the first write. Each new copy recalculates and removes stale generated entries.
   Each selected store replaces its entire destination, clearing old unmatched keys,
@@ -535,31 +543,48 @@ always prepares with `force: false`; replacement consent/`--yes` is not force.
 The implemented rewrite flow follows the approved clarification on #2/#8,
 superseding experimental relay metadata, host/container port translation and
 first-name selection. See [supported forms, preservation and verification](user-secrets-rewriting.md).
+The later user clarification permits explicit sandbox-scoped local policy
+declarations as an additional source of rewrite intent, without kit files or
+recreation; the original kit-only restriction is superseded, not its safety checks.
+The sandbox is the sole mapping source: no kit files, local build records, image
+contents or registry lookups participate in runtime port discovery. Provisioning
+provenance below describes existing runtime metadata, not a kit lookup.
 
-- Discover exact kit-declared TCP resources through
-  `sbx policy ls <sandbox> --source kit --type network --json`. Require active,
+- Discover exact declared TCP resources through
+  `sbx policy ls <sandbox> --type network --json`. Keep active,
   sandbox-scoped/provisioned kit network allow rules with `net:connect:tcp` and
-  literal `localhost:<integer 1..65535>` resources; deduplicate/sort ports numerically.
-  Wildcard/global/manual rules are not inferred kit intent. An empty inventory is valid.
+  literal `localhost:<integer 1..65535>` resources. Also recognize the observed
+  sbx v0.51.0 persistent local-rule schema: active/editable, exact matching sandbox
+  scope/application/identity, scoped/local origin/layer, `created_via: added`, UUID
+  rule ID/name and policy ID, TCP-only action and only exact localhost-port resources.
+  Unknown manual fields/provenance (including expiry/constraints) are excluded.
+  Deduplicate/sort ports numerically. Wildcard/global/broad authorization is never
+  inferred rewrite intent. An empty inventory is valid.
 - Check current effective authorization with
   `sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>`;
   a higher-priority deny excludes the port. Missing/malformed required metadata
   fails safely before writes. Do not invent mappings or change policy.
 - Rewrite only supported loopback endpoint fields at an
   inventoried, currently authorized port to `host.docker.internal`, preserving the
-  **same published host port**. URL/PostgreSQL forms include localhost, dotted IPv4
+  **same published host port**. URL/PostgreSQL/Oracle forms include localhost, dotted IPv4
   loopback and IPv6 loopback. Supported forms include absolute URI
   authorities, SQL Server comma-port fields (optional `tcp:`), and separate
   Host/Server + Port database fields. Standard URL scheme defaults and the
   PostgreSQL Host default 5432 are eligible only when that same host port is mapped.
+  The private `UserSecretsCopy.Oracle.cs` adapter handles Easy Connect/Plus and
+  structural descriptors, including quoted `Data Source` values. It maps parsed
+  host spans back to the original text, preserving credentials, service/SID names,
+  options, formatting and compound remote/unmapped destinations. Easy Connect's
+  default 1521 is eligible only if mapped; descriptors require explicit ports.
 - Preserve named endpoints, including `host.docker.internal`, and their ports
   for TLS/SNI. Preserve undeclared ports and unrelated
   credentials/text/fields/paths/queries. A service published as `8004:5432` does not
   justify rewriting `localhost:5432` to port 8004.
   Recognized mapped-local endpoints with unsafe/ambiguous supported syntax now
   fail actionably before writes, without values. Arbitrary/unmapped localhost
-  strings do not fail merely for mentioning localhost. Oracle/split settings are
-  separate follow-ups.
+  strings do not fail merely for mentioning localhost. The explicit
+  `Database_Config:Host` + `Database_Config:Port` pair uses resolved effective
+  metadata and changes only the host; see [split settings](user-secrets-split-settings.md).
 - No host kit sources, staged descriptors, `/etc/hosts`, `host-port@1` or `sbx ports`
   are used. `sbx inspect` is insufficient for this inventory. Authorization is not
   proof of service availability or protection against later policy changes.
@@ -568,9 +593,25 @@ first-name selection. See [supported forms, preservation and verification](user-
 
 Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
 rewriting (#8), creation/replacement integration (#9) and URL/PostgreSQL
-appsettings-derived overrides (#13) are implemented through the shared copy flow.
-Shared-store generation is temporarily rejected; compatible merging/conflicts,
-Oracle and recognized split-setting support remain follow-ups under #12.
+appsettings-derived overrides (#13), and compatible shared-store merging with
+all-consumer conflict protection (#14), Oracle Easy Connect/descriptor support
+(#15), and recognized `Database_Config` split-setting support (#16) are implemented
+through the shared copy flow. Oracle and split settings feed the same
+format-independent generated-candidate/effective-value safeguards. Selected keys
+govern output; unfiltered appsettings-only metadata supplies split-port eligibility.
+See [shared-store verification](verification/user-secrets-shared-stores.md).
+See [Oracle command-level verification](verification/user-secrets-oracle.md).
+See [split-setting command-level verification](verification/user-secrets-split-settings.md).
+Final #12 review fixes and full integrated direct-executable verification are in
+[the combined story record](verification/user-secrets-endpoint-story.md): Debug
+and Release each passed **1168 tests**, with **7 platform skips**, zero failures,
+and zero-warning/error serial SDK 10 builds. Missing-port local Oracle descriptors
+now fail safely when 1521 is mapped; bare whitespace prose remains unchanged.
+The subsequent requested explicit-selected-ID discovery simplification removes
+unrelated unresolved-project warnings/blocking while retaining matching-project
+validation and shared-store conflicts. Debug and Release each passed **1173 tests**,
+with **7 platform skips** and zero failures; see
+[the regression and verification record](verification/user-secrets-selected-projects.md).
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force
@@ -612,6 +653,10 @@ ambient global reachability is not kit rewrite intent. Windows sbx v0.51.0 live
 transport evidence and representative Unix/automated path tests do not establish
 an independent Unix-host sbx run. No host store mutation, production-secret reads
 or new publication is needed or claimed by these synthetic checks.
+The later [scoped-policy QA record](verification/user-secrets-scoped-policy.md)
+documents explicitly authorized local declarations on the existing `D:\dev\rwe`
+sandbox and read-only production port discovery; no real secret copy, connectivity
+or authentication check was performed for that change.
 
 ### `abox prune [--full] [--sbx]`
 

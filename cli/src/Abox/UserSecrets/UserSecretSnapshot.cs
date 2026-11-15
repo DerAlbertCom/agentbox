@@ -24,9 +24,35 @@ internal sealed class UserSecretSnapshot
     internal IReadOnlyDictionary<string, JsonElement> EffectiveLeaves { get; init; } =
         new Dictionary<string, JsonElement>();
 
-    internal static UserSecretSnapshot Parse(UserSecretSelection selection, string json)
+    internal static UserSecretSnapshot Parse(UserSecretSelection selection, string json) =>
+        ParseAll(selection.Id, json).SelectKeys(selection);
+
+    internal UserSecretSnapshot SelectKeys(UserSecretSelection selection)
     {
-        var id = selection.Id;
+        if (!selection.IsFiltered)
+            return this;
+        // Flat effective keys preserve array indices when earlier items are omitted.
+        var selected = EffectiveLeaves
+            .Where(leaf => selection.Includes(leaf.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
+        return new UserSecretSnapshot(
+            Id,
+            JsonSerializer.SerializeToElement(selected),
+            Values
+                .Where(value => selected.ContainsKey(value.Key))
+                .ToDictionary(
+                    value => value.Key,
+                    value => value.Value,
+                    StringComparer.OrdinalIgnoreCase
+                )
+        )
+        {
+            EffectiveLeaves = selected,
+        };
+    }
+
+    internal static UserSecretSnapshot ParseAll(string id, string json)
+    {
         try
         {
             using var document = JsonDocument.Parse(
@@ -42,29 +68,6 @@ internal sealed class UserSecretSnapshot
             var values = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
             var leaves = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
             ReadValues(document.RootElement, null, values, leaves, id);
-            if (selection.IsFiltered)
-            {
-                // Flat effective keys preserve array indices when earlier items are omitted.
-                var selected = leaves.Where(leaf => selection.Includes(leaf.Key)).ToDictionary();
-                return new UserSecretSnapshot(
-                    id,
-                    JsonSerializer.SerializeToElement(selected),
-                    values
-                        .Where(value => selected.ContainsKey(value.Key))
-                        .ToDictionary(
-                            value => value.Key,
-                            value => value.Value,
-                            StringComparer.OrdinalIgnoreCase
-                        )
-                )
-                {
-                    EffectiveLeaves = selected.ToDictionary(
-                        pair => pair.Key,
-                        pair => pair.Value.Clone(),
-                        StringComparer.OrdinalIgnoreCase
-                    ),
-                };
-            }
             return new UserSecretSnapshot(id, document.RootElement, values)
             {
                 EffectiveLeaves = leaves.ToDictionary(
