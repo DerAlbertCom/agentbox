@@ -14,6 +14,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheApprovedCertificateBundleIsEmbeddedAndCopiedExactlyIntoTheBuildContext()
     {
+        // Arrange
         using var embedded = typeof(WorkloadKitGenerator).Assembly.GetManifestResourceStream(
             "Abox.Assets.rwe_inspection_certificate_chain.pem"
         );
@@ -27,8 +28,10 @@ public sealed class WorkloadKitGeneratorTests
             .Should()
             .Be("5994104949F2CB3A35FCBA877D5D94E3123C394D05261044BE2CAB49C8B73BFC");
 
+        // Act
         _generator.Generate(WriteWorkload(""), Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var bundle = File.ReadAllBytes(
             Path.Combine(_root.Path, "kit", "certificates", "rwe_inspection_certificate_chain.pem")
         );
@@ -38,6 +41,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void EachTrustedCertificateHasItsOwnCrtFileAndThereAreNoPrivateKeys()
     {
+        // Arrange
         using var embedded = typeof(WorkloadKitGenerator).Assembly.GetManifestResourceStream(
             "Abox.Assets.rwe_inspection_certificate_chain.pem"
         );
@@ -51,7 +55,11 @@ public sealed class WorkloadKitGeneratorTests
         blocks.Should().NotBeEmpty();
 
         var directory = Path.Combine(_root.Path, "kit", "certificates");
+
+        // Act
         _generator.Generate(WriteWorkload(""), Path.Combine(_root.Path, "kit"));
+
+        // Assert
         File.ReadAllText(Path.Combine(directory, "rwe_inspection_certificate_chain.pem"))
             .Should()
             .NotContain("PRIVATE KEY");
@@ -70,8 +78,13 @@ public sealed class WorkloadKitGeneratorTests
             certificate.HasPrivateKey.Should().BeFalse();
         }
 
+        // Arrange
         File.WriteAllText(Path.Combine(directory, "stale.crt"), "not an approved CA");
+
+        // Act
         _generator.Generate(WriteWorkload(""), Path.Combine(_root.Path, "kit"));
+
+        // Assert
         File.Exists(Path.Combine(directory, "stale.crt")).Should().BeFalse();
     }
 
@@ -84,9 +97,13 @@ public sealed class WorkloadKitGeneratorTests
         string configuration
     )
     {
+        // Arrange
         _root.File("setup.sh", "echo setup");
+
+        // Act
         _generator.Generate(WriteWorkload(configuration), Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"))
             .ReplaceLineEndings("\n");
         dockerfile
@@ -125,10 +142,13 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheImageIsBuiltOnTheTemplateOfTheWorkload()
     {
+        // Arrange
         var workload = WriteWorkload("template: docker.io/sbx/shell-image\n");
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain("FROM docker.io/sbx/shell-image");
     }
@@ -136,10 +156,13 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void AWorkloadWithoutATemplateUsesTheDefaultOne()
     {
+        // Arrange
         var workload = WriteWorkload("mise: []\n");
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain($"FROM {WorkloadFile.DefaultTemplate}");
     }
@@ -147,6 +170,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheAptPackagesAreInstalledInOneStepBeforeTheTools()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             template: docker.io/sbx/shell-docker-image
@@ -158,8 +182,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain("apt-get update");
         dockerfile.Should().Contain("apt-get install -y --no-install-recommends");
@@ -176,6 +202,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void ThePackagesAreInstalledAsRootAndTheToolsAsTheAgentUser()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             apt:
@@ -185,8 +212,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile = dockerfile.ReplaceLineEndings("\n");
         foreach (
@@ -212,6 +241,9 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void ANameThatIsNoPackageNameIsAnError()
     {
+        // Arrange: the workload text includes shell syntax in a package name.
+
+        // Act
         var write = () =>
             WriteWorkload(
                 """
@@ -220,12 +252,14 @@ public sealed class WorkloadKitGeneratorTests
                 """
             );
 
+        // Assert
         write.Should().Throw<AboxException>().WithMessage("*not a package name*");
     }
 
     [Fact]
     public void EveryToolHasItsOwnInstallStep()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             mise:
@@ -234,8 +268,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain("mise use -g -y nodejs@24.4.3");
         dockerfile.Should().Contain("mise use -g -y dotnet@10.0.403");
@@ -245,6 +281,9 @@ public sealed class WorkloadKitGeneratorTests
     [Fact(SkipExceptions = [typeof(ShellUnavailableException)])]
     public async Task AFailedMiseDownloadStopsTheBootstrap()
     {
+        // Arrange: the synthetic shell functions make the download fail.
+
+        // Act
         var result = await RunBootstrapAsync(
             """
             command() { return 1; }
@@ -252,6 +291,7 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Assert
         result.StandardError.Should().Contain("SSL certificate problem");
         result
             .ExitCode.Should()
@@ -264,6 +304,9 @@ public sealed class WorkloadKitGeneratorTests
     [Fact(SkipExceptions = [typeof(ShellUnavailableException)])]
     public async Task ASuccessfulInstallerMustLeaveMiseRunnable()
     {
+        // Arrange: the synthetic installer succeeds without installing mise.
+
+        // Act
         var result = await RunBootstrapAsync(
             """
             command() { return 1; }
@@ -275,6 +318,7 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Assert
         result
             .ExitCode.Should()
             .Be(127, "bootstrap must verify that mise is runnable before installing tools");
@@ -284,6 +328,9 @@ public sealed class WorkloadKitGeneratorTests
     [Fact(SkipExceptions = [typeof(ShellUnavailableException)])]
     public async Task AFailedMiseInstallerStopsTheBootstrap()
     {
+        // Arrange: the synthetic installer exits unsuccessfully.
+
+        // Act
         var result = await RunBootstrapAsync(
             """
             command() { return 1; }
@@ -295,6 +342,7 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Assert
         result.ExitCode.Should().Be(23);
         result.StandardError.Should().NotContain("tools must not run");
     }
@@ -302,6 +350,9 @@ public sealed class WorkloadKitGeneratorTests
     [Fact(SkipExceptions = [typeof(ShellUnavailableException)])]
     public async Task AnExistingMiseDoesNotNeedADownload()
     {
+        // Arrange: mise is available through a synthetic shell function.
+
+        // Act
         var result = await RunBootstrapAsync(
             """
             curl() { echo 'download must not run' >&2; return 60; }
@@ -309,6 +360,7 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Assert
         result.ExitCode.Should().Be(0);
         result.StandardOutput.Should().Contain("mise test version");
         result.StandardError.Should().NotContain("download must not run");
@@ -317,6 +369,9 @@ public sealed class WorkloadKitGeneratorTests
     [Fact(SkipExceptions = [typeof(ShellUnavailableException)])]
     public async Task ANewMiseIsAvailableToTheNextRun()
     {
+        // Arrange: the synthetic installer writes a runnable mise under HOME.
+
+        // Act
         var result = await RunBootstrapAsync(
             """
             command() { return 1; }
@@ -332,6 +387,7 @@ public sealed class WorkloadKitGeneratorTests
             "sh -c 'GITHUB_TOKEN= mise use -g -y dotnet@10.0.403'"
         );
 
+        // Assert
         result.ExitCode.Should().Be(0, result.StandardError);
         result.StandardOutput.Should().Contain("mise --version");
         result.StandardOutput.Should().Contain("mise use -g -y dotnet@10.0.403");
@@ -340,6 +396,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheVersionsOfOneToolAreInstalledInOneStep()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             mise:
@@ -348,8 +405,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain("mise use -g -y dotnet@10.0.403 dotnet@9.0.303");
         CountOccurrences(dockerfile, "mise use -g -y").Should().Be(1);
@@ -358,6 +417,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheVersionThatComesLastInTheWorkloadIsTheDefaultOfItsTool()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             mise:
@@ -366,8 +426,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile
             .IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
@@ -378,6 +440,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheToolsAreInstalledInReverseOrderSoTheLastOneIsTheDefault()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             mise:
@@ -386,8 +449,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile
             .IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
@@ -398,6 +463,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void TheScriptsRunAtTheEndOfTheBuild()
     {
+        // Arrange
         _root.File("enable-fzf.sh", "echo fzf");
         var workload = WriteWorkload(
             """
@@ -406,8 +472,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain("COPY scripts/ /tmp/abox-scripts/");
         dockerfile.Should().Contain("RUN bash /tmp/abox-scripts/enable-fzf.sh");
@@ -417,12 +485,16 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void GeneratedFilesUseLinuxLineEndings()
     {
+        // Arrange
         _root.File("setup.sh", "#!/bin/bash\r\necho setup\r\n");
+
+        // Act
         _generator.Generate(
             WriteWorkload("apt: [git]\nmise: [nodejs@24.4.3]\nscripts: [setup.sh]\n"),
             Path.Combine(_root.Path, "kit")
         );
 
+        // Assert
         foreach (var file in new[] { "workload.dockerfile", "workload.yaml", "scripts/setup.sh" })
         {
             File.ReadAllText(Path.Combine(_root.Path, "kit", file)).Should().NotContain("\r");
@@ -432,6 +504,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void ScriptCopyOnlyReplacesCrLfAndPreservesEveryOtherByte()
     {
+        // Arrange
         var source = _root.File("setup.sh", "");
         byte[] content =
         [
@@ -455,11 +528,13 @@ public sealed class WorkloadKitGeneratorTests
         ];
         File.WriteAllBytes(source, content);
 
+        // Act
         _generator.Generate(
             WriteWorkload("scripts: [setup.sh]\n"),
             Path.Combine(_root.Path, "kit")
         );
 
+        // Assert
         File.ReadAllBytes(Path.Combine(_root.Path, "kit", "scripts", "setup.sh"))
             .Should()
             .Equal([
@@ -488,18 +563,25 @@ public sealed class WorkloadKitGeneratorTests
     [InlineData("SETUP.SH")]
     public void ScriptsWithTheSameFileNameCannotOverwriteEachOther(string secondName)
     {
+        // Arrange
         _root.File("first/setup.sh", "echo first\n");
         _root.File($"second/{secondName}", "echo second\n");
         var workload = WriteWorkload($"scripts: [first/setup.sh, second/{secondName}]\n");
 
+        // Act
         var action = () => _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
-        action.Should().Throw<AboxException>().WithMessage($"*first/setup.sh*second/{secondName}*");
+        // Assert
+        action
+            .Should()
+            .Throw<AboxException>()
+            .WithMessage($"*first/setup.sh*second/{secondName}*");
     }
 
     [Fact]
     public void TheGitHubTokenIsASecretAndNotAnArgument()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             mise:
@@ -507,8 +589,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile
             .Should()
@@ -519,6 +603,7 @@ public sealed class WorkloadKitGeneratorTests
     [Fact]
     public void AScriptThatIsNotThereIsAnError()
     {
+        // Arrange
         var workload = WriteWorkload(
             """
             scripts:
@@ -526,8 +611,10 @@ public sealed class WorkloadKitGeneratorTests
             """
         );
 
+        // Act
         var action = () => _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
+        // Assert
         action.Should().Throw<AboxException>().WithMessage("*missing.sh*");
     }
 

@@ -9,13 +9,16 @@ public sealed class WorkloadFileTests
     [Fact]
     public void ThePublishRepositoryIsReadFromTheWorkload()
     {
+        // Arrange
         var path = _root.File(
             "sample.workload",
             "publishRepository: mtiae-developer-container-images-local\n"
         );
 
+        // Act
         var workload = WorkloadFile.Load(path);
 
+        // Assert
         workload.PublishRepository.Should().Be("mtiae-developer-container-images-local");
     }
 
@@ -34,19 +37,27 @@ public sealed class WorkloadFileTests
     [InlineData("\"repository\\n\"")]
     public void InvalidPublishRepositoriesAreRejected(string value)
     {
+        // Arrange
         var path = _root.File("sample.workload", $"publishRepository: {value}\n");
 
+        // Act
         var load = () => WorkloadFile.Load(path);
 
+        // Assert
         load.Should().Throw<AboxException>().WithMessage("*publishRepository*not a valid*");
     }
 
     [Fact]
     public void LocalWorkloadsDoNotNeedAPublishRepository()
     {
+        // Arrange
         var path = _root.File("sample.workload", "mise: []\n");
 
-        WorkloadFile.Load(path).PublishRepository.Should().BeNull();
+        // Act
+        var workload = WorkloadFile.Load(path);
+
+        // Assert
+        workload.PublishRepository.Should().BeNull();
     }
 
     [Theory]
@@ -54,10 +65,13 @@ public sealed class WorkloadFileTests
     [InlineData("{name: repository}")]
     public void ThePublishRepositoryMustBeAScalar(string value)
     {
+        // Arrange
         var path = _root.File("sample.workload", $"publishRepository: {value}\n");
 
+        // Act
         var load = () => WorkloadFile.Load(path);
 
+        // Assert
         load.Should().Throw<AboxException>().WithMessage("*publishRepository*must be a value*");
     }
 }

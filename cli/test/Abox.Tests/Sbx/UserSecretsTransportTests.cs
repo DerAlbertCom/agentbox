@@ -14,8 +14,10 @@ public sealed class UserSecretsTransportTests
     [InlineData("export APPDATA=relative\n")]
     public async Task InvalidEffectiveAppDataCannotFallBackToHome(string environment)
     {
+        // Arrange
         using var sandbox = new ShellSandbox(true) { BeforeReceiver = environment };
 
+        // Act
         var action = () =>
             sandbox.Client.WriteUserSecretsAsync(
                 "sandbox",
@@ -24,6 +26,7 @@ public sealed class UserSecretsTransportTests
                 CancellationToken.None
             );
 
+        // Assert
         await action.Should().ThrowAsync<AboxException>();
         Directory.Exists(sandbox.SecretsRoot).Should().BeFalse();
     }
@@ -31,9 +34,11 @@ public sealed class UserSecretsTransportTests
     [Fact]
     public async Task ALaterInvalidDestinationIsDetectedBeforeAnyDirectoriesAreCreated()
     {
+        // Arrange
         using var sandbox = new ShellSandbox(true);
         Directory.CreateDirectory(sandbox.StorePath);
 
+        // Act
         var action = () =>
             sandbox.Client.ValidateUserSecretsDestinationAsync(
                 "sandbox",
@@ -41,6 +46,7 @@ public sealed class UserSecretsTransportTests
                 CancellationToken.None
             );
 
+        // Assert
         await action.Should().ThrowAsync<AboxException>();
         Directory.Exists(Path.Combine(sandbox.SecretsRoot, "first")).Should().BeFalse();
     }
@@ -50,25 +56,34 @@ public sealed class UserSecretsTransportTests
     [InlineData(false)]
     public async Task ReceiverResolvesEffectiveEnvironmentAndReplacesTheWholeStore(bool appData)
     {
+        // Arrange
         using var sandbox = new ShellSandbox(appData);
+
+        // Act
         await sandbox.Client.ValidateUserSecretsDestinationAsync(
             "sandbox",
             ["synthetic"],
             CancellationToken.None
         );
+        // Assert
         Directory
             .Exists(sandbox.SecretsRoot)
             .Should()
             .BeFalse("destination preflight must not create anything");
+        // Arrange
         const string original = "{\"Password\":\"Grüße 🔒\",\"Removed\":\"old\"}";
 
+        // Act
         await sandbox.Client.WriteUserSecretsAsync(
             "sandbox",
             "synthetic",
             original,
             CancellationToken.None
         );
+        // Assert
         File.ReadAllBytes(sandbox.StorePath).Should().Equal(Encoding.UTF8.GetBytes(original));
+
+        // Act
         await sandbox.Client.WriteUserSecretsAsync(
             "sandbox",
             "synthetic",
@@ -76,6 +91,7 @@ public sealed class UserSecretsTransportTests
             CancellationToken.None
         );
 
+        // Assert
         File.ReadAllText(sandbox.StorePath).Should().Be("{}");
         Directory.GetFiles(Path.GetDirectoryName(sandbox.StorePath)!).Should().ContainSingle();
         if (!OperatingSystem.IsWindows())
@@ -94,6 +110,7 @@ public sealed class UserSecretsTransportTests
     [InlineData("corrupt")]
     public async Task ShortOrCorruptInputCannotCommitEvenWhenStdinCloses(string damage)
     {
+        // Arrange
         using var sandbox = new ShellSandbox(true);
         await sandbox.Client.WriteUserSecretsAsync(
             "sandbox",
@@ -103,6 +120,7 @@ public sealed class UserSecretsTransportTests
         );
         sandbox.Frame = frame => damage == "short" ? frame[..^3] : frame[..^1] + "x";
 
+        // Act
         var action = () =>
             sandbox.Client.WriteUserSecretsAsync(
                 "sandbox",
@@ -111,6 +129,7 @@ public sealed class UserSecretsTransportTests
                 CancellationToken.None
             );
 
+        // Assert
         await action.Should().ThrowAsync<AboxException>();
         File.ReadAllText(sandbox.StorePath).Should().Be("{\"Previous\":true}");
         Directory.GetFiles(Path.GetDirectoryName(sandbox.StorePath)!).Should().ContainSingle();
@@ -119,6 +138,7 @@ public sealed class UserSecretsTransportTests
     [Fact]
     public async Task CancellationWhileInputIsBlockedDoesNotReplaceThePreviousFile()
     {
+        // Arrange
         using var sandbox = new ShellSandbox(true);
         await sandbox.Client.WriteUserSecretsAsync(
             "sandbox",
@@ -129,6 +149,7 @@ public sealed class UserSecretsTransportTests
         sandbox.BeforeReceiver = "sleep 30\n";
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(400));
 
+        // Act
         var action = () =>
             sandbox.Client.WriteUserSecretsAsync(
                 "sandbox",
@@ -137,6 +158,7 @@ public sealed class UserSecretsTransportTests
                 cancellation.Token
             );
 
+        // Assert
         await action.Should().ThrowAsync<OperationCanceledException>();
         File.ReadAllText(sandbox.StorePath).Should().Be("{}");
     }
@@ -144,9 +166,11 @@ public sealed class UserSecretsTransportTests
     [Fact]
     public async Task NonregularDestinationIsRejectedWithoutReplacingIt()
     {
+        // Arrange
         using var sandbox = new ShellSandbox(true);
         Directory.CreateDirectory(sandbox.StorePath);
 
+        // Act
         var action = () =>
             sandbox.Client.WriteUserSecretsAsync(
                 "sandbox",
@@ -155,6 +179,7 @@ public sealed class UserSecretsTransportTests
                 CancellationToken.None
             );
 
+        // Assert
         await action.Should().ThrowAsync<AboxException>();
         Directory.Exists(sandbox.StorePath).Should().BeTrue();
     }
@@ -164,6 +189,7 @@ public sealed class UserSecretsTransportTests
     [InlineData("exception")]
     public async Task RawFailuresIncludingScalarFragmentsNeverEscapeTheSbxAdapter(string failure)
     {
+        // Arrange
         using var root = new TempDirectory();
         var runner = Substitute.For<IProcessRunner>();
         runner
@@ -177,9 +203,11 @@ public sealed class UserSecretsTransportTests
             );
         var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
 
+        // Act
         var action = () =>
             client.WriteUserSecretsAsync("sandbox", "synthetic", "{}", CancellationToken.None);
 
+        // Assert
         var error = await action.Should().ThrowAsync<AboxException>();
         error
             .Which.ToString()
@@ -191,6 +219,7 @@ public sealed class UserSecretsTransportTests
     [Fact]
     public async Task PayloadAndFrameUseOnlySensitiveNoninteractiveStdinWithUtf8ByteLength()
     {
+        // Arrange
         using var root = new TempDirectory();
         const string payload = "{\"Password\":\"Grüße 🔒\"}";
         ProcessRequest? captured = null;
@@ -204,8 +233,10 @@ public sealed class UserSecretsTransportTests
             });
         var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
 
+        // Act
         await client.WriteUserSecretsAsync("sandbox", "synthetic", payload, CancellationToken.None);
 
+        // Assert
         captured.Should().NotBeNull();
         captured!.FileName.Should().Be("sbx");
         captured.Arguments.Take(2).Should().Equal("exec", "-i");

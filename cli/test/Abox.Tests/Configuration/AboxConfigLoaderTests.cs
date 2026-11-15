@@ -9,13 +9,16 @@ public sealed class AboxConfigLoaderTests
     [Fact]
     public void WithoutAFileTheDefaultsAreUsed()
     {
+        // Arrange
         var paths = AboxPaths.For(
             Path.Combine(_root.Path, "config"),
             Path.Combine(_root.Path, "state")
         );
 
+        // Act
         var config = AboxConfigLoader.Load(paths);
 
+        // Assert
         config.DefaultTeam.Should().BeNull();
         config.KitsDirectory.Should().Be("kits");
         config.DefaultTag.Should().Be("latest");
@@ -26,6 +29,7 @@ public sealed class AboxConfigLoaderTests
     [Fact]
     public void TheFileIsRead()
     {
+        // Arrange
         var config = Path.Combine(_root.Path, "config");
         Directory.CreateDirectory(config);
         File.WriteAllText(
@@ -39,10 +43,12 @@ public sealed class AboxConfigLoaderTests
             """
         );
 
+        // Act
         var loaded = AboxConfigLoader.Load(
             AboxPaths.For(config, Path.Combine(_root.Path, "state"))
         );
 
+        // Assert
         loaded.DefaultTeam.Should().Be("ac");
         loaded.DefaultLocation.Should().Be("/home/albert/projects");
         loaded.KitsDirectory.Should().Be("kits");
@@ -53,13 +59,16 @@ public sealed class AboxConfigLoaderTests
     [Fact]
     public void AKeyThatIsNotKnownIsAnError()
     {
+        // Arrange
         var config = Path.Combine(_root.Path, "config");
         Directory.CreateDirectory(config);
         File.WriteAllText(Path.Combine(config, "config.yaml"), "defaulSquad: ac\n");
 
+        // Act
         var action = () =>
             AboxConfigLoader.Load(AboxPaths.For(config, Path.Combine(_root.Path, "state")));
 
+        // Assert
         action.Should().Throw<AboxException>().WithMessage("*not a known key*");
     }
 
@@ -69,12 +78,15 @@ public sealed class AboxConfigLoaderTests
     [InlineData("pullRepository: '   '")]
     public void AnOmittedOrBlankPullRepositoryUsesTheDefault(string yaml)
     {
+        // Arrange
         _root.File("config/config.yaml", yaml);
 
+        // Act
         var config = AboxConfigLoader.Load(
             AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path)
         );
 
+        // Assert
         config.PullRepository.Should().Be("mtiae-docker-release");
     }
 
@@ -86,11 +98,14 @@ public sealed class AboxConfigLoaderTests
     [InlineData("release images")]
     public void AnInvalidPullRepositoryIsAConfigurationError(string repository)
     {
+        // Arrange
         _root.File("config/config.yaml", $"pullRepository: '{repository}'\n");
 
+        // Act
         var action = () =>
             AboxConfigLoader.Load(AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path));
 
+        // Assert
         action.Should().Throw<AboxException>().WithMessage("*pullRepository*repository name*");
     }
 }

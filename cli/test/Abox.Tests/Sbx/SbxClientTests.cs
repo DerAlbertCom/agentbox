@@ -29,12 +29,15 @@ public sealed class SbxClientTests : IDisposable
         bool expected
     )
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(exitCode, "", ""));
 
+        // Act
         var found = await _client.HasProgramAsync("sample", program, CancellationToken.None);
 
+        // Assert
         found.Should().Be(expected);
         await _runner
             .Received(1)
@@ -61,11 +64,13 @@ public sealed class SbxClientTests : IDisposable
     [InlineData("add-mcp")]
     public async Task OutcomesPreserveTheExitCodeAndBothStreamsWithoutThrowing(string command)
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(17, "stdout", "stderr"));
         var cancellationToken = CancellationToken.None;
 
+        // Act
         var outcome = await (
             command switch
             {
@@ -108,6 +113,7 @@ public sealed class SbxClientTests : IDisposable
             }
         );
 
+        // Assert
         outcome.ExitCode.Should().Be(17);
         outcome.Output.Should().Be("stdoutstderr");
     }
@@ -117,10 +123,12 @@ public sealed class SbxClientTests : IDisposable
     [InlineData("/kits/workload", "never")]
     public async Task CreationPassesTheExplicitPullPolicy(string source, string pullPolicy)
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, string.Empty, string.Empty));
 
+        // Act
         var outcome = await _client.CreateAsync(
             new SbxCreateRequest(
                 source,
@@ -135,6 +143,7 @@ public sealed class SbxClientTests : IDisposable
             CancellationToken.None
         );
 
+        // Assert
         outcome.Succeeded.Should().BeTrue();
         await _runner
             .Received(1)
@@ -160,6 +169,7 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task TheVersionIsReadFromTheJsonOutput()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -183,17 +193,22 @@ public sealed class SbxClientTests : IDisposable
                 )
             );
 
+        // Act
         var version = await _client.GetVersionAsync(CancellationToken.None);
 
+        // Assert
         version.Should().Be(new Version(0, 51, 0));
     }
 
     [Fact]
     public async Task ThinLocalKitsUseTheHostBuilderAndRecordedDockerContext()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, "", ""));
+
+        // Act
         await _client.CreateAsync(
             new SbxCreateRequest(
                 "/runtime/workload",
@@ -208,6 +223,7 @@ public sealed class SbxClientTests : IDisposable
             CancellationToken.None
         );
 
+        // Assert
         await _runner
             .Received(1)
             .RunAsync(
@@ -226,12 +242,15 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task AVersonlessAnswerIsAnError()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, "{\"server\": {\"state\": \"stopped\"}}", string.Empty));
 
+        // Act
         var call = async () => await _client.GetVersionAsync(CancellationToken.None);
 
+        // Assert
         (await call.Should().ThrowAsync<AboxException>()).WithMessage(
             "*Cannot read the sbx version from ''*"
         );
@@ -240,6 +259,7 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task TheSandboxesAreReadFromTheJsonOutput()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -269,8 +289,10 @@ public sealed class SbxClientTests : IDisposable
                 )
             );
 
+        // Act
         var sandboxes = await _client.ListSandboxesAsync(CancellationToken.None);
 
+        // Assert
         sandboxes.Should().HaveCount(2);
         sandboxes[0].Name.Should().Be("agentbox-abox-12345");
         sandboxes[0].IsRunning.Should().BeTrue();
@@ -282,6 +304,7 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task TheTemplatesAreReadFromTheJsonOutput()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -310,8 +333,10 @@ public sealed class SbxClientTests : IDisposable
                 )
             );
 
+        // Act
         var templates = await _client.ListTemplatesAsync(CancellationToken.None);
 
+        // Assert
         templates.Should().HaveCount(2);
         templates[0]
             .Reference.Should()
@@ -325,6 +350,7 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task TheDiagnoseReportIsReadFromTheJsonOutput()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -348,8 +374,10 @@ public sealed class SbxClientTests : IDisposable
                 )
             );
 
+        // Act
         var report = await _client.DiagnoseAsync(CancellationToken.None);
 
+        // Assert
         var check = report.Checks.Should().ContainSingle().Which;
         check.Name.Should().Be("Daemon");
         check.Failed.Should().BeTrue();
@@ -359,6 +387,7 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task TheMcpServersAreReadFromTheJsonOutput()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -379,8 +408,10 @@ public sealed class SbxClientTests : IDisposable
                 )
             );
 
+        // Act
         var servers = await _client.ListMcpServersAsync(CancellationToken.None);
 
+        // Assert
         servers.Should().Equal("elastic");
         await _runner
             .Received(1)
@@ -395,6 +426,7 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task TheSecretsAreReadFromTheJsonOutput()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(
@@ -414,8 +446,10 @@ public sealed class SbxClientTests : IDisposable
                 )
             );
 
+        // Act
         var secrets = await _client.ListSecretsAsync(CancellationToken.None);
 
+        // Assert
         secrets.Services.Should().Equal("github");
         var custom = secrets.Custom.Should().ContainSingle().Which;
         custom.Targets.Should().Equal("api.example.com");
@@ -425,12 +459,15 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task OutputThatIsNotJsonIsAnErrorThatNamesTheCommand()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, "not json", string.Empty));
 
+        // Act
         var action = () => _client.ListSandboxesAsync(CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("sbx ls");
@@ -439,12 +476,15 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task EmptyOutputIsAnErrorThatNamesTheCommand()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, string.Empty, string.Empty));
 
+        // Act
         var action = () => _client.DiagnoseAsync(CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("sbx diagnose");
@@ -453,12 +493,15 @@ public sealed class SbxClientTests : IDisposable
     [Fact]
     public async Task AFailedCommandIsAnErrorWithWhatSbxWrote()
     {
+        // Arrange
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(1, string.Empty, "boom"));
 
+        // Act
         var action = () => _client.ListSandboxesAsync(CancellationToken.None);
 
+        // Assert
         var exception = await action.Should().ThrowAsync<AboxException>();
 
         exception.Which.Message.Should().Contain("boom");

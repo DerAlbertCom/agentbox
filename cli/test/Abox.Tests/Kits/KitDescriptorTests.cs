@@ -9,6 +9,7 @@ public sealed class KitDescriptorTests
     [Fact]
     public void TheServicesAKitAsksForAreRead()
     {
+        // Arrange
         _root.File(
             "kits/pi-config/pi-config.yaml",
             """
@@ -30,8 +31,10 @@ public sealed class KitDescriptorTests
             """
         );
 
+        // Act
         var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
 
+        // Assert
         descriptor.Should().NotBeNull();
         var service = descriptor!.Services.Should().ContainSingle().Which;
         service.Service.Should().Be("github");
@@ -43,6 +46,7 @@ public sealed class KitDescriptorTests
     [Fact]
     public void AServiceWithSeveralPhasesIsRead()
     {
+        // Arrange
         _root.File(
             "kits/pi-config/pi-config.yaml",
             """
@@ -58,8 +62,10 @@ public sealed class KitDescriptorTests
             """
         );
 
+        // Act
         var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
 
+        // Assert
         descriptor.Should().NotBeNull();
         descriptor!
             .Services.Should()
@@ -71,6 +77,7 @@ public sealed class KitDescriptorTests
     [Fact]
     public void ACapabilityThatIsNotACredentialIsIgnored()
     {
+        // Arrange
         _root.File(
             "kits/pi-config/pi-config.yaml",
             """
@@ -85,8 +92,10 @@ public sealed class KitDescriptorTests
             """
         );
 
+        // Act
         var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
 
+        // Assert
         descriptor.Should().NotBeNull();
         descriptor!.Services.Should().BeEmpty();
     }
@@ -94,8 +103,13 @@ public sealed class KitDescriptorTests
     [Fact]
     public void AKitWithoutADescriptorHasNoServices()
     {
+        // Arrange
         _root.Directory_("kits/empty");
 
-        KitDescriptor.Load(Path.Combine(_root.Path, "kits", "empty")).Should().BeNull();
+        // Act
+        var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "empty"));
+
+        // Assert
+        descriptor.Should().BeNull();
     }
 }
