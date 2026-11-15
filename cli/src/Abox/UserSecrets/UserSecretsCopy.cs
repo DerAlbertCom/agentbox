@@ -26,7 +26,10 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                 "Global 'userSecretsDenyList' must be a list of nonempty literal substrings; --force does not bypass invalid configuration."
             );
         var stores = new List<UserSecretSnapshot>();
-        foreach (var selection in folderConfig.UserSecrets)
+        var selections = folderConfig.UserSecrets.Any(selection => selection.IsPrefixPattern)
+            ? UserSecretSelection.Expand(folderConfig.UserSecrets, host.StoreIds(cancellationToken))
+            : folderConfig.UserSecrets;
+        foreach (var selection in selections)
         {
             cancellationToken.ThrowIfCancellationRequested();
             string json;

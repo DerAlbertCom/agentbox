@@ -7,11 +7,14 @@ internal static partial class UserSecretId
 {
     internal static void Validate(string id)
     {
-        if (!SafeId().IsMatch(id) || id.EndsWith('.') || IsDeviceName(id))
+        if (!IsValid(id))
             throw new AboxException(
                 "Unsafe user-secret ID. Use 1–128 ASCII letters, digits, dots, underscores or hyphens, beginning with a letter or digit; no paths or reserved device names."
             );
     }
+
+    internal static bool IsValid(string id) =>
+        SafeId().IsMatch(id) && !id.EndsWith('.') && !IsDeviceName(id);
 
     private static bool IsDeviceName(string id)
     {

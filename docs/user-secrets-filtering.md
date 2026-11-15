@@ -1,7 +1,7 @@
 # Selecting .NET user-secret keys
 
 `abox user-secrets [--location <folder>] [--force]` reads `abox.json` in the
-sandbox folder and copies explicitly named host stores into that folder's
+sandbox folder and copies explicitly selected host stores into that folder's
 **existing** local or published sandbox. It never creates or replaces a sandbox.
 Filtering uses the shared prepare/copy flow; there is no separate transport or
 safety path for filtered stores.
@@ -10,6 +10,7 @@ safety path for filtered stores.
 {
   "userSecrets": [
     "whole-store-id",
+    "Cape.*",
     { "id": "another-whole-store-id" },
     {
       "id": "filtered-store-id",
@@ -19,12 +20,51 @@ safety path for filtered stores.
 }
 ```
 
-Only named stores are read. Plain IDs and objects can be mixed. Objects accept
-only `id` and optional `keys`, with no duplicate properties. IDs retain the
-existing safe-ID rules and may occur only once, case-insensitively, across both
-entry forms. A malformed entry fails the entire preparation, even with `--force`.
+Only selected stores are read. Plain IDs and objects can be mixed. Objects accept
+only `id` and optional `keys`, with no duplicate properties. Identical ID selection
+strings may occur only once, case-insensitively, across both entry forms. A malformed
+entry fails the entire preparation, even with `--force`.
 
-## Pattern semantics
+## Store-ID prefix selections
+
+An ID selection can be an exact safe ID or a nonempty safe literal prefix plus
+one terminal `*`. For example, `Cape.*` selects `Cape.Deals` and `cape.Position`,
+but not `CapeOther` or `Other.Cape.Deals`: the dot is literal. Both string entries
+and objects such as `{"id":"Cape.*","keys":["ConnectionStrings:*"]}` support this.
+
+- Prefix matching is ordinal and case-insensitive, consistent with existing ID
+  duplicate checks. The prefix contains 1–128 ASCII letters/digits/dots/underscores/
+  hyphens, beginning with a letter/digit. A trailing dot is allowed in a **prefix**,
+  not an actual ID. Reserved device-name prefixes such as `CON.*` are rejected.
+- Only that one final `*` is supported. Bare `*`, embedded/repeated stars, `?`,
+  brackets, paths, separators, regexes and escape syntax are not supported.
+  No trimming or arbitrary filesystem glob evaluation occurs.
+- Enumeration visits only direct store directories under the effective host
+  APPDATA/HOME .NET root, never project files or nested directories. Unrelated
+  invalid names/content are not selected or read. Matching actual IDs must still
+  pass strict portable ID validation (including the 128-character limit and no
+  trailing dots/device names). Matching unsafe IDs, linked paths or case-colliding
+  actual IDs fail the entire preparation before sandbox calls; force cannot bypass
+  this. Host root ancestors and selected directories/files reject symlinks/reparse
+  points. Concurrent malicious filesystem changes remain outside the contract.
+- A no-match prefix (including an absent host root) selects no stores and writes
+  nothing. It does not broaden selection or clear any destination. An exact ID
+  still requires a readable host file and fails if missing. Enumeration/permission
+  errors fail, never silently become no matches.
+- Selection entries are processed in declaration order; each prefix expands in
+  ordinal case-insensitive ID order, with actual host spelling retained. When
+  prefixes are present, an exact selection also resolves to the corresponding
+  actual host spelling case-insensitively. Exact-only requests retain host-native
+  filename lookup. Ambiguous case-distinct host directories fail, not pick one.
+- Overlapping exact/prefix selections copy each actual ID once at its first
+  occurrence. Their key selections form a union; any whole-store selection wins.
+  Identical/case-variant selection strings remain duplicate configuration errors.
+
+The shared preparation applies these rules on demand and during local/published
+creation or accepted `run` replacement. Ordinary `run` still does not resync stores;
+on-demand copying still does not require or verify a sandbox squad record.
+
+## Key-pattern semantics
 
 Patterns match **effective .NET configuration keys**, not JSON property segments
 or secret values. For example, `{"ConnectionStrings":{"Db":"..."}}` has the
@@ -64,7 +104,7 @@ booleans, nulls and empty containers are preserved. Plain IDs and objects withou
 `keys` retain the whole store's JSON structure. Comments are not configuration
 values and are not copied as secret content.
 
-All named host files must still be readable, valid UTF-8/JSON objects. Duplicate
+All selected host files must still be readable, valid UTF-8/JSON objects. Duplicate
 effective .NET keys (including case-only duplicates, nested/flat collisions and
 array-index collisions) fail validation **before filtering**, even if neither
 duplicate would be selected. Filtering and force cannot bypass malformed input.

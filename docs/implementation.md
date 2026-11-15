@@ -415,7 +415,7 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
 
 ### `abox user-secrets [--location <path>] [--force]`
 
-The on-demand path copies explicitly named .NET stores/selected keys into an
+The on-demand path copies explicitly selected .NET stores/selected keys into an
 existing local or published sandbox, with no kit-source or build dependency. It
 never creates or replaces a sandbox. See the
 [configuration, safety and recovery contract](../README.md#copying-net-user-secrets).
@@ -446,7 +446,15 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   The command's early squad-conflict check and shared lifecycle's pure revalidation
   intentionally protect both public entry paths without duplicate file reads.
 - `UserSecretsCopy.PrepareAsync(folderConfig, force, token)` validates all entries,
-  snapshots every selected host file and its nested JSON tree, rejects duplicate
+  expands safe literal ID prefixes ending in one `*` against direct host store
+  directories, then snapshots every selected host file and its nested JSON tree. ID
+  patterns are validated separately from strict actual IDs. Expansion is ordinal
+  case-insensitive, deterministic within each entry, and deduplicated across
+  overlapping exact/prefix entries (key unions, whole store wins). No-match prefixes
+  select no stores; missing exact IDs fail. Matching unsafe/case-colliding host IDs
+  and symlinks/reparse points in host ancestors/stores/files fail before sandbox
+  access. See [store-prefix semantics and verification](verification/user-secrets-store-prefixes.md).
+  Preparation rejects duplicate
   effective case-insensitive .NET keys before filtering, then checks all selected
   **original** values before rewriting/writes. Plain IDs or objects with omitted
   `keys` select the whole store. Full-key case-insensitive patterns support only

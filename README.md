@@ -205,6 +205,7 @@ selected by `--root`):
   "squad": "ac",
   "userSecrets": [
     "5b3e0f6a-1c2d-4e5f-a6b7-c8d9e0f1a2b3",
+    "Cape.*",
     { "id": "my-dev-store", "keys": ["ConnectionStrings:*", "Feature:Enabled"] }
   ]
 }
@@ -229,7 +230,17 @@ abox user-secrets --location /path/to/project --force
 #### Selection and squad identity
 
 Plain IDs and objects can be mixed. A plain ID or `{"id":"my-dev-store"}` selects
-the **whole store**. A `keys` list selects effective .NET keys, such as
+the **whole store**. An ID ending in one `*`, such as `Cape.*`, selects every local
+store whose ID starts with the literal prefix `Cape.` (ordinal, case-insensitive).
+Only a safe nonempty literal prefix plus one terminal `*` is supported: no bare
+`*`, paths, recursive lookup or other glob syntax. A prefix with no matches selects
+no stores; a missing exact ID still fails. Matches use actual host ID spelling and
+are sorted; overlapping exact/prefix selections copy each store once, unioning
+their key selections (a whole-store selection wins). Repeated identical selection
+strings are still rejected case-insensitively. Matching unsafe host directory names
+or case-colliding IDs fail before any copy, rather than being silently skipped.
+
+A `keys` list selects effective .NET keys, such as
 `ConnectionStrings:Db` for a nested JSON property:
 
 - Matching is full-key, ordinal and case-insensitive. An exact pattern selects
@@ -301,8 +312,11 @@ not trigger a copy.
 The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when
 `APPDATA` is set, **including on Unix**, otherwise
 `<HOME>/.microsoft/usersecrets/<id>/secrets.json`. Empty/relative environment roots
-fail; abox does not guess another user's profile. Only named files are read; host
-files are never changed. The sandbox destination is independently resolved from
+fail; abox does not guess another user's profile. Prefixes enumerate only direct
+store directories in that root, not project files or subdirectories. Only selected
+files are read; host files are never changed. Host root ancestors, selected store
+directories and secret files must not be symbolic links/reparse points. The sandbox
+destination is independently resolved from
 the effective, non-root **default exec application user** and its `APPDATA`/`HOME`,
 using the same precedence. An application launched with a different environment
 must use matching roots. No host paths, local kits or published-source checkout

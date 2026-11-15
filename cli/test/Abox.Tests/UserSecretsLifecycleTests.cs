@@ -13,6 +13,60 @@ namespace Abox.Tests;
 public sealed class UserSecretsLifecycleTests
 {
     [Theory]
+    [InlineData("published", false)]
+    [InlineData("local", false)]
+    [InlineData("run", false)]
+    [InlineData("published", true)]
+    [InlineData("local", true)]
+    [InlineData("run", true)]
+    public async Task AutomaticCopyExpandsTheSameHostPrefixesAndNeverForcesDeniedExpandedStores(
+        string entry,
+        bool denied
+    )
+    {
+        using var fixture = new Fixture();
+        fixture.Existing();
+        fixture.Configure("""{"squad":"ac","userSecrets":["Cape.*"]}""");
+        fixture.Store("Cape.Deals", "{}");
+        fixture.Store(
+            "Cape.Position",
+            denied ? """{"Endpoint":"https://PROD.EXAMPLE/synthetic-private"}""" : "{}"
+        );
+        fixture.Store("Other", "invalid unselected JSON");
+
+        (await fixture.Replace(entry)).Should().Be(denied ? 1 : 0, fixture.Console.AllText);
+
+        if (denied)
+        {
+            await fixture.NoReplacementOrCopy();
+            fixture.Console.AllText.Should().Contain("Cape.Position").And.Contain("--force");
+        }
+        else
+        {
+            await fixture
+                .Sbx.Received(1)
+                .WriteUserSecretsAsync(
+                    fixture.Name,
+                    "Cape.Deals",
+                    "{}",
+                    Arg.Any<CancellationToken>()
+                );
+            await fixture
+                .Sbx.Received(1)
+                .WriteUserSecretsAsync(
+                    fixture.Name,
+                    "Cape.Position",
+                    "{}",
+                    Arg.Any<CancellationToken>()
+                );
+        }
+        fixture
+            .Console.AllText.Should()
+            .NotContain("PROD.EXAMPLE")
+            .And.NotContain("synthetic-private");
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task CreationUsesTheFoldersSquadAndCopiesOnlySelectedStoresAfterSavingTheRecord(

@@ -11,10 +11,13 @@ team source selected with `--root`:
 }
 ```
 
-Only trust this file from a trusted folder: its explicitly named stores authorize
+Only trust this file from a trusted folder: its explicitly selected stores authorize
 copying those host user secrets into that folder's sandbox. Review changes to its
 squad, IDs and key patterns before running create, replacement or `user-secrets`.
 This is the existing folder opt-in boundary, not a separate approval mechanism.
+Store IDs also support safe literal prefixes such as `Cape.*`, using the same
+[expansion and key-union rules](user-secrets-filtering.md#store-id-prefix-selections)
+on demand and during creation/replacement.
 
 ## Squad selection
 

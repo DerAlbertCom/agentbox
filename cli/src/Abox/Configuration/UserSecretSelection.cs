@@ -3,7 +3,7 @@ using Abox.Naming;
 
 namespace Abox.Configuration;
 
-/// <summary>An explicitly named store, optionally restricted to effective .NET keys.</summary>
+/// <summary>An exact store ID or literal prefix selection, optionally restricted to effective .NET keys.</summary>
 public sealed class UserSecretSelection
 {
     private readonly string[][]? patterns;
@@ -14,7 +14,21 @@ public sealed class UserSecretSelection
         patterns = keys?.Select(key => key.Split('*')).ToArray();
     }
 
+    private UserSecretSelection(
+        string id,
+        UserSecretSelection selection,
+        UserSecretSelection? previous
+    )
+    {
+        Id = id;
+        patterns =
+            previous is null ? selection.patterns
+            : previous.patterns is null || selection.patterns is null ? null
+            : [.. previous.patterns, .. selection.patterns];
+    }
+
     public string Id { get; }
+    internal bool IsPrefixPattern => Id.EndsWith('*');
     internal bool IsFiltered => patterns is not null;
 
     internal bool Includes(string key) =>
@@ -55,7 +69,7 @@ public sealed class UserSecretSelection
                     "abox.json: every user-secret entry must be a store ID or an object with 'id' and optional 'keys'."
                 ),
             };
-            UserSecretId.Validate(selection.Id);
+            ValidateIdSelection(selection.Id);
             if (!ids.Add(selection.Id))
                 throw new AboxException(
                     "abox.json: duplicate user-secret store IDs are not allowed (case-insensitive)."
@@ -63,6 +77,56 @@ public sealed class UserSecretSelection
             result.Add(selection);
         }
         return result;
+    }
+
+    private static void ValidateIdSelection(string id)
+    {
+        if (!id.Contains('*'))
+        {
+            UserSecretId.Validate(id);
+            return;
+        }
+        // A prefix can end in a dot (Cape.*); actual expanded IDs still cannot.
+        if (id.EndsWith('*') && id.Length <= 129 && UserSecretId.IsValid(id[..^1].TrimEnd('.')))
+            return;
+        throw new AboxException(
+            "Unsafe user-secret ID pattern. Use a safe literal prefix followed by one terminal '*'; no paths or other wildcards."
+        );
+    }
+
+    internal static IReadOnlyList<UserSecretSelection> Expand(
+        IReadOnlyList<UserSecretSelection> selections,
+        IReadOnlyList<string> hostIds
+    )
+    {
+        var result = new Dictionary<string, UserSecretSelection>(StringComparer.OrdinalIgnoreCase);
+        foreach (var selection in selections)
+        {
+            var matches = hostIds
+                .Where(id =>
+                    selection.IsPrefixPattern
+                        ? id.StartsWith(selection.Id[..^1], StringComparison.OrdinalIgnoreCase)
+                        : id.Equals(selection.Id, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToArray();
+            if (!selection.IsPrefixPattern && matches.Length == 0)
+                matches = [selection.Id];
+            foreach (var id in matches)
+            {
+                UserSecretId.Validate(id);
+                if (result.TryGetValue(id, out var previous))
+                {
+                    if (!previous.Id.Equals(id, StringComparison.Ordinal))
+                        throw new AboxException(
+                            "Host user-secret store IDs collide case-insensitively. Rename the conflicting host directories; no stores were copied."
+                        );
+                    result[id] = new UserSecretSelection(id, selection, previous);
+                }
+                else
+                    result.Add(id, new UserSecretSelection(id, selection, null));
+            }
+        }
+        return result.Values.ToArray();
     }
 
     private static UserSecretSelection ParseObject(JsonElement entry)
