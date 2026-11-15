@@ -78,3 +78,64 @@ Both sides use the **original resolver**, isolating #39 without #38. Five record
 samples follow one warmup per assembly, with alternating measurement order on the
 same snapshot. These are warm-cache local diagnostics, not universal timings or
 an end-to-end/SLA claim.
+
+Two complete runs on **Microsoft Windows 10.0.26200, x64, .NET 10.0.15**
+(SDK 11.0.100, Release builds) passed. The second run followed the documented
+`git archive` reproduction, building **both** variants from archived commits into
+a fresh scratch directory. The first run used an archived base and the ticket
+worktree's after build; other verification work was also active on this shared
+machine. Absolute path depth, filesystem/cache state and other machine activity
+can affect this original ancestry resolver, so compare paired samples within a
+run rather than cross-run absolute times.
+
+| Sample | Initial before (ms) | Initial after (ms) | Fresh archived before (ms) | Fresh archived after (ms) |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 12529.94 | 2820.29 | 14206.90 | 3608.25 |
+| 2 | 12789.65 | 2923.95 | 13850.53 | 3469.81 |
+| 3 | 13467.89 | 3348.32 | 13036.41 | 3723.29 |
+| 4 | 17025.86 | 3003.32 | 14990.89 | 3551.08 |
+| 5 | 12878.77 | 3145.61 | 13964.14 | 3713.07 |
+| **Median** | **12878.77** | **3003.32** | **13964.14** | **3608.25** |
+
+Both runs reported:
+
+| Inventory / validation | Before | After |
+| --- | ---: | ---: |
+| Reachable ordinary synthetic directories, including root | 10253 | 2448 |
+| Discovered matching projects in every sample | 414 | 402 |
+| Project differences outside dependency boundaries | 0 | 0 |
+| Original source-content mutations | 0 | 0 |
+
+The twelve intentionally removed consumers are ten
+`web/node_modules/package-0000..0009/lib/nested/Synthetic.csproj` files,
+`web/node_modules/package-0000/node_modules/child/Synthetic.csproj`, and
+`web/nested/NoDe_MoDuLeS/package/Synthetic.csproj`. The 400 ordinary project
+consumers and both similarly named directories remain discoverable. These are
+**inventory counts**, not instrumentation of filesystem calls.
+
+Reproducible content fingerprints (same in both runs):
+
+```text
+Synthetic input SHA256:
+F104F911B88263EBB030A1D880A81AEA3F9503ED1378E00DC88E2B4254CD43A3
+Included project-set SHA256:
+10E7986378E7B6F7C1F4678ED4488839D1CE7AB07A9765D9C02E72DEEDA008F6
+Fresh archived before assembly SHA256:
+51C0B64B3D6A10EE46EB351CD33126B46799620646028DBFAFB4361A6D43CAB2
+Fresh archived after assembly SHA256:
+DA3BD15E7E4F181C8FE602FC8F04BA02AFE08CAFBC0D972C5427DF1AAFF90C74
+PASS: all samples match expected sets, no differences outside node_modules, source snapshot unchanged.
+```
+
+Assembly hashes identify the measured builds, not a portable build-output hash
+promise (build locations can differ). Prototype observations in the issue
+(roughly 26 s to 1.3 s without parent reuse, about 0.5 s combined) concern another
+snapshot/machine state and are not asserted by this synthetic measurement.
+
+Additional focused verification passed **181 tests**, with zero failures and the
+two existing file-symlink capability skips, using the filter
+`NodeModulesDiscovery39Tests | UserSecretsAppSettingsCommandTests | UserSecretsSharedStoreCommandTests`.
+The explicit Debug solution build and both archived Release production builds
+completed with **zero warnings/errors**. The standalone benchmark build and
+`dotnet csharpier check cli benchmarks/performance-39` passed (212 source/project
+files checked); `git diff --check` passed.
