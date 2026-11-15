@@ -82,6 +82,8 @@ metadata require rebuilding for the requested team; no directory/source-path
 inference substitutes for provenance. A present but invalid qualified manifest
 never falls back to an older one. Builds write only the new layout: old sources,
 manifests, images and runtime directories are not moved, deleted or relabelled.
+See [team-isolation verification](verification/team-qualified-builds.md) for the
+synthetic coverage and legacy compatibility checks.
 
 Normal and metadata-only builds, local/remote creation and reusable build-store
 access use the same registry-tag grammar: 1–128 ASCII letters, digits, underscores,

@@ -56,7 +56,7 @@ public sealed class AgentGuidanceBuildTests
             ),
             CancellationToken.None
         );
-        var manifest = store.Load("ac", "latest")!;
+        var manifest = store.Load("sample", "ac", "latest")!;
         var snapshot = BuildSources.Snapshot(manifest, root.Directory_("publication-snapshot"));
         var kit = manifest.Kits.Should().ContainSingle().Which;
         var descriptor = KitDescriptor.Load(snapshot[kit.Reference])!;
