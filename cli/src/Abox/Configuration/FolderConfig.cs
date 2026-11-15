@@ -6,14 +6,20 @@ namespace Abox.Configuration;
 /// <summary>Runtime-only opt-in in the sandbox folder, never a build input.</summary>
 public sealed class FolderConfig
 {
-    private FolderConfig(string? squad, IReadOnlyList<UserSecretSelection> userSecrets)
+    private FolderConfig(
+        string location,
+        string? squad,
+        IReadOnlyList<UserSecretSelection> userSecrets
+    )
     {
+        Location = Path.GetFullPath(location);
         Squad = squad;
         UserSecrets = userSecrets;
     }
 
     public string? Squad { get; }
     public IReadOnlyList<UserSecretSelection> UserSecrets { get; }
+    internal string Location { get; }
 
     /// <summary>The folder selects the squad; an explicit matching selection is allowed.</summary>
     public string? SelectSquad(string? explicitSquad)
@@ -77,7 +83,7 @@ public sealed class FolderConfig
             var selections = root.TryGetProperty("userSecrets", out var entries)
                 ? UserSecretSelection.Parse(entries)
                 : [];
-            return new FolderConfig(squad, selections);
+            return new FolderConfig(location, squad, selections);
         }
         catch (FileNotFoundException)
         {

@@ -451,11 +451,11 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   patterns are validated separately from strict actual IDs. Expansion is ordinal
   case-insensitive, deterministic within each entry, and deduplicated across
   overlapping exact/prefix entries (key unions, whole store wins). No-match prefixes
-  select no stores; missing exact IDs fail. Matching unsafe/case-colliding host IDs
+   select no stores; missing exact copy-only IDs fail. Matching unsafe/case-colliding host IDs
   and symlinks/reparse points in the host user-secret root itself/stores/files fail
   before sandbox access; linked profile ancestors above that trusted root are allowed.
-  A matched directory without a readable `secrets.json` fails all preparation instead
-  of being silently skipped as an unmatched prefix. See
+   A matched directory without a readable `secrets.json` is not skipped as an
+   unmatched prefix; missing files require matching project appsettings sources. See
   [store-prefix semantics and verification](verification/user-secrets-store-prefixes.md).
   Preparation rejects duplicate
   effective case-insensitive .NET keys before filtering, then checks all selected
@@ -469,10 +469,23 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   `SafetyOverride` on the prepared snapshot/report means at least one selected
   original value actually matched the deny list and was allowed by `--force`, not
   merely that the flag was supplied. The on-demand warning uses the successful
-  copy report; lifecycle callers retain those semantics.
+   copy report; lifecycle callers retain those semantics.
+- `ProjectSettings` statically discovers selected stores' literal `UserSecretsId`
+  consumers beneath the `FolderConfig` location, excluding artifacts, escaping
+  directory links and cycles. It never evaluates MSBuild. Selected project-local
+  base/lowercase-development JSON is validated and merged case-insensitively;
+  only selected keys are retained. The prepared snapshots carry project originals
+  in memory, allowing project-only generation without a host secrets file.
+  Unmatched stores remain copy-only. See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
   before writing. `UserSecretsCopy.Target.cs` applies authorized endpoint rewriting
-  using sbx policy discovery, retaining originals for deny/force accounting.
+   using sbx policy discovery, retaining originals for deny/force accounting.
+   Selected host keys block generated replacements. Eligible appsettings-only
+   values produce flat effective-key overrides subject to the same deny/filter
+   checks. A temporary fail-closed check rejects any generation for multiple
+   discovered consumers, but permits authoritative copy-only values. Parsing,
+   adaptation, deny, policy and destination checks complete for all stores before
+   the first write. Each new copy recalculates and removes stale generated entries.
   Each selected store replaces its entire destination, clearing old unmatched keys,
   even for a zero-key `{}` result. Reports contain IDs, key names/counts, never values.
   Only parsed JSON data is serialized for transfer:
@@ -527,15 +540,21 @@ first-name selection. See [supported forms, preservation and verification](user-
   `sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>`;
   a higher-priority deny excludes the port. Missing/malformed required metadata
   fails safely before writes. Do not invent mappings or change policy.
-- Rewrite only supported loopback endpoint fields (`localhost`/`127.0.0.1`) at an
+- Rewrite only supported loopback endpoint fields at an
   inventoried, currently authorized port to `host.docker.internal`, preserving the
-  **same explicit published host port**. Supported forms include absolute URI
+  **same published host port**. URL/PostgreSQL forms include localhost, dotted IPv4
+  loopback and IPv6 loopback. Supported forms include absolute URI
   authorities, SQL Server comma-port fields (optional `tcp:`), and separate
-  Host/Server + Port database fields. Never infer default ports.
+  Host/Server + Port database fields. Standard URL scheme defaults and the
+  PostgreSQL Host default 5432 are eligible only when that same host port is mapped.
 - Preserve named endpoints, including `host.docker.internal`, and their ports
-  for TLS/SNI. Preserve undeclared ports, unsupported/ambiguous forms and unrelated
+  for TLS/SNI. Preserve undeclared ports and unrelated
   credentials/text/fields/paths/queries. A service published as `8004:5432` does not
   justify rewriting `localhost:5432` to port 8004.
+  Recognized mapped-local endpoints with unsafe/ambiguous supported syntax now
+  fail actionably before writes, without values. Arbitrary/unmapped localhost
+  strings do not fail merely for mentioning localhost. Oracle/split settings are
+  separate follow-ups.
 - No host kit sources, staged descriptors, `/etc/hosts`, `host-port@1` or `sbx ports`
   are used. `sbx inspect` is insufficient for this inventory. Authorization is not
   proof of service availability or protection against later policy changes.
@@ -543,8 +562,10 @@ first-name selection. See [supported forms, preservation and verification](user-
 #### User-secrets integration status
 
 Safe on-demand copying (#6), filtering (#7), authorized same-port endpoint
-rewriting (#8) and creation/replacement integration (#9) are implemented through
-the shared copy flow.
+rewriting (#8), creation/replacement integration (#9) and URL/PostgreSQL
+appsettings-derived overrides (#13) are implemented through the shared copy flow.
+Shared-store generation is temporarily rejected; compatible merging/conflicts,
+Oracle and recognized split-setting support remain follow-ups under #12.
 
 The safety review fixes are integrated: normalized transfer excludes skipped
 comments/trailing commas, no-payload checks cannot consume host stdin, and force
@@ -552,13 +573,20 @@ warnings report actual overridden matches only after successful copying. JSON
 formatting/escape spelling is not a preservation contract; unchanged string
 contents stay unchanged.
 
-Final post-review integrated Debug verification: **756 passed, zero failures, 4 explicit
+Earlier pre-#13 integrated Debug verification: **756 passed, zero failures, 4 explicit
 native Windows symlink-privilege skips** (760 total). The skipped receiver cases
 are not claimed as passing; see [rewrite verification](user-secrets-rewriting.md).
 The focused user-secrets/create/run regression set passed **366 tests**, with the
 same **4 skips** (370 total). The Debug solution build had zero warnings/errors;
 CSharpier and `git diff --check` passed. No Release build or tests were run for
-this final-review change.
+that final-review change.
+
+Issue #13 verification: **918 passed, zero failures, 5 existing platform skips**
+(923 total) in both Debug and Release. Both solution builds had zero warnings/errors;
+CSharpier and `git diff --check` passed. New command-level coverage includes bounded
+project discovery, generation, precedence/filtering, URL/PostgreSQL adaptation,
+all-store validation, safe diagnostics, temporary shared-store rejection and
+create/replacement/refresh behavior. See [the synthetic verification record](verification/user-secrets-appsettings.md).
 
 Lifecycle regression coverage now explicitly permits non-replacing runs with
 mismatched, missing or unknown squad records. On-demand copying now also permits
