@@ -2,6 +2,7 @@ using System.CommandLine;
 using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
+using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sbx;
 using Abox.UserSecrets;
@@ -15,6 +16,7 @@ public sealed class UserSecretsCommand : Command
         Lazy<AboxConfig> config,
         Preflight preflight,
         Lazy<UserSecretsCopy> copy,
+        Lazy<SandboxRecordStore> records,
         ISbxClient sbx,
         IConsole console
     )
@@ -43,6 +45,10 @@ public sealed class UserSecretsCommand : Command
                             await FolderConfig.LoadAsync(folder, cancellationToken)
                             ?? throw new AboxException(
                                 "No abox.json in this folder. Declare 'userSecrets' explicitly before copying."
+                            );
+                        if (folderConfig.Squad is not null)
+                            folderConfig.EnsureSandboxSquad(
+                                records.Value.Load(SandboxName.For(folder))?.Squad
                             );
                         var prepared = await copy.Value.PrepareAsync(
                             folderConfig,
