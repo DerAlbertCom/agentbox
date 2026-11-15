@@ -10,6 +10,7 @@ public sealed class UserSecretsCopyTests
     [Fact]
     public async Task PreparationIsSideEffectFreeAndCopyUsesTheOriginalInMemorySnapshot()
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         var source = root.File(
@@ -23,15 +24,22 @@ public sealed class UserSecretsCopyTests
             sbx
         );
 
+        // Act
         var prepared = await copy.PrepareAsync(
             await FolderConfig.LoadAsync(Path.Combine(root.Path, "folder"), CancellationToken.None),
             false,
             CancellationToken.None
         );
+        // Assert
         sbx.ReceivedCalls().Should().BeEmpty();
+
+        // Arrange
         File.WriteAllText(source, "malformed changed after validation");
+
+        // Act
         var report = await copy.CopyAsync(prepared, "sandbox", CancellationToken.None);
 
+        // Assert
         await sbx.Received(1)
             .WriteUserSecretsAsync(
                 "sandbox",
@@ -47,6 +55,7 @@ public sealed class UserSecretsCopyTests
     [Fact]
     public async Task MissingFolderConfigurationIsANoopEvenWithoutUsableHostEnvironment()
     {
+        // Arrange
         var sbx = Substitute.For<ISbxClient>();
         var copy = new UserSecretsCopy(
             new AboxConfig { UserSecretsDenyList = [""] },
@@ -54,9 +63,11 @@ public sealed class UserSecretsCopyTests
             sbx
         );
 
+        // Act
         var prepared = await copy.PrepareAsync(null, false, CancellationToken.None);
         var report = await copy.CopyAsync(prepared, "sandbox", CancellationToken.None);
 
+        // Assert
         report.Stores.Should().BeEmpty();
         sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -66,6 +77,7 @@ public sealed class UserSecretsCopyTests
     [InlineData(true)]
     public async Task DirectlyConstructedNullDenyPolicyIsRejectedEvenWithForce(bool force)
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File("abox.json", """{"userSecrets":["missing"]}""");
         var sbx = Substitute.For<ISbxClient>();
@@ -76,8 +88,10 @@ public sealed class UserSecretsCopyTests
         );
         var folder = await FolderConfig.LoadAsync(root.Path, CancellationToken.None);
 
+        // Act
         var action = () => copy.PrepareAsync(folder, force, CancellationToken.None);
 
+        // Assert
         await action.Should().ThrowAsync<AboxException>().WithMessage("*userSecretsDenyList*");
         sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -87,6 +101,7 @@ public sealed class UserSecretsCopyTests
     [InlineData("relative")]
     public async Task InvalidAppDataDoesNotFallBackToAnOtherwiseUsableHome(string appData)
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File("abox.json", """{"userSecrets":["sample"]}""");
         root.File(".microsoft/usersecrets/sample/secrets.json", "{}");
@@ -97,6 +112,7 @@ public sealed class UserSecretsCopyTests
             sbx
         );
 
+        // Act
         var action = async () =>
             await copy.PrepareAsync(
                 await FolderConfig.LoadAsync(root.Path, CancellationToken.None),
@@ -104,6 +120,7 @@ public sealed class UserSecretsCopyTests
                 CancellationToken.None
             );
 
+        // Assert
         await action.Should().ThrowAsync<AboxException>().WithMessage("*APPDATA*HOME*");
         sbx.ReceivedCalls().Should().BeEmpty();
     }
@@ -111,6 +128,7 @@ public sealed class UserSecretsCopyTests
     [Fact]
     public async Task CancellationIsPreservedByBothPhases()
     {
+        // Arrange
         using var root = new TempDirectory();
         root.File("abox.json", """{"userSecrets":["sample"]}""");
         root.File(".microsoft/usersecrets/sample/secrets.json", "{}");
@@ -120,10 +138,19 @@ public sealed class UserSecretsCopyTests
         using var cancelled = new CancellationTokenSource();
         cancelled.Cancel();
 
+        // Act
         var preparation = () => copy.PrepareAsync(folder, false, cancelled.Token);
+
+        // Assert
         await preparation.Should().ThrowAsync<OperationCanceledException>();
+
+        // Arrange
         var prepared = await copy.PrepareAsync(folder, false, CancellationToken.None);
+
+        // Act
         var copying = () => copy.CopyAsync(prepared, "sandbox", cancelled.Token);
+
+        // Assert
         await copying.Should().ThrowAsync<OperationCanceledException>();
         await sbx.DidNotReceive()
             .WriteUserSecretsAsync(
