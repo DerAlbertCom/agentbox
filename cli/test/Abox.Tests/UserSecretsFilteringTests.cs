@@ -1,11 +1,7 @@
 using System.Text.Json;
-using Abox.Cli;
 using Abox.Configuration;
-using Abox.Infrastructure;
-using Abox.Naming;
 using Abox.Sbx;
 using Abox.UserSecrets;
-using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -345,20 +341,15 @@ public sealed class UserSecretsFilteringTests
 
     private sealed class Fixture : IDisposable
     {
-        public TempDirectory Root { get; } = new();
-        public TestConsole Console { get; } = new();
-        public ISbxClient Sbx { get; } = Substitute.For<ISbxClient>();
+        private readonly UserSecretsCliHarness cli;
+        public TempDirectory Root => cli.Root;
+        public TestConsole Console => cli.Console;
+        public ISbxClient Sbx => cli.Sbx;
         public List<(string Id, string Json)> Writes { get; } = [];
-        public string Location { get; }
-        private readonly ServiceProvider provider;
 
         public Fixture(AboxConfig? config = null)
         {
-            Location = Root.Directory_("folder");
-            Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
-            Sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
-            Sbx.FindSandboxAsync(SandboxName.For(Location), Arg.Any<CancellationToken>())
-                .Returns(new SandboxInfo(SandboxName.For(Location), "running", null));
+            cli = new UserSecretsCliHarness(config);
             Sbx.WriteUserSecretsAsync(
                     Arg.Any<string>(),
                     Arg.Any<string>(),
@@ -370,34 +361,17 @@ public sealed class UserSecretsFilteringTests
                     Writes.Add((call.ArgAt<string>(1), call.ArgAt<string>(2)));
                     return Task.CompletedTask;
                 });
-            var programs = Substitute.For<IHostPrograms>();
-            programs.Exists(Arg.Any<string>()).Returns(true);
-            var services = new ServiceCollection().AddAbox(Console, new TrailingArguments());
-            services.AddSingleton(config ?? new AboxConfig());
-            services.AddSingleton(AboxPaths.For(Root.Path, Root.Path));
-            services.AddSingleton(new UserSecretsHost(Root.Directory_("appdata"), null));
-            services.AddSingleton(Sbx);
-            services.AddSingleton(programs);
-            provider = services.BuildServiceProvider();
         }
 
         public void Configure(string entries) =>
             Root.File("folder/abox.json", "{\"userSecrets\":" + entries + "}");
 
-        public string Store(string id, string json) =>
-            Root.File($"appdata/Microsoft/UserSecrets/{id}/secrets.json", json);
+        public string Store(string id, string json) => cli.Store(id, json);
 
         public string Payload(string id) => Writes.Last(write => write.Id == id).Json;
 
-        public Task<int> Run(params string[] args) =>
-            provider
-                .GetRequiredService<AboxRootCommand>()
-                .InvokeAsync(["user-secrets", "--location", Location, .. args]);
+        public Task<int> Run(params string[] args) => cli.Run(args);
 
-        public void Dispose()
-        {
-            provider.Dispose();
-            Root.Dispose();
-        }
+        public void Dispose() => cli.Dispose();
     }
 }

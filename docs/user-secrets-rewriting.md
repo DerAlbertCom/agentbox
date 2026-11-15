@@ -148,14 +148,17 @@ sandboxes were removed in `finally`. No actual host secret stores, existing user
 sandboxes, publications or global settings were touched. This proves metadata and
 copy behavior, not service connectivity or an untested published/nonempty policy.
 
-Repository verification uses **Debug tests only** for #8 (per the user's current
-instruction), plus the Release solution build, Debug probe build, CSharpier and
-`git diff --check`. Native Windows symlink regression tests explicitly skip when
-this host lacks link-creation privileges; they are not reported as passing.
+Earlier #8 verification used **Debug tests only**, plus a Release solution build
+and Debug probe build. The focused rewrite/policy/CLI suite passed **101 tests**
+with no skips. Those builds had zero warnings/errors; CSharpier and
+`git diff --check` passed. No Release test run was performed for #8.
 
-Final integrated run: `dotnet test --solution cli/agentbox.slnx -c Debug` passed
-**738 tests**, with **4 explicit native-symlink privilege skips**, zero failures.
-The focused rewrite/policy/CLI suite passed **101 tests** with no skips. Release
-solution and Debug `RewriteProbe` builds had zero warnings/errors;
-`dotnet csharpier check cli docs/verification/user-secrets` and `git diff --check`
-passed. No Release test run was performed for #8.
+The latest post-review integrated run, `dotnet test cli/agentbox.slnx -c Debug`,
+passed **756 tests**, with **4 explicit native-symlink privilege skips** (760 total),
+zero failures. The focused user-secrets/create/run regression set passed **366
+tests**, with the same **4 skips** (370 total). The Debug solution build had zero
+warnings/errors; `dotnet csharpier check cli` and `git diff --check` passed. No
+Release build or test run, live sandbox changes, publication or global setting
+changes were performed for this final-review change. Native Windows symlink
+regression tests explicitly skip when this host lacks link-creation privileges;
+they are not reported as passing.

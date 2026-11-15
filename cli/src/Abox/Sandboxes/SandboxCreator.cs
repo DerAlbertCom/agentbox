@@ -13,6 +13,7 @@ namespace Abox.Sandboxes;
 /// <param name="Squad">The squad the sandbox is created from, or null when the command asks for one.</param>
 /// <param name="Location">The folder the sandbox works on.</param>
 /// <param name="Tag">The tag of the published kit set or local build.</param>
+/// <param name="FolderConfig">The folder configuration snapshot loaded by the caller; null means absent.</param>
 /// <param name="AssumeYes">Whether the replacement of an existing sandbox is confirmed already.</param>
 /// <param name="Local">Whether to use local kits instead of pulling the published set.</param>
 public sealed record SandboxCreationRequest(
@@ -20,6 +21,7 @@ public sealed record SandboxCreationRequest(
     string? Squad,
     string Location,
     string Tag,
+    FolderConfig? FolderConfig,
     bool AssumeYes = false,
     bool Local = false
 );
@@ -49,7 +51,7 @@ public sealed class SandboxCreator(
             throw new AboxException($"The folder '{location}' does not exist.");
         }
 
-        var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
+        var folderConfig = request.FolderConfig;
         request = request with
         {
             Squad = folderConfig?.SelectSquad(request.Squad) ?? request.Squad,
@@ -128,16 +130,7 @@ public sealed class SandboxCreator(
             {
                 var report = await userSecrets.CopyAsync(preparedSecrets, name, cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
-                foreach (var store in report.Stores)
-                {
-                    console.WriteLine(
-                        $"Copied user-secret store '{store.Id}': {store.KeyCount} keys."
-                    );
-                    if (store.RewrittenKeyCount > 0)
-                        console.WriteLine(
-                            $"Rewrote user-secret store '{store.Id}': {store.RewrittenKeyCount} keys ({string.Join(", ", store.RewrittenKeys.Select(key => System.Text.Json.JsonSerializer.Serialize(key)))})."
-                        );
-                }
+                UserSecretsReportWriter.WriteStores(report, console);
             }
             catch (OperationCanceledException)
             {

@@ -1,4 +1,3 @@
-using Abox.Cli;
 using Abox.Configuration;
 using Abox.Features;
 using Abox.Infrastructure;
@@ -6,7 +5,6 @@ using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sandboxes;
 using Abox.Sbx;
-using Abox.UserSecrets;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -103,16 +101,14 @@ public sealed class UserSecretsLifecycleTests
     [InlineData("published")]
     [InlineData("local")]
     [InlineData("run")]
-    [InlineData("ordinary-run")]
     [InlineData("on-demand")]
-    public async Task AConflictingSquadCannotCopyReplaceOrLaunch(string entry)
+    public async Task AConflictingSquadCannotCopyOrReplace(string entry)
     {
         using var fixture = new Fixture();
         fixture.Existing();
         fixture.Configure("""{"squad":"bd","userSecrets":["missing"]}""");
         var exit = entry switch
         {
-            "ordinary-run" => await fixture.OrdinaryRun(),
             "on-demand" => await fixture.OnDemand(),
             _ => await fixture.Replace(entry),
         };
@@ -123,6 +119,51 @@ public sealed class UserSecretsLifecycleTests
         await fixture
             .Sbx.DidNotReceive()
             .ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("published", true)]
+    [InlineData("local", true)]
+    [InlineData("run", true)]
+    [InlineData("published", false)]
+    [InlineData("local", false)]
+    [InlineData("run", false)]
+    public async Task ReplacementUsesTheFolderConfigurationValidatedAtCommandEntry(
+        string entry,
+        bool configured
+    )
+    {
+        using var fixture = new Fixture();
+        fixture.Existing();
+        if (configured)
+            fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
+        fixture.Store("sample", "{}");
+        if (entry == "run")
+            fixture
+                .Sbx.FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>())
+                .Returns(_ =>
+                {
+                    fixture.Configure("""{"squad":"bd","userSecrets":["missing"]}""");
+                    return new SandboxInfo(fixture.Name, "running", Fixture.OldBuild);
+                });
+        else
+            fixture
+                .Sbx.GetVersionAsync(Arg.Any<CancellationToken>())
+                .Returns(_ =>
+                {
+                    fixture.Configure("""{"squad":"bd","userSecrets":["missing"]}""");
+                    return new Version(0, 51, 0);
+                });
+
+        (await fixture.Replace(entry)).Should().Be(0);
+
+        fixture.Records.Load(fixture.Name)!.Squad.Should().Be("ac");
+        if (configured)
+            await fixture
+                .Sbx.Received(1)
+                .WriteUserSecretsAsync(fixture.Name, "sample", "{}", Arg.Any<CancellationToken>());
+        else
+            await fixture.NoCopy();
     }
 
     [Fact]
@@ -278,6 +319,33 @@ public sealed class UserSecretsLifecycleTests
     }
 
     [Theory]
+    [InlineData("mismatched")]
+    [InlineData("missing")]
+    [InlineData("unknown")]
+    public async Task OrdinaryRunCanOpenAnExistingSandboxWithoutAMatchingFolderSquadRecord(
+        string recordState
+    )
+    {
+        using var fixture = new Fixture();
+        fixture.Existing();
+        fixture.Configure("""{"squad":"bd","userSecrets":["missing"]}""");
+        var record = fixture.Records.Load(fixture.Name)!;
+        record.BuildCreatedAt = DateTimeOffset.MaxValue;
+        if (recordState == "unknown")
+            record.Squad = "";
+        fixture.Records.Save(fixture.Name, record);
+        if (recordState == "missing")
+            fixture.Records.Remove(fixture.Name);
+
+        (await fixture.Run()).Should().Be(0);
+
+        await fixture.NoReplacementOrCopy();
+        await fixture
+            .Sbx.Received(1)
+            .ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task DecliningEitherReplacementDoesNotCopySecrets(bool run)
@@ -294,6 +362,22 @@ public sealed class UserSecretsLifecycleTests
 
         await fixture.NoReplacementOrCopy();
         fixture.Records.Load(fixture.Name)!.BuildCreatedAt.Should().Be(Fixture.OldBuild);
+    }
+
+    [Fact]
+    public async Task DecliningANewerBuildCanOpenTheExistingSandboxDespiteADifferentFolderSquad()
+    {
+        using var fixture = new Fixture();
+        fixture.Existing();
+        fixture.Configure("""{"squad":"bd","userSecrets":["missing"]}""");
+        fixture.Console.Answer = false;
+
+        (await fixture.Run()).Should().Be(0);
+
+        await fixture.NoReplacementOrCopy();
+        await fixture
+            .Sbx.Received(1)
+            .ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -400,12 +484,23 @@ public sealed class UserSecretsLifecycleTests
         await fixture.NoReplacementOrCopy();
     }
 
-    [Fact]
-    public async Task AFolderSquadRequiresAKnownMatchingRecordForOnDemandCopy()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AFolderSquadRequiresAKnownMatchingRecordForOnDemandCopy(bool unknownSquad)
     {
         using var fixture = new Fixture();
         fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
+        fixture.Existing();
+        if (unknownSquad)
+        {
+            var record = fixture.Records.Load(fixture.Name)!;
+            record.Squad = "";
+            fixture.Records.Save(fixture.Name, record);
+        }
+        else
+            fixture.Records.Remove(fixture.Name);
 
         (await fixture.OnDemand()).Should().Be(1);
 
@@ -560,19 +655,18 @@ public sealed class UserSecretsLifecycleTests
 
     private sealed class Fixture : IDisposable
     {
-        public TempDirectory Root { get; } = new();
-        public TestConsole Console { get; } = new();
-        public ISbxClient Sbx { get; } = Substitute.For<ISbxClient>();
-        public string Location { get; }
-        public string Name => SandboxName.For(Location);
+        private readonly UserSecretsCliHarness cli = new(existingSandbox: false);
+        public TempDirectory Root => cli.Root;
+        public TestConsole Console => cli.Console;
+        public ISbxClient Sbx => cli.Sbx;
+        public string Location => cli.Location;
+        public string Name => cli.Name;
         public SandboxRecordStore Records { get; }
         public BuildStore Builds { get; }
-        private readonly ServiceProvider provider;
         public static readonly DateTimeOffset OldBuild = new(2026, 1, 1, 0, 0, 0, TimeSpan.Zero);
 
         public Fixture()
         {
-            Location = Root.Directory_("folder");
             Root.File("teams/sample/ac.abox", "workload: sample\n");
             Root.File("teams/sample/bd.abox", "workload: sample\n");
             var paths = AboxPaths.For(Root.Directory_("config"), Root.Directory_("state"));
@@ -589,16 +683,12 @@ public sealed class UserSecretsLifecycleTests
                     LocalWorkload = LocalWorkloadTest.Artifact(Root),
                 }
             );
-            Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
-            Sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
             Sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
                 .Returns(new SbxOutcome(0, ""));
             Sbx.RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
                 .Returns(new SbxOutcome(0, ""));
             Sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(0);
-            var programs = Substitute.For<IHostPrograms>();
-            programs.Exists(Arg.Any<string>()).Returns(true);
-            var services = new ServiceCollection().AddAbox(Console, new TrailingArguments());
+            var services = cli.Services;
             services.AddSingleton(
                 new AboxConfig
                 {
@@ -608,27 +698,20 @@ public sealed class UserSecretsLifecycleTests
                 }
             );
             services.AddSingleton(paths);
-            services.AddSingleton(new UserSecretsHost(Root.Directory_("appdata"), null));
-            services.AddSingleton(Sbx);
-            services.AddSingleton(programs);
             services.AddSingleton<IProcessRunner>(LocalWorkloadTest.Runner());
             services.AddSingleton(PublishedSquadTest.Source());
-            provider = services.BuildServiceProvider();
         }
 
-        public void Configure(string json) => Root.File("folder/abox.json", json);
+        public void Configure(string json) => cli.Configure(json);
 
-        public string Store(string id, string json) =>
-            Root.File($"appdata/Microsoft/UserSecrets/{id}/secrets.json", json);
+        public string Store(string id, string json) => cli.Store(id, json);
 
         public Task<int> Create(bool local = false, params string[] args) =>
-            provider
-                .GetRequiredService<AboxRootCommand>()
-                .InvokeAsync([
-                    "create",
-                    .. local ? new[] { "--local", "--root", Root.Path } : [],
-                    .. args,
-                ]);
+            cli.Invoke([
+                "create",
+                .. local ? new[] { "--local", "--root", Root.Path } : [],
+                .. args,
+            ]);
 
         public void Existing()
         {
@@ -642,30 +725,28 @@ public sealed class UserSecretsLifecycleTests
                     BuildCreatedAt = OldBuild,
                 }
             );
-            Sbx.FindSandboxAsync(Name, Arg.Any<CancellationToken>())
-                .Returns(new SandboxInfo(Name, "running", OldBuild));
+            cli.ExistingSandbox(OldBuild);
         }
 
         public Task<int> Replace(string entry) =>
             entry == "run" ? Run() : Create(entry == "local", "--squad", "ac", "--yes");
 
-        public Task<int> Run() =>
-            provider.GetRequiredService<AboxRootCommand>().InvokeAsync(["run"]);
+        public Task<int> Run() => cli.Invoke("run");
 
-        public Task<int> OnDemand(params string[] args) =>
-            provider.GetRequiredService<AboxRootCommand>().InvokeAsync(["user-secrets", .. args]);
+        public Task<int> OnDemand(params string[] args) => cli.Invoke(["user-secrets", .. args]);
 
         public Task<int> CreateShared(CancellationToken cancellationToken) =>
             CommandHandling.RunAsync(
-                () =>
-                    provider
-                        .GetRequiredService<SandboxCreator>()
+                async () =>
+                    await cli
+                        .Provider.GetRequiredService<SandboxCreator>()
                         .CreateAsync(
                             new SandboxCreationRequest(
                                 new("sample", "", ["ac"]),
                                 "ac",
                                 Location,
                                 "latest",
+                                await FolderConfig.LoadAsync(Location, cancellationToken),
                                 AssumeYes: true
                             ),
                             cancellationToken
@@ -693,6 +774,8 @@ public sealed class UserSecretsLifecycleTests
         public async Task NoCopy()
         {
             await Sbx.DidNotReceive()
+                .GetUserSecretsHostPortsAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await Sbx.DidNotReceive()
                 .ValidateUserSecretsDestinationAsync(
                     Arg.Any<string>(),
                     Arg.Any<IReadOnlyList<string>>(),
@@ -707,10 +790,6 @@ public sealed class UserSecretsLifecycleTests
                 );
         }
 
-        public void Dispose()
-        {
-            provider.Dispose();
-            Root.Dispose();
-        }
+        public void Dispose() => cli.Dispose();
     }
 }

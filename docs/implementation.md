@@ -325,8 +325,10 @@ published tag.
    sandbox record, build metadata or configured default team when available. Local
    records retain `--local` and their build's `--root`; unknown team/squad names are marked `<name>` placeholders
    to replace. The same complete hint is used when launcher programs are missing.
-3. When the folder config has `squad`, requires a known matching sandbox record
-   before opening/replacing the sandbox. A conflict never silently switches squads.
+3. Ordinary run can open the existing sandbox even with a different or unknown
+   recorded squad; it copies no secrets and changes no squad. When replacement is
+   accepted and the folder config has `squad`, requires a known matching sandbox
+   record before preparation/replacement. A conflict never silently switches squads.
 4. For a locally created sandbox, offers to replace it when the build of its squad is newer than the one the
    sandbox was made of. abox knows the squad of a sandbox because it keeps a record of
    the sandboxes it created, in `<state dir>/sandboxes/`. Replacement stays local,
@@ -382,8 +384,14 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
 - `FolderConfig.LoadAsync(location, token)` reads runtime-only `abox.json`,
   returning null for absence. A missing file is an on-demand error but a lifecycle
   no-op. Its optional `squad` selects creation and rejects conflicting explicit
-  selections; run/on-demand copying requires a matching known sandbox record if
-  that squad is present. The team still comes from command/user settings.
+  selections; on-demand copying and accepted run replacement require a matching
+  known sandbox record if that squad is present. Ordinary run does not impose that
+  copy/replacement constraint. The team still comes from command/user settings.
+- `SandboxCreationRequest` carries the folder configuration snapshot loaded at
+  command entry, including null for absence. Creation never reloads it, including
+  after deletion; host selections are then snapshotted before destructive work.
+  The command's early squad-conflict check and shared lifecycle's pure revalidation
+  intentionally protect both public entry paths without duplicate file reads.
 - `UserSecretsCopy.PrepareAsync(folderConfig, force, token)` validates all entries,
   snapshots every selected host file and its nested JSON tree, rejects duplicate
   effective case-insensitive .NET keys before filtering, then checks all selected
@@ -406,6 +414,8 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   Only parsed JSON data is serialized for transfer:
   skipped comments and trailing commas must not survive as unscanned payload text.
   No hook framework or alternate pipeline is needed.
+- `UserSecretsReportWriter` formats the value-free store summaries once for both
+  automatic and on-demand output, JSON-escaping rewritten key names.
 - `SbxClient.UserSecrets.cs` owns captured default-user exec, environment/path checks
   and the fixed receiver. All ancestor symlinks, nonregular/multiply-linked files
   and wrong-owned secret directories/files fail. It verifies stdin byte count and
@@ -478,9 +488,22 @@ warnings report actual overridden matches only after successful copying. JSON
 formatting/escape spelling is not a preservation contract; unchanged string
 contents stay unchanged.
 
-Final integrated Debug verification: **738 passed, zero failures, 4 explicit
-native Windows symlink-privilege skips** (742 total). The skipped receiver cases
+Final post-review integrated Debug verification: **756 passed, zero failures, 4 explicit
+native Windows symlink-privilege skips** (760 total). The skipped receiver cases
 are not claimed as passing; see [rewrite verification](user-secrets-rewriting.md).
+The focused user-secrets/create/run regression set passed **366 tests**, with the
+same **4 skips** (370 total). The Debug solution build had zero warnings/errors;
+CSharpier and `git diff --check` passed. No Release build or tests were run for
+this final-review change.
+
+Lifecycle regression coverage now explicitly permits non-replacing runs with
+mismatched, missing or unknown squad records, while copying/accepted replacement
+still reject unintended squads. It also checks that entry-time folder snapshots,
+including absence, survive later file edits. A small composed CLI harness shares
+synthetic host/store and fake-tool setup across command, filtering, safety and
+lifecycle suites; behavior-specific helpers stay local. The null-deny-list guard
+remains intentional for directly constructed public settings, independently of
+the YAML loader; force cannot bypass that invalid configuration.
 
 The accepted [verification matrix](verification/user-secrets/README.md) is
 **local/nonempty kit policy + published/empty kit policy**. An already-published
@@ -681,6 +704,13 @@ cli/src/Abox/
 - One wrapper class (`SbxClient`) makes every `sbx` call. The flags and the version
   check live in that one place. One wrapper class (`OciRegistry`) makes every `docker`
   call. The arguments are always a list, never a shell string.
+- Runtime folder selections and their parsing/matching live in `Configuration`,
+  not the shared copy orchestration. Portable store-ID validation lives in
+  low-level `Naming.UserSecretId`; both configuration parsing and the sbx adapter
+  validate with it. Thus `Configuration` and `Sbx` do not import `UserSecrets` or
+  know its orchestration, while the copy flow can consume both. Reporting remains
+  above the technical sbx wrapper. These are module responsibilities, not a rule
+  that every namespace must be a separate module.
 - Each launcher is one class behind `ILauncher`.
 - Each command is a class that the container builds and that takes its dependencies
   in its constructor; nothing looks the commands up by hand. The root command holds

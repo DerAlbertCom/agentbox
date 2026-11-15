@@ -25,11 +25,13 @@ This is the existing folder opt-in boundary, not a separate approval mechanism.
 - With no folder squad, existing selection remains: `--squad`, the only local
   squad, or local interactive selection. Published creation still requires a
   squad when neither the option nor the folder specifies one.
-- Opening an existing sandbox or running on-demand `user-secrets` checks a folder
-  squad against the sandbox's record. A different or unknown recorded squad fails
-  safely; create the intended sandbox explicitly first. No folder squad means
-  there is no extra identity constraint. A missing-sandbox run hint includes the
-  folder squad, without requiring local team sources.
+- On-demand `user-secrets` and accepted newer-build replacement from `run` check a
+  folder squad against the sandbox's record. A different or unknown recorded squad
+  fails safely; create the intended sandbox explicitly first. No folder squad means
+  there is no extra identity constraint. Ordinary `run`, including declining
+  replacement, can open the existing sandbox despite a different or unknown squad
+  record, because it neither copies secrets nor replaces the sandbox. A
+  missing-sandbox run hint includes the folder squad, without requiring local team sources.
 
 The team still comes from `--team` or `defaultTeam`; `abox.json` does not select a
 team. Changing its squad does not silently replace an existing sandbox on `run`.
@@ -39,7 +41,9 @@ team. Changing its squad does not silently replace an existing sandbox on `run`.
 Local and published `abox create`, explicit replacement (including `--yes`), and
 accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
 
-1. Load and validate `abox.json` and resolve a matching squad.
+1. Load and validate `abox.json` once at command entry and resolve a matching squad.
+   Pass that same folder configuration snapshot (including absence) to the shared
+   lifecycle; do not reload it between squad selection, preparation and replacement.
 2. Call shared `UserSecretsCopy.PrepareAsync(folderConfig, false, token)` to
    snapshot **all** selected host stores and check selected original values
    against the global deny list. Missing, unreadable, malformed or denied later

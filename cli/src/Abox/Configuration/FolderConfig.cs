@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Abox.UserSecrets;
 
 namespace Abox.Configuration;
 
@@ -30,12 +29,12 @@ public sealed class FolderConfig
         return Squad ?? explicitSquad;
     }
 
-    /// <summary>Do not open or copy to a sandbox whose recorded squad differs or is unknown.</summary>
+    /// <summary>Do not copy to or implicitly replace a sandbox whose recorded squad differs or is unknown.</summary>
     public void EnsureSandboxSquad(string? recordedSquad)
     {
         if (Squad is not null && string.IsNullOrWhiteSpace(recordedSquad))
             throw new AboxException(
-                "Cannot verify the sandbox's squad against abox.json. Create it with abox create for this folder before opening it or copying user secrets."
+                "Cannot verify the sandbox's squad against abox.json. Create it with abox create for this folder before replacing it or copying user secrets."
             );
         SelectSquad(recordedSquad);
     }

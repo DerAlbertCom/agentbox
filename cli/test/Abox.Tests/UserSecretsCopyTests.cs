@@ -62,6 +62,27 @@ public sealed class UserSecretsCopyTests
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DirectlyConstructedNullDenyPolicyIsRejectedEvenWithForce(bool force)
+    {
+        using var root = new TempDirectory();
+        root.File("abox.json", """{"userSecrets":["missing"]}""");
+        var sbx = Substitute.For<ISbxClient>();
+        var copy = new UserSecretsCopy(
+            new AboxConfig { UserSecretsDenyList = null! },
+            new UserSecretsHost(null, null),
+            sbx
+        );
+        var folder = await FolderConfig.LoadAsync(root.Path, CancellationToken.None);
+
+        var action = () => copy.PrepareAsync(folder, force, CancellationToken.None);
+
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*userSecretsDenyList*");
+        sbx.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData("")]
     [InlineData("relative")]
     public async Task InvalidAppDataDoesNotFallBackToAnOtherwiseUsableHome(string appData)

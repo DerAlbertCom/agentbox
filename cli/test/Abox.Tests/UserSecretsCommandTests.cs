@@ -1,11 +1,8 @@
-using Abox.Cli;
 using Abox.Configuration;
-using Abox.Infrastructure;
 using Abox.Naming;
 using Abox.Sbx;
-using Abox.UserSecrets;
-using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
+using Fixture = Abox.Tests.UserSecretsCliHarness;
 
 namespace Abox.Tests;
 
@@ -434,66 +431,5 @@ public sealed class UserSecretsCommandTests
     {
         using var document = System.Text.Json.JsonDocument.Parse(json);
         return document.RootElement.GetProperty(key).GetString() == value;
-    }
-
-    private sealed class Fixture : IDisposable
-    {
-        public TempDirectory Root { get; } = new();
-        public TestConsole Console { get; } = new();
-        public ISbxClient Sbx { get; } = Substitute.For<ISbxClient>();
-        public string Location { get; }
-        private readonly ServiceProvider provider;
-
-        public Fixture(AboxConfig? config = null, bool unix = false, string? configYaml = null)
-        {
-            Location = Root.Directory_("folder");
-            Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
-            Sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
-            Sbx.FindSandboxAsync(SandboxName.For(Location), Arg.Any<CancellationToken>())
-                .Returns(new SandboxInfo(SandboxName.For(Location), "running", null));
-            var programs = Substitute.For<IHostPrograms>();
-            programs.Exists(Arg.Any<string>()).Returns(true);
-            var services = new ServiceCollection().AddAbox(Console, new TrailingArguments());
-            if (configYaml is null)
-                services.AddSingleton(config ?? new AboxConfig { DefaultLocation = Location });
-            else
-                Root.File("config.yaml", configYaml);
-            services.AddSingleton(AboxPaths.For(Root.Path, Root.Path));
-            services.AddSingleton(
-                new UserSecretsHost(
-                    unix ? null : Root.Directory_("appdata"),
-                    Root.Directory_("home")
-                )
-            );
-            services.AddSingleton(Sbx);
-            services.AddSingleton(programs);
-            provider = services.BuildServiceProvider();
-        }
-
-        public string Store(string id, string json) =>
-            Root.File($"appdata/Microsoft/UserSecrets/{id}/secrets.json", json);
-
-        public Task<int> Run(params string[] args) =>
-            provider
-                .GetRequiredService<AboxRootCommand>()
-                .InvokeAsync(["user-secrets", "--location", Location, .. args]);
-
-        public Task<int> RunDefault() =>
-            provider.GetRequiredService<AboxRootCommand>().InvokeAsync(["user-secrets"]);
-
-        public async Task NoWrites() =>
-            await Sbx.DidNotReceive()
-                .WriteUserSecretsAsync(
-                    Arg.Any<string>(),
-                    Arg.Any<string>(),
-                    Arg.Any<string>(),
-                    Arg.Any<CancellationToken>()
-                );
-
-        public void Dispose()
-        {
-            provider.Dispose();
-            Root.Dispose();
-        }
     }
 }
