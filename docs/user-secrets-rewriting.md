@@ -152,3 +152,10 @@ Repository verification uses **Debug tests only** for #8 (per the user's current
 instruction), plus the Release solution build, Debug probe build, CSharpier and
 `git diff --check`. Native Windows symlink regression tests explicitly skip when
 this host lacks link-creation privileges; they are not reported as passing.
+
+Final integrated run: `dotnet test --solution cli/agentbox.slnx -c Debug` passed
+**738 tests**, with **4 explicit native-symlink privilege skips**, zero failures.
+The focused rewrite/policy/CLI suite passed **101 tests** with no skips. Release
+solution and Debug `RewriteProbe` builds had zero warnings/errors;
+`dotnet csharpier check cli docs/verification/user-secrets` and `git diff --check`
+passed. No Release test run was performed for #8.
