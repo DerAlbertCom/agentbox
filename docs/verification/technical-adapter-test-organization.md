@@ -139,22 +139,27 @@ artifacts have the `post475-` prefix. No live sandbox, registry, host-secret sto
 production service, issue/PR mutation or original user-modified launcher script
 was involved. No Release verification is claimed for this bounded test-only batch.
 
-## Remaining S1/S2 ownership outside #36
+## S1/S2 endpoint follow-up outside #36 (resolved)
 
 A repository-wide syntax inspection found no remaining missing phase markers in
-the technical-module batch. It did find two endpoint-generation lifecycle methods
-left in root `cli/test/Abox.Tests/UserSecretsLifecycleTests.cs`:
+the technical-module batch. At that checkpoint it found two endpoint-generation
+lifecycle methods left in root `cli/test/Abox.Tests/UserSecretsLifecycleTests.cs`:
 
 - `EveryCreationAndReplacementPathGeneratesCurrentProjectOverridesWithoutAHostFile`
   (five theory rows).
 - `MalformedProjectConfigurationPreventsDestructiveReplacement` (three rows).
 
-These are the endpoint cases deliberately left outside #34 and belong to #35's
-endpoint/create-replacement coverage. Their remaining root placement (S1) and
-missing phase markers (S2) are reported rather than silently claimed compliant
-or changed outside this ticket's agreed scope. They still execute and retain
-their shared lifecycle fixture/partial compatibility. Whole-program Release and
-final reviews remain parent-level verification work.
+These endpoint cases belong to #35's endpoint/create-replacement coverage and were
+originally reported rather than changed outside #36's scope. The final integrated
+follow-up now moves both into
+`UserSecrets/UserSecretsLifecycleTests.EndpointGeneration.cs` and adds explicit
+Arrange/Act/Assert phases. All eight rows, identities, data, assertions and private
+fixture/partial access are preserved; the existing selection/lifecycle partial and
+`ShellSandbox` remain unchanged. The S1/S2 gap is resolved, not an open residual.
+See the [final endpoint-lifecycle verification](audit-21-endpoint-test-organization.md#final-integrated-endpoint-lifecycle-follow-up)
+for exact before/after discovery/metadata and runtime/skip comparisons, plus full
+Debug and Release execution: each discovers 1,653 cases, passes 1,646 and skips the
+same seven platform-dependent cases, with zero failures/errors/not-run.
 
 ## Integration verification after #35
 
@@ -211,9 +216,10 @@ Integration full discovery (1,653): 04e49791d1b7105878535a7fa24ba3d797a9d094ffa9
 This is a same-worktree comparison: discovery IDs depend on the assembly path,
 so this hash is not expected to match the ticket-worktree hash above. The existing
 four receiver-link, two file-link and one case-distinct-directory skips remain
-platform limitations, not passing coverage. The two root endpoint-generation
-lifecycle methods reported above remain untouched for the final reviewer/fixer.
-All 15 implementation tickets are now integrated; formal review and whole-program
-Release verification remain next. No other branch was merged, no ticket worktree
+platform limitations, not passing coverage. At this checkpoint the two root
+endpoint-generation lifecycle methods were left for the final reviewer/fixer;
+their subsequent focused fix and completed whole-program Debug/Release verification
+are recorded in the resolved follow-up above. All 15 implementation tickets are
+integrated. No other branch was merged, no ticket worktree
 was edited, and no live runtime, registry, real secret store or issue/PR mutation
 was used. The original user-modified `run-abox.ps1` retains its pre-merge SHA-256.

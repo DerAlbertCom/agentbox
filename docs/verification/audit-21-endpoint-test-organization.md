@@ -187,5 +187,113 @@ so these hashes are not expected to match the ticket-worktree hashes above.
 The existing two file-link, four receiver-link and one case-distinct-directory
 skips remain platform limitations, not passing coverage. No production files,
 other ticket worktrees, live runtime/registry/secrets, issue/PR state or original
-user-modified launcher were changed. Release verification and final reviews remain
-deferred until #36 is integrated.
+user-modified launcher were changed. At this checkpoint, Release verification and
+final reviews were deferred until #36 was integrated; the follow-up below records
+the completed verification and remaining endpoint-organization fix.
+
+## Final integrated endpoint-lifecycle follow-up
+
+On 2026-11-15, resumed the clean `integration/audit-21` branch at
+`dea89d82ccbff7a77d67c8055dd7c3e6e57d8c0f`, with all 15 tickets integrated, and
+reread the complete #21/#35 bodies and empty comment lists through `gh issue view`.
+This focused follow-up resolves the same S1/S2 gap reported by both final reviews:
+the two endpoint-generation theories still at the test-project root.
+
+- Moved the root `UserSecretsLifecycleTests.cs` to
+  `cli/test/Abox.Tests/UserSecrets/UserSecretsLifecycleTests.EndpointGeneration.cs`.
+  These cross-command create/replacement cases protect the shared user-secret flow,
+  beside the existing selection/lifecycle partial and its private fixture.
+- Added explicit Arrange/Act/Assert markers to both methods. In the malformed-input
+  test only, a named exit result separates the existing command action and assertion.
+  Namespace, partial class, method names, attributes, theory inputs, assertions and
+  private-helper access remain unchanged. No production files or test-only public
+  APIs changed; no new tests or trivial configuration assertions were introduced.
+- The five generation rows remain `published-create`, `local-create`, `published`,
+  `local` and `run`; all still verify the exact current-development override payload
+  and successful creation/replacement without a host file. The three malformed-input
+  rows remain `published`, `local` and `run`; all still verify failure, absence of
+  replacement/copy and value-free project/appsettings diagnostics.
+- Reversing only the phase comments and named exit local makes the moved source
+  identical to the original, ignoring blank lines. SHA-256 checks confirm the
+  existing `UserSecrets/UserSecretsLifecycleTests.cs`, transport `ShellSandbox`,
+  receiver safety suite and both worktree/original launcher scripts are unchanged.
+
+### Discovery, runtime metadata and skips
+
+Fresh Debug discovery before editing and after rebuilding is exactly equal across
+all JSON fields and entry order: **1,653 unique cases**, with zero additions,
+removals, duplicate IDs or changed metadata. This includes all **eight moved rows**:
+their IDs, class/method names, display names/theory arguments, explicit flags and
+any emitted skip metadata are unchanged. The normalized SHA-256 procedure described
+above yields these identical before/after fingerprints:
+
+```text
+Full discovery (1,653): 04e49791d1b7105878535a7fa24ba3d797a9d094ffa919e10e575e9e9424c135
+Moved theory rows (8): 20b92209cf2124ad46dfeb7f126fb7e5c82646721335ec3ebfbf245669a8392e
+```
+
+The before/after eight-row runtime XML matches as a multiset of
+name/type/method/result rows, with no skips. Full Debug before/after and full
+Release likewise have identical runtime rows and identical seven skipped
+identities/reasons. Release also discovers 1,653 unique cases with the same
+class/method/display names, theory arguments and explicit flags; its assembly path
+and path-dependent IDs differ from Debug as expected.
+
+The unchanged platform skips are:
+
+- `MatchingCaseCollidingHostIdsFailRatherThanChoosingAStore`:
+  `This host filesystem cannot create case-distinct synthetic store directories.`
+- All four `destinationLink`/`checkOnly` rows of
+  `ReceiverRejectsSymlinkAncestorsAndDestinationsWithoutTouchingTheirTargets`:
+  `This host cannot create the synthetic symlink needed by the receiver test.`
+- Both `generate` rows of
+  `LinkedProjectFilesAreNeverReadAndDoNotPreventSelectedStores`:
+  `File symlink tests require native link privileges on this host.`
+
+None is counted as passing coverage.
+
+### Completed final verification
+
+Restored the repository's CSharpier tool and solution through SDK 10.0.404. Built
+the solution serially in Debug before/after editing and in Release after editing;
+all builds completed with zero warnings/errors. Tests used the executable xUnit
+runner, not `dotnet test`, with a **1,800-second subprocess timeout per run**.
+
+| Check | Passed | Skipped | Failed/errors/not-run | Seconds |
+| --- | ---: | ---: | ---: | ---: |
+| Eight moved rows, before | 8 | 0 | 0 | 0.543 |
+| Full Debug baseline | 1,646 | 7 | 0 | 106.787 |
+| Eight moved rows, after | 8 | 0 | 0 | 0.542 |
+| Seven endpoint/generation suites listed above, after | 360 | 2 | 0 | 11.849 |
+| Full Debug, after | 1,646 | 7 | 0 | 102.317 |
+| Full Release, after | 1,646 | 7 | 0 | 107.103 |
+
+Commands run from the integration worktree:
+
+```powershell
+$sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
+$artifacts = 'C:/Users/UI520628/AppData/Local/Temp/11/opencode/audit21-final-endpoint-fix'
+dotnet $sdk10 tool restore
+dotnet $sdk10 restore cli/agentbox.slnx --disable-parallel
+dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentbox.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
+$debug = './cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe'
+$release = './cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.exe'
+# Capture before/after discovery directly as raw stdout bytes with Python subprocess.run.
+& $debug -list full/json -preEnumerateTheories -noColor
+& $release -list full/json -preEnumerateTheories -noColor
+& $debug -method Abox.Tests.UserSecretsLifecycleTests.EveryCreationAndReplacementPathGeneratesCurrentProjectOverridesWithoutAHostFile -method Abox.Tests.UserSecretsLifecycleTests.MalformedProjectConfigurationPreventsDestructiveReplacement -noLogo -noColor -maxThreads 2 -longRunning 120 -result-xml "$artifacts/after-focused.xml"
+# The seven-class endpoint/generation command above was also rerun.
+& $debug -noLogo -noColor -maxThreads 2 -longRunning 120 -result-xml "$artifacts/after-full-debug.xml"
+& $release -noLogo -noColor -maxThreads 2 -longRunning 120 -result-xml "$artifacts/after-full-release.xml"
+dotnet csharpier check cli
+git diff --check
+git diff --cached --check
+```
+
+CSharpier passed for all **209 C# files**; working and staged whitespace checks
+passed. Raw discovery, logs, XML, protected-file hashes, original source and
+comparison reports are retained in `$artifacts`. The only remaining verification
+limitations are the seven platform skips above. No live services, runtime/registry
+operations, real secret stores, unrelated refactors, issue/PR mutations or worktree
+cleanup were involved. The integration branch remains `integration/audit-21`.

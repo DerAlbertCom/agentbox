@@ -15,6 +15,7 @@ public sealed partial class UserSecretsLifecycleTests
         string entry
     )
     {
+        // Arrange
         using var fixture = new Fixture();
         if (!entry.EndsWith("-create", StringComparison.Ordinal))
             fixture.Existing();
@@ -35,10 +36,12 @@ public sealed partial class UserSecretsLifecycleTests
             .Sbx.GetUserSecretsHostPortsAsync(fixture.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 4317 });
 
+        // Act
         var exit = entry.EndsWith("-create", StringComparison.Ordinal)
             ? await fixture.Create(entry == "local-create")
             : await fixture.Replace(entry);
 
+        // Assert
         exit.Should().Be(0, fixture.Console.AllText);
         await fixture
             .Sbx.Received(1)
@@ -56,6 +59,7 @@ public sealed partial class UserSecretsLifecycleTests
     [InlineData("run")]
     public async Task MalformedProjectConfigurationPreventsDestructiveReplacement(string entry)
     {
+        // Arrange
         using var fixture = new Fixture();
         fixture.Existing();
         fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
@@ -66,8 +70,11 @@ public sealed partial class UserSecretsLifecycleTests
         );
         fixture.Root.File("folder/appsettings.json", "{\"Url\":\"synthetic-private\", broken}");
 
-        (await fixture.Replace(entry)).Should().Be(1);
+        // Act
+        var exit = await fixture.Replace(entry);
 
+        // Assert
+        exit.Should().Be(1);
         await fixture.NoReplacementOrCopy();
         fixture
             .Console.AllText.Should()
