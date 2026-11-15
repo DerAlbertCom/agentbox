@@ -133,7 +133,7 @@ public sealed class PruneServiceTests
     }
 
     [Fact]
-    public async Task ARegularPruneDoesNotStopTheSandboxes()
+    public async Task ARegularPruneStopsTheSandboxesWhenItIsAskedTo()
     {
         _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>()).Returns(SampleImages());
         _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
