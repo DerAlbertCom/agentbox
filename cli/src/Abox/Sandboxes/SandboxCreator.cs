@@ -4,6 +4,7 @@ using Abox.Kits;
 using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sbx;
+using Abox.UserSecrets;
 
 namespace Abox.Sandboxes;
 
@@ -32,7 +33,8 @@ public sealed class SandboxCreator(
     ISbxClient sbx,
     IConsole console,
     LocalSquadSource local,
-    RemoteSquadSource remote
+    RemoteSquadSource remote,
+    UserSecretsCopy userSecrets
 )
 {
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
@@ -41,15 +43,24 @@ public sealed class SandboxCreator(
         CancellationToken cancellationToken
     )
     {
-        ISquadSource source = request.Local ? local : remote;
-        var selection = source.Resolve(request);
-
         var location = Path.GetFullPath(request.Location);
         if (!Directory.Exists(location))
         {
             throw new AboxException($"The folder '{location}' does not exist.");
         }
 
+        var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
+        request = request with
+        {
+            Squad = folderConfig?.SelectSquad(request.Squad) ?? request.Squad,
+        };
+        ISquadSource source = request.Local ? local : remote;
+        var selection = source.Resolve(request);
+        var preparedSecrets = await userSecrets.PrepareAsync(
+            folderConfig,
+            force: false,
+            cancellationToken
+        );
         var prepared = await source.LoadAsync(selection, cancellationToken);
         var manifest = prepared.Metadata;
 
@@ -61,13 +72,17 @@ public sealed class SandboxCreator(
             request.AssumeYes,
             cancellationToken
         );
+        cancellationToken.ThrowIfCancellationRequested();
         await RegisterMcpServersAsync(mcpToRegister, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
         var mounts = CreateStateDirectories(name, manifest);
+        cancellationToken.ThrowIfCancellationRequested();
         if (replace)
         {
             await RemoveExistingSandboxAsync(name, cancellationToken);
         }
 
+        cancellationToken.ThrowIfCancellationRequested();
         var outcome = await sbx.CreateAsync(
             new SbxCreateRequest(
                 prepared.KitSource,
@@ -102,6 +117,32 @@ public sealed class SandboxCreator(
                 KitReference = prepared.KitReference,
             }
         );
+
+        if (folderConfig is not null)
+        {
+            var recovery =
+                $"The sandbox was created and its record retained, but required user-secret copying did not complete. "
+                + $"Completed files may remain replaced; no cross-store rollback is attempted. "
+                + $"Fix the folder configuration or destination/runtime and retry without recreating: abox user-secrets --location \"{location}\"";
+            try
+            {
+                var report = await userSecrets.CopyAsync(preparedSecrets, name, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                foreach (var store in report.Stores)
+                    console.WriteLine(
+                        $"Copied user-secret store '{store.Id}': {store.KeyCount} keys."
+                    );
+            }
+            catch (OperationCanceledException)
+            {
+                console.WriteError(recovery);
+                throw;
+            }
+            catch (AboxException exception)
+            {
+                throw new AboxException($"{exception.Message}{Environment.NewLine}{recovery}");
+            }
+        }
 
         console.WriteLine($"Created sandbox '{name}' for '{location}'.");
         console.WriteLine($"Open it with: abox run --location {location}");
