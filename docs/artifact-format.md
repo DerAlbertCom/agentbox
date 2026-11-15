@@ -63,7 +63,8 @@ a moving tag. No workload is built and no registry is written.
 The bundled `/usr/share/abox/squad.json` contains `SchemaVersion: 1`, `Team`,
 `Squad`, `Tag`, `CreatedAt`, `Mcp`, `State`, and informational `Kits`. The original
 publisher's identical format without `SchemaVersion` is also accepted as version 1.
-Identity, required fields and safe state paths are checked; every mount must have
+Identity, required fields and [portable canonical state paths and non-overlapping host mappings](authoring.md#state)
+are checked with the same rules as local creation; every mount must have
 an exact host-mount declaration in the processed set. Missing or incompatible
 metadata requires a maintainer rebuild/republish, never a local-manifest fallback.
 All metadata/MCP checks precede sandbox removal. Remote squad discovery is not

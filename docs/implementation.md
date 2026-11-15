@@ -364,6 +364,16 @@ Frontend resolution, registry-kit metadata and custom mixin recipes can still
 need network/build work; `--local` does not promise fully offline creation or
 prebuild arbitrary mixin recipes. The repository's mixins are declaration-only.
 
+`Kits/StateEntry` owns the shared portable state-path and overlap rules for `.abox`
+resolution, consumed local manifests and bundled published metadata. Creation
+validates the entire stored state list before MCP lookup/registration, state
+directory preparation or sandbox replacement, then mounts only those validated
+entries. Stored paths must be canonical and retain their original derived host
+mapping; they are not repaired on consumption. Sandbox overlap and portable
+host-mapping overlap (including case and Unicode-normalization aliases) are both
+rejected. Valid home-relative, absolute and whole-home mappings retain their
+existing persistence layout. See [the state input rules and mapping examples](authoring.md#state).
+
 Remote create instead consumes the published set's already built/processed
 workload and mixin layers and their merged v3 declarations. It does not pass
 team-local kit sources, local arguments or a host-builder override. No team
