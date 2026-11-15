@@ -26,6 +26,7 @@ public sealed class RunService(
     SandboxRecordStore records,
     SandboxCreator create,
     ISbxClient sbx,
+    SandboxResolver sandboxes,
     IHostPrograms hostPrograms,
     IConsole console
 )
@@ -50,42 +51,42 @@ public sealed class RunService(
         }
 
         var location = Path.GetFullPath(request.Location);
-        var name = SandboxName.For(location);
         var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
 
-        var sandbox = await sbx.FindSandboxAsync(name, cancellationToken);
+        var sandbox = await sandboxes.FindAsync(location, cancellationToken);
         if (sandbox is null)
         {
+            var name = SandboxName.For(location);
             console.WriteError($"There is no sandbox for '{location}'.");
             console.WriteError($"Create it with: {CreateCommandFor(name, location, folderConfig)}");
             return 1;
         }
 
-        if (!await ReplaceWithANewerBuildAsync(name, location, folderConfig, cancellationToken))
+        if (!await ReplaceWithANewerBuildAsync(sandbox, location, folderConfig, cancellationToken))
         {
             return 1;
         }
 
         foreach (var program in launcher.SandboxRequirements)
         {
-            if (await sbx.HasProgramAsync(name, program, cancellationToken))
+            if (await sbx.HasProgramAsync(sandbox.Name, program, cancellationToken))
             {
                 continue;
             }
 
             console.WriteError(
-                $"The image of '{name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
+                $"The image of '{sandbox.Name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
             );
             console.WriteError(
-                $"Create the sandbox again for this folder: {CreateCommandFor(name, location, folderConfig)}"
+                $"Create the sandbox again for this folder: {CreateCommandFor(sandbox.Name, location, folderConfig)}"
             );
             return 1;
         }
 
         var context = new LauncherContext(
             location,
-            name,
-            await WorkspaceOfAsync(name, location, cancellationToken),
+            sandbox.Name,
+            await WorkspaceOfAsync(sandbox.Name, location, cancellationToken),
             request.Argv,
             sbx,
             console
@@ -138,13 +139,13 @@ public sealed class RunService(
     /// was made of. Returns false when the command must not go on.
     /// </summary>
     private async Task<bool> ReplaceWithANewerBuildAsync(
-        string name,
+        SandboxInfo sandbox,
         string location,
         FolderConfig? folderConfig,
         CancellationToken cancellationToken
     )
     {
-        var record = records.Load(name);
+        var record = records.Load(sandbox.Name);
         if (record is null || record.KitReference is not null)
         {
             return true;
@@ -186,7 +187,8 @@ public sealed class RunService(
                     record.Tag,
                     folderConfig,
                     AssumeYes: true,
-                    Local: true
+                    Local: true,
+                    ExistingSandbox: sandbox
                 ),
                 cancellationToken
             ) == 0;

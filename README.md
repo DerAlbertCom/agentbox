@@ -167,16 +167,45 @@ absolute path; otherwise it is `~/.config/abox/config.yaml` on Linux/macOS or
 lowercase JFrog repository name, not a URL, host, path or tag. Omitted or blank
 values use the default. It is independent of each workload's `publishRepository`.
 
+### Reusing cape-agent-sandbox environments
+
+`run`, `user-secrets` and create/replacement checks find the sandbox for the
+effective folder (`--location`, then `defaultLocation`, then the current folder).
+They first check the current `<folder>-abox-<hash>` name. Only when it is absent
+do they check the exact historical `<folder>-ai-sbx-<hash>` generated name.
+Runtime/discovery errors stop the command; they are not treated as absence.
+
+A legacy sandbox is reused **in place**, including when sbx exec needs to start
+it. Probes, launchers and secret copying use its actual name. If both names exist,
+the agentbox name wins and the legacy sandbox is left alone. There is no automatic
+rename, recreation, cleanup, adoption record or persistent-state/Herdr migration.
+Arbitrary custom names and workspace-metadata matches are not discovered.
+
+`run` and `user-secrets` still never create a missing sandbox. Normal `create`
+uses current naming when neither candidate exists. Replacing an existing legacy
+sandbox still requires the usual confirmation (or explicit `--yes`), lists the
+same losses, and retains the selected name rather than converting it to agentbox
+naming. An accepted newer-build replacement from `run` does the same.
+
+On-demand `user-secrets` does **not verify the sandbox's squad** or require an
+agentbox record, even when `abox.json` declares a squad. It copies into the resolved
+existing sandbox without creating or changing any record. Create/run replacement
+squad checks remain unchanged. Review the [user-secret safety contract](#copying-net-user-secrets)
+before copying. Historical path spelling and link rules determine the legacy hash;
+this is not a general alias search across all spellings of a folder.
+
 ### Copying .NET user secrets
 
-Declare the squad and only the intended stores/keys in **the sandbox folder's
-`abox.json`** (not a squad `.abox` file or the source project selected by `--root`):
+Declare only the intended stores/keys and optionally the creation squad in **the
+sandbox folder's `abox.json`** (not a squad `.abox` file or the source project
+selected by `--root`):
 
 ```json
 {
   "squad": "ac",
   "userSecrets": [
     "5b3e0f6a-1c2d-4e5f-a6b7-c8d9e0f1a2b3",
+    "Cape.*",
     { "id": "my-dev-store", "keys": ["ConnectionStrings:*", "Feature:Enabled"] }
   ]
 }
@@ -201,7 +230,19 @@ abox user-secrets --location /path/to/project --force
 #### Selection and squad identity
 
 Plain IDs and objects can be mixed. A plain ID or `{"id":"my-dev-store"}` selects
-the **whole store**. A `keys` list selects effective .NET keys, such as
+the **whole store**. An ID ending in one `*`, such as `Cape.*`, selects every local
+store whose ID starts with the literal prefix `Cape.` (ordinal, case-insensitive).
+Only a safe nonempty literal prefix plus one terminal `*` is supported: no bare
+`*`, paths, recursive lookup or other glob syntax. A prefix with no matches selects
+no stores; a missing exact ID still fails. A matched directory without a readable
+`secrets.json` fails the entire preparation, even with `--force`; it is not an
+unmatched prefix. Matches use actual host ID spelling and
+are sorted; overlapping exact/prefix selections copy each store once, unioning
+their key selections (a whole-store selection wins). Repeated identical selection
+strings are still rejected case-insensitively. Matching unsafe host directory names
+or case-colliding IDs fail before any copy, rather than being silently skipped.
+
+A `keys` list selects effective .NET keys, such as
 `ConnectionStrings:Db` for a nested JSON property:
 
 - Matching is full-key, ordinal and case-insensitive. An exact pattern selects
@@ -227,9 +268,11 @@ scalar types and empty-container handling.
 The optional `squad` selects local or published creation when `--squad` is omitted.
 An explicit option must match case-insensitively; conflicts fail, not override the
 folder. The team still comes from `--team` or `defaultTeam`. With no folder squad,
-existing command selection applies. On-demand `user-secrets` and accepted `run`
-replacement require a known matching sandbox record when a folder squad is present;
-they never silently switch an existing sandbox's squad. Ordinary `run` (including
+existing command selection applies. Accepted `run` replacement requires a known
+matching sandbox record when a folder squad is present; it never silently switches
+an existing sandbox's squad. On-demand `user-secrets` ignores squad identity when
+selecting the existing sandbox: missing, matching or mismatched records do not
+block copying. Folder configuration is still validated. Ordinary `run` (including
 declining replacement) can still open the existing sandbox with a different or
 unknown recorded squad: it copies no secrets and changes no squad.
 
@@ -256,7 +299,7 @@ null/empty containers have no text. A blocked unmatched value does not prevent a
 safe filtered copy. A block names the store/key, never the value.
 
 `--force` is **on-demand only** and bypasses only matched deny-list policy, not
-invalid configuration/JSON, missing files, squad constraints, metadata/destination
+invalid configuration/JSON, missing files, policy metadata/destination
 checks, cancellation or transport errors. A warning is reported
 after a successful copy **only if selected original values actually matched**;
 passing `--force` with no match is not an override.
@@ -271,8 +314,12 @@ not trigger a copy.
 The host store is `<APPDATA>/Microsoft/UserSecrets/<id>/secrets.json` when
 `APPDATA` is set, **including on Unix**, otherwise
 `<HOME>/.microsoft/usersecrets/<id>/secrets.json`. Empty/relative environment roots
-fail; abox does not guess another user's profile. Only named files are read; host
-files are never changed. The sandbox destination is independently resolved from
+fail; abox does not guess another user's profile. Prefixes enumerate only direct
+store directories in that root, not project files or subdirectories. Only selected
+files are read; host files are never changed. The host user-secrets root itself,
+selected store directories and secret files must not be symbolic links/reparse
+points. Linked ancestors above that trusted root (for example a linked user profile)
+are allowed. The sandbox destination is independently resolved from
 the effective, non-root **default exec application user** and its `APPDATA`/`HOME`,
 using the same precedence. An application launched with a different environment
 must use matching roots. No host paths, local kits or published-source checkout

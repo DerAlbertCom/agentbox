@@ -1,4 +1,5 @@
 using Abox.Configuration;
+using Abox.LocalState;
 using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
@@ -8,6 +9,34 @@ namespace Abox.Tests;
 
 public sealed class UserSecretsCommandTests
 {
+    [Theory]
+    [InlineData(null)]
+    [InlineData("ac")]
+    [InlineData("")]
+    [InlineData("other")]
+    public async Task OnDemandCopyDoesNotRequireASandboxSquadRecord(string? recordedSquad)
+    {
+        using var fixture = new Fixture();
+        fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
+        fixture.Store("sample", "{}");
+        var records = new SandboxRecordStore(AboxPaths.For(fixture.Root.Path, fixture.Root.Path));
+        if (recordedSquad is not null)
+            records.Save(fixture.Name, new SandboxRecord { Squad = recordedSquad });
+
+        (await fixture.Run()).Should().Be(0, fixture.Console.AllText);
+
+        await fixture
+            .Sbx.Received(1)
+            .WriteUserSecretsAsync(fixture.Name, "sample", "{}", Arg.Any<CancellationToken>());
+        (records.Load(fixture.Name)?.Squad).Should().Be(recordedSquad);
+        await fixture
+            .Sbx.DidNotReceive()
+            .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
+        await fixture
+            .Sbx.DidNotReceive()
+            .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task MalformedUtf8InFolderConfigurationIsRejectedRatherThanNormalized()
     {
@@ -114,6 +143,7 @@ public sealed class UserSecretsCommandTests
     [InlineData("{\"userSecrets\":[],\"userSecrets\":[\"sample\"]}")]
     [InlineData("{\"unknown\":\"synthetic-value\"}")]
     [InlineData("{\"squad\":false}")]
+    [InlineData("{\"squad\":\"\"}")]
     public async Task MissingOrInvalidFolderConfigurationNeverWidensSelection(string? json)
     {
         using var fixture = new Fixture();
@@ -181,17 +211,18 @@ public sealed class UserSecretsCommandTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData("destination")]
+    [InlineData("policy")]
+    [InlineData("transfer")]
     public async Task TransferAndTargetPreparationFailuresAreValueFreeAndForceDoesNotBypassThem(
-        bool targetFailure
+        string failurePhase
     )
     {
         using var fixture = new Fixture();
-        fixture.Root.File("folder/abox.json", """{"userSecrets":["first","later"]}""");
+        fixture.Configure("""{"squad":"ac","userSecrets":["first","later"]}""");
         fixture.Store("first", "{}");
         fixture.Store("later", "{}");
-        if (targetFailure)
+        if (failurePhase == "destination")
             fixture
                 .Sbx.ValidateUserSecretsDestinationAsync(
                     Arg.Any<string>(),
@@ -200,6 +231,14 @@ public sealed class UserSecretsCommandTests
                 )
                 .Returns(
                     Task.FromException(new AboxException("synthetic-password 123456789 true"))
+                );
+        else if (failurePhase == "policy")
+            fixture
+                .Sbx.GetUserSecretsHostPortsAsync(fixture.Name, Arg.Any<CancellationToken>())
+                .Returns(
+                    Task.FromException<IReadOnlyList<int>>(
+                        new AboxException("synthetic-password 123456789 true")
+                    )
                 );
         else
             fixture
@@ -220,7 +259,7 @@ public sealed class UserSecretsCommandTests
             .NotContain("synthetic-password")
             .And.NotContain("123456789 true")
             .And.Contain("retry");
-        if (targetFailure)
+        if (failurePhase != "transfer")
             await fixture.NoWrites();
         else
             fixture.Console.AllText.Should().Contain("1 completed").And.Contain("rollback");
@@ -343,7 +382,7 @@ public sealed class UserSecretsCommandTests
         using var fixture = new Fixture(
             new AboxConfig { UserSecretsDenyList = ["PrOd.Example", "[stage]"] }
         );
-        fixture.Root.File("folder/abox.json", """{"userSecrets":["first","later"]}""");
+        fixture.Configure("""{"squad":"ac","userSecrets":["first","later"]}""");
         fixture.Store("first", """{"Password":"safe-synthetic"}""");
         fixture.Store(
             "later",

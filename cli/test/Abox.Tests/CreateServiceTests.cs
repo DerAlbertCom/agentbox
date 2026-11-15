@@ -36,6 +36,7 @@ public sealed class CreateServiceTests
         _service = new SandboxCreator(
             _records,
             _paths,
+            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
@@ -146,6 +147,7 @@ public sealed class CreateServiceTests
         var service = new SandboxCreator(
             _records,
             _paths,
+            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
@@ -227,6 +229,7 @@ public sealed class CreateServiceTests
         var service = new SandboxCreator(
             _records,
             _paths,
+            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
@@ -369,6 +372,7 @@ public sealed class CreateServiceTests
         var service = new SandboxCreator(
             _records,
             _paths,
+            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
@@ -563,6 +567,7 @@ public sealed class CreateServiceTests
         var service = new SandboxCreator(
             _records,
             _paths,
+            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(runner), _console),
@@ -632,6 +637,7 @@ public sealed class CreateServiceTests
         var service = new SandboxCreator(
             _records,
             _paths,
+            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
             new LocalSquadSource(_store, images, _console),

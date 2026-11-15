@@ -189,6 +189,56 @@ reproducibility. `sbx kit push` is deliberately not used: its
 legacy `spec.yaml` packager does not understand these v3 descriptors; see
 [artifact-format.md](artifact-format.md).
 
+### Shared existing-sandbox resolution (#10)
+
+`Sandboxes/SandboxResolver.FindAsync(location, token)` is the single location-to-existing-
+sandbox rule for run, on-demand user secrets and create/replacement checks. It returns
+the actual `SandboxInfo` or null: current `SandboxName.For` first, then the exact
+cape-agent-sandbox generated name only after a genuine null/not-found. Discovery
+exceptions and cancellation propagate, never enabling fallback or creation.
+Current naming and effective-location precedence are unchanged. No fuzzy/prefix or
+workspace-metadata matching is used; both-present inventories select the current
+candidate without touching the legacy one.
+
+`Naming/LegacySandboxName` keeps sanitization and hashing pure; `SandboxResolver`
+privately resolves the historical real path before calling it. The contract is
+verified against
+cape-agent-sandbox `1512ff71c31c6bfa7e923a43683c6d80624c40d0`:
+
+- Sanitize the original leaf before case conversion: non-ASCII-letter/digit/underscore/
+  hyphen characters become hyphens; lowercase invariantly, trim surrounding hyphens,
+  and use `root` when empty. Append `-ai-sbx-` and three SHA-256 bytes of the UTF-8
+  historical real path as six lowercase hex characters.
+- Windows uses `Path.GetFullPath` and a final directory link target when available,
+  falling back to the full path on missing/ordinary/inaccessible link resolution.
+  Preserve case, native separators and retained trailing separators in the hash.
+- Non-Windows uses the historical `bash -c 'cd "$1" 2>/dev/null && pwd -P' bash <path>`;
+  take its last output line on success, otherwise the original effective location.
+  Never hash the Windows-lowercased/slash-normalized current naming input instead.
+
+Callers carry the selected actual name into local-record reads, probes, launcher
+context, policy discovery, transfer and removal. Accepted run replacement passes
+its already-selected `SandboxInfo` in `SandboxCreationRequest.ExistingSandbox` so
+a second candidate appearing after consent cannot redirect destructive work.
+Create's read-only MCP validation, host-secret preparation, confirmation, cancellation
+checks, state preparation and removal safeguards remain in place. Explicitly
+authorized replacement creates and records the replacement under that same name;
+ordinary compatibility lookup writes no record or state/alias mapping and migrates
+neither legacy state layout nor Herdr registrations.
+
+On-demand user-secret copying does not verify squad identity or read/require a local
+sandbox record, even when `abox.json` declares `squad`. Missing, matching, unknown or
+mismatched records do not block copying. Host input and deny-list validation precede
+runtime access. Discovery writes no provenance; create/run replacement squad checks,
+destination/ownership, effective policy authorization, value-free reporting and
+sensitive transport checks are unchanged. This supersedes the earlier on-demand
+record prerequisite in #2/#10, per the user's subsequent policy correction.
+
+Explicit-name `exec`/`pipe`, inventory-wide prune and host proxy-secret commands do
+not use location fallback. Future location-based commands, including ports (#3),
+must use this resolver and retain the actual selected identity; this change adds
+neither ports nor public stop/delete commands. See [verification and red evidence](verification/legacy-sandbox-compatibility.md).
+
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag>]
 [--local] [--yes]`
 
@@ -229,7 +279,9 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
    schema/identity, state paths and matching host-mount capabilities are validated;
    missing/invalid metadata requires maintainer republication, never local fallback.
    Only `--local` reads the local build manifest for state and MCP metadata.
-3. Names the sandbox after the folder: `<folder>-abox-<hash>`, where the hash is the
+3. Resolves an existing current or legacy sandbox as above and retains its actual
+   name for an authorized replacement. For a new sandbox, names it after the
+   folder: `<folder>-abox-<hash>`, where the hash is the
    first five hex characters, uppercase, of SHA-256 over the normalized absolute
    path: forward slashes, lowercased on Windows.
 4. Validates MCP registrations read-only, then asks before replacing an existing
@@ -363,7 +415,7 @@ The team defaults to the user setting `defaultTeam` when `--team` is omitted.
 
 ### `abox user-secrets [--location <path>] [--force]`
 
-The on-demand path copies explicitly named .NET stores/selected keys into an
+The on-demand path copies explicitly selected .NET stores/selected keys into an
 existing local or published sandbox, with no kit-source or build dependency. It
 never creates or replaces a sandbox. See the
 [configuration, safety and recovery contract](../README.md#copying-net-user-secrets).
@@ -384,16 +436,28 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
 - `FolderConfig.LoadAsync(location, token)` reads runtime-only `abox.json`,
   returning null for absence. A missing file is an on-demand error but a lifecycle
   no-op. Its optional `squad` selects creation and rejects conflicting explicit
-  selections; on-demand copying and accepted run replacement require a matching
-  known sandbox record if that squad is present. Ordinary run does not impose that
-  copy/replacement constraint. The team still comes from command/user settings.
+  selections; accepted run replacement requires a matching known sandbox record
+  if that squad is present. On-demand copying never checks the sandbox's squad or
+  reads its record. Ordinary run does not impose the replacement constraint.
+  The team still comes from command/user settings.
 - `SandboxCreationRequest` carries the folder configuration snapshot loaded at
   command entry, including null for absence. Creation never reloads it, including
   after deletion; host selections are then snapshotted before destructive work.
   The command's early squad-conflict check and shared lifecycle's pure revalidation
   intentionally protect both public entry paths without duplicate file reads.
 - `UserSecretsCopy.PrepareAsync(folderConfig, force, token)` validates all entries,
-  snapshots every selected host file and its nested JSON tree, rejects duplicate
+  expands safe literal ID prefixes ending in one `*` against direct host store
+  directories, then snapshots every selected host file and its nested JSON tree. ID
+  patterns are validated separately from strict actual IDs. Expansion is ordinal
+  case-insensitive, deterministic within each entry, and deduplicated across
+  overlapping exact/prefix entries (key unions, whole store wins). No-match prefixes
+  select no stores; missing exact IDs fail. Matching unsafe/case-colliding host IDs
+  and symlinks/reparse points in the host user-secret root itself/stores/files fail
+  before sandbox access; linked profile ancestors above that trusted root are allowed.
+  A matched directory without a readable `secrets.json` fails all preparation instead
+  of being silently skipped as an unmatched prefix. See
+  [store-prefix semantics and verification](verification/user-secrets-store-prefixes.md).
+  Preparation rejects duplicate
   effective case-insensitive .NET keys before filtering, then checks all selected
   **original** values before rewriting/writes. Plain IDs or objects with omitted
   `keys` select the whole store. Full-key case-insensitive patterns support only
@@ -443,7 +507,7 @@ input, image layer or published artifact. Concurrent malicious filesystem edits 
 the sandbox user/root and crash durability are outside this contract.
 
 `--force` is available only on demand and bypasses only matched deny policy, not
-input, squad, metadata, destination or transport checks. The reporting contract is
+input, policy metadata, destination or transport checks. The reporting contract is
 to warn after successful copying only when at least one selected original value
 actually matched, never merely because the flag was supplied. Automatic copying
 always prepares with `force: false`; replacement consent/`--yes` is not force.
@@ -497,9 +561,10 @@ CSharpier and `git diff --check` passed. No Release build or tests were run for
 this final-review change.
 
 Lifecycle regression coverage now explicitly permits non-replacing runs with
-mismatched, missing or unknown squad records, while copying/accepted replacement
-still reject unintended squads. It also checks that entry-time folder snapshots,
-including absence, survive later file edits. A small composed CLI harness shares
+mismatched, missing or unknown squad records. On-demand copying now also permits
+these records; creation/accepted replacement still reject unintended squads.
+It also checks that entry-time folder snapshots, including absence, survive later
+file edits. A small composed CLI harness shares
 synthetic host/store and fake-tool setup across command, filtering, safety and
 lifecycle suites; behavior-specific helpers stay local. The null-deny-list guard
 remains intentional for directly constructed public settings, independently of
@@ -684,6 +749,7 @@ cli/src/Abox/
   Launchers/        one class per launcher
   Sandboxes/        application-level sandbox orchestration shared by create and run
     SandboxCreator.cs       the create operation shared by create and run
+    SandboxResolver.cs      current-first, exact legacy fallback for existing sandboxes
     PublishedSquadSource.cs reads the published set's bundled squad metadata
     SquadSources.cs         local and remote ISquadSource adapters
   Sbx/              every call to sbx: CLI arguments, settings and response models

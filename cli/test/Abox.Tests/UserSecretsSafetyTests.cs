@@ -17,6 +17,8 @@ public sealed class UserSecretsSafetyTests
     [InlineData("CON.txt", true)]
     [InlineData("sample.", false)]
     [InlineData("sample.", true)]
+    [InlineData("Cape.*", false)]
+    [InlineData("Cape.*", true)]
     public async Task TheSbxAdapterIndependentlyRejectsUnsafeStoreIdsBeforeStartingAProcess(
         string id,
         bool checkOnly

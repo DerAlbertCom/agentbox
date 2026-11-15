@@ -43,6 +43,7 @@ public sealed class RunServiceTests
         _create = new SandboxCreator(
             _records,
             _paths,
+            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
             new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
@@ -57,6 +58,7 @@ public sealed class RunServiceTests
             _records,
             _create,
             _sbx,
+            SandboxTest.Resolver(_sbx),
             hostPrograms,
             _console
         );
@@ -193,6 +195,7 @@ public sealed class RunServiceTests
             _records,
             _create,
             _sbx,
+            SandboxTest.Resolver(_sbx),
             Substitute.For<IHostPrograms>(),
             _console
         );
@@ -300,6 +303,7 @@ public sealed class RunServiceTests
             _records,
             _create,
             _sbx,
+            SandboxTest.Resolver(_sbx),
             Substitute.For<IHostPrograms>(),
             _console
         );
