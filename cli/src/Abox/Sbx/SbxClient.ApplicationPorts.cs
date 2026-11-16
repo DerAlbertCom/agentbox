@@ -55,54 +55,19 @@ public sealed partial class SbxClient
             ))
             .ToArray();
         foreach (var mapping in mappings)
-            if (
-                existing.Any(binding =>
-                    binding.HostPort == mapping.HostPort
-                    && binding.Protocol is "tcp" or "tcp4"
-                    && binding.HostIp is "127.0.0.1" or "0.0.0.0"
-                    && !Matches(binding, mapping)
-                    && !Matches(
-                        binding,
-                        new ApplicationPortMapping(
-                            relayPorts[mapping.SandboxPort],
-                            mapping.HostPort
-                        )
-                    )
-                )
-            )
-                throw new AboxException(
-                    $"Host port 127.0.0.1:{mapping.HostPort} has a conflicting runtime mapping. Inspect sandbox ports and free that binding explicitly, then retry; existing mappings were not changed."
-                );
-        var upgrades = mappings
-            .Distinct()
-            .Where(mapping => existing.Any(binding => Matches(binding, mapping)))
-            .ToArray();
-        if (upgrades.Length > 0)
         {
-            // Replace only exact requested direct mappings, after all relay listeners
-            // and conflicts are validated. Never unpublish by host port alone.
-            var unrelated = existing
-                .Where(binding => !upgrades.Any(mapping => Matches(binding, mapping)))
-                .ToArray();
-            var upgradeArguments = new List<string> { "ports", sandbox };
-            foreach (var mapping in upgrades)
-                upgradeArguments.AddRange([
-                    "--unpublish",
-                    $"127.0.0.1:{mapping.HostPort}:{mapping.SandboxPort}/tcp4",
-                ]);
-            upgradeArguments.Add("--json");
-            await RunOrThrowAsync(
-                new ProcessRequest(ExecutableName, upgradeArguments),
-                "sbx ports --unpublish (upgrade requested direct mappings to localhost relays)",
-                cancellationToken
+            var conflict = existing.FirstOrDefault(binding =>
+                binding.HostPort == mapping.HostPort
+                && binding.Protocol is "tcp" or "tcp4"
+                && binding.HostIp is "127.0.0.1" or "0.0.0.0"
+                && !Matches(
+                    binding,
+                    new ApplicationPortMapping(relayPorts[mapping.SandboxPort], mapping.HostPort)
+                )
             );
-            existing = await ReadApplicationBindingsAsync(sandbox, cancellationToken);
-            if (
-                upgrades.Any(mapping => existing.Any(binding => Matches(binding, mapping)))
-                || unrelated.Any(binding => !existing.Contains(binding))
-            )
+            if (conflict is not null)
                 throw new AboxException(
-                    "Runtime did not confirm the requested direct-mapping upgrade and preservation of unrelated mappings. Inspect sandbox ports and retry; some requested bindings may need republication."
+                    $"Host port 127.0.0.1:{mapping.HostPort} has a conflicting runtime mapping {conflict.HostIp}:{conflict.HostPort}:{conflict.SandboxPort}/{conflict.Protocol}. Ownership is unproven; abox will not replace it. Inspect sandbox ports and, only if you intend to replace it, explicitly remove only that exact binding before retrying; existing mappings were not changed."
                 );
         }
         var missing = forwarded

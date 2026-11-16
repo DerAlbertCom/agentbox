@@ -40,10 +40,11 @@
   reads restored mappings. Ensure sandbox relays, then reuse exact matching
   host-to-relay mappings; reject conflicting local bindings and unknown/malformed
   inventory. Append missing mappings in one sbx call
-  and confirm requested mappings via a fresh inventory. Upgrade only exact requested
-  direct native mappings after relay readiness/full conflict validation, using their
-  full original specs and confirming unrelated-inventory preservation. Never remove
-  or overwrite unrelated mappings.
+   and confirm requested mappings via a fresh inventory. Refuse every unproven direct
+   native binding at a requested host port, even an exact match at default offset 10000.
+   Diagnostics identify the full conflicting spec; deliberate operator inspection and
+   manual exact removal are required if replacement is intended. Never remove or
+   overwrite unrelated mappings or automatically unpublish any binding.
   Occupied ports/runtime failure return 1, cancellation 130. Some bindings may remain
   after failure/cancellation, as may sandbox relays; inspect and retry after correcting the cause. No
   transaction, rollback, stale-mapping cleanup or concurrent-writer guarantee.
@@ -97,20 +98,26 @@ actionably before any new host publication; abox never installs dependencies.
   health check. An occupied saved relay port fails without taking over/killing its
   listener or silently selecting a new target for an existing host mapping.
 
-An older **exact requested** `127.0.0.1:<host>:<application>/tcp4` native mapping can
-be upgraded to its localhost-capable relay. All requested conflicts and relay
-readiness are validated first; removal uses the complete original spec, never just
-a host port. Fresh inventory must confirm removal and preservation of unrelated
-bindings before publication continues. Different targets, wildcard/non-loopback
-bindings and non-exact protocols are conflicts, never removed. There is no atomic
-replace/rollback: failure or cancellation can leave a requested binding absent;
-retry uses the saved relay and republishes it. No unrelated mapping is migrated.
+An **exact requested** `127.0.0.1:<host>:<application>/tcp4` native mapping is not proof
+of abox ownership at **any offset**. It is now a conflict, never an automatic upgrade.
+Only confirmed abox relay mappings are reusable. Different targets, wildcard/non-loopback
+bindings and non-exact protocols are also conflicts, never removed. See the
+[explicit operator recovery examples](../application-port-offsets.md#persistent-mapping-and-ownership-contract).
+Failure/cancellation may leave newly published bindings/relays, but cannot remove an
+existing native binding. Retry uses confirmed relays and only publishes missing bindings.
 
 Do not delete relay state while runtime mappings still target its ports. No stale-port
 cleanup, host/sandbox reboot durability or hostile same-user/root writer guarantee
 is claimed.
 
 ## Runtime evidence (Windows, 2026-11-16)
+
+**Historical evidence through `c9ceeb1`:** the runs in this section exercised the
+then-current implementation, including its exact-native automatic upgrade. That
+upgrade was later retired during #45 safety hardening because exact numbers do not
+establish ownership. The historical observations below are retained unchanged; they
+are not evidence that the current product performs or permits automatic takeover.
+See [current hardening verification](../application-port-offsets.md) for the new contract.
 
 Both installed client and running server were **v0.51.0**, revision
 `7d55286de0c775148b985ed349f760f1eba06203`, server API `0.49.0`.
@@ -260,11 +267,12 @@ fails, the probe prints the sandbox name and cleanup warning; do not prune broad
 Append `--sandbox-localhost` for the **required positive** localhost-only-app check;
 it must return zero, including the host response after abox exits. Without the flag,
 the app uses a wildcard bind, which must also work without relay/app-port collision.
-Both modes run the 12 real receiver checks first, preserve an unrelated direct native
-mapping, upgrade an exact requested direct mapping, and verify HTTP again after
-stop/start and restarting the synthetic app. Verification-only `--port=8213` chooses
+Both modes run the current real receiver checks first, preserve an unrelated direct native
+mapping, reject an exact requested direct mapping with unchanged inventory, then explicitly
+remove only that probe-owned binding as the operator before retrying. They verify HTTP
+again after stop/start and restarting the synthetic app. Verification-only `--port=8213` chooses
 a different synthetic app port and its next three ports, still using the shipped
-fixed offset 10000; it does not add a product option or change user app startup settings.
+offset 10000; this probe does not exercise the product's custom-offset option or change user app startup settings.
 The probe refuses initially occupied test ports rather than modifying other mappings;
 do not run it concurrently with another verifier using its chosen four host ports.
 
@@ -286,7 +294,7 @@ case; they are not claimed as passing. Descendant/root directory-link coverage
 ran successfully using native Windows junctions. CSharpier passed for `cli` and
 the checked-in verification programs; `git diff --check` passed.
 
-Relay-fix Debug verification: **1765 passed, 15 platform skips, zero failed** (1780
+Historical relay-fix Debug verification: **1765 passed, 15 platform skips, zero failed** (1780
 total). Focused ports command/adapter tests: **61 passed, one platform skip** (62
 total). Debug solution build: **zero warnings/errors**. CSharpier passed for `cli`
 and the checked-in verification programs; `git diff --check` passed. New tests

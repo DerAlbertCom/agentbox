@@ -128,13 +128,17 @@ class ReceiverChecks(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual(relay, json.loads(result.stdout)[0]["relay_port"])
 
-    def test_native_mapping_with_another_offset_is_not_assumed_owned_or_upgraded(self):
+    def test_native_mapping_with_another_host_port_is_an_unproven_conflict_not_an_offset_change(self):
         # Arrange: no relay state exists; a direct native binding may belong to another tool.
         bindings = json.dumps([[8203, 18203]])
         # Act
         result = self.invoke(8203, "--offset", 20000, "--bindings", bindings)
         # Assert
-        self.assertIn("offset change", result.stderr)
+        self.assertIn("Direct native mapping conflict", result.stderr)
+        self.assertIn("18203 -> sandbox target 8203", result.stderr)
+        self.assertIn("ownership is unknown", result.stderr)
+        self.assertIn("explicitly remove only that exact binding", result.stderr)
+        self.assertNotIn("offset change", result.stderr)
         self.assertNotEqual(0, result.returncode)
         self.assertFalse(os.path.exists(os.path.join(self.root, "8203.port")))
 

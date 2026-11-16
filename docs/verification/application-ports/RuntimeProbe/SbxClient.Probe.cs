@@ -78,4 +78,19 @@ public sealed partial class SbxClient
             ),
             token
         );
+
+    // Explicit probe-operator consent only, never automatic application-port cleanup.
+    public Task<ProcessResult> RemoveExactProbeMappingAsync(
+        string name,
+        int target,
+        int host,
+        CancellationToken token
+    ) =>
+        runner.RunAsync(
+            new ProcessRequest(
+                ExecutableName,
+                ["ports", name, "--unpublish", $"127.0.0.1:{host}:{target}/tcp4", "--json"]
+            ),
+            token
+        );
 }

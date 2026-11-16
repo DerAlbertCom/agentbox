@@ -738,9 +738,10 @@ option, snapshot setting, then 10000. The same immutable snapshot still contains
 squad and user-secret selections for creation/replacement callers; absence stays null.
 Future lifecycle setup can select from that entry-time snapshot without rereading
 the workspace. `AppPorts.PublishAsync(location, sandbox, offset, token)` applies the
-selected offset to every discovered occurrence before calling the adapter. The
-original three-argument overload remains compatible and uses default 10000. This
-does not add automatic create/recreate setup (#47).
+selected offset to every discovered occurrence before calling the adapter. An explicit
+offset is required: there is no overload that silently substitutes 10000. Lifecycle
+callers (#47) must select from their entry-time folder snapshot, not reread configuration.
+This does not add automatic create/recreate setup.
 
 Offsets are integers -65534..65534, including zero and negatives, with complete-plan
 widened arithmetic and resulting-port validation in 1..65535 before runtime mutation.
@@ -762,19 +763,22 @@ No host worker, shell-lifetime assumption or PID-based adoption/killing is neede
 The receiver gets the selected offset and validated TCP-binding snapshot. Under its
 setup lock it reads all saved relay ports/control sockets, including no-longer-discovered
 apps and running relays whose save acknowledgement was lost. Any existing binding
-to a known relay (or requested direct application target) with a different offset
+to a known relay with a different offset
 refuses the whole change before starting new relays or changing bindings. Operators
 must remove exact old bindings explicitly to change offsets; no ownership guessing,
 automatic stale-binding removal or concurrent runtime-writer transaction is claimed.
+Direct bindings to a requested app at another host port are also refused conservatively,
+with an unproven-direct-mapping diagnostic, not a claim of a previous abox offset.
 
 The adapter reuses exact `127.0.0.1:<host>:<relay>/tcp4` mappings, refuses conflicting
 or malformed inventory, only appends missing bindings and verifies them after
-publication. After validating all conflicts and relay readiness, it upgrades an exact
-requested direct native mapping using its complete original loopback/host/app/protocol
-spec, confirms removal and unrelated-inventory preservation, then publishes the relay.
-It never removes or overwrites unrelated mappings; different targets, wildcard binds
-and non-exact protocols remain conflicts. Upgrade failure/cancellation may leave the
-requested host binding absent; retry republishes it without replacing the sandbox.
+publication. Every unproven direct native binding at a requested host port is a conflict,
+even an exact loopback/host/app/protocol match at offset 10000. Matching numbers are not
+ownership provenance. abox never unpublishes bindings automatically; diagnostics identify
+the full conflicting spec and require deliberate operator inspection and exact removal
+if replacement is intended. Different targets, wildcard binds and non-exact protocols
+also remain conflicts. The historical #43 automatic native upgrade is retired; existing
+proven relay mappings remain reusable, including the already-converted Deals mapping.
 Application publishing is deliberately separate from user-secrets' opposite-direction
 authorized host-access policy inventory.
 

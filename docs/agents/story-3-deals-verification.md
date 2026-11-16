@@ -16,6 +16,14 @@ reviewed relay implementation present at merge **`fb4658a`** (verification HEAD
 `c9ceeb1`). It did not restart the API, agents or sandbox, change application
 bindings, or resume the separately blocked host-certificate copy.
 
+**Later #45 safety hardening:** the historical exact-native automatic upgrade
+recorded here is retired. Current abox refuses all unproven direct native bindings,
+including offset 10000, until an operator deliberately removes the exact binding.
+This does not invalidate the observations at `c9ceeb1`, require touching this sandbox,
+or change reuse of its already-confirmed abox relay mapping. The retained `--apply`
+helper describes the old one-shot check and is not a current upgrade procedure;
+do not rerun it. No new live Deals verification is claimed by this documentation note.
+
 ### Narrow production-adapter upgrade and repeat
 
 - Rechecked exact selected identity **`rwe-ai-sbx-41bc30`**, already running;
