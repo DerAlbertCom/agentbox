@@ -1,6 +1,7 @@
 """Exercise the production receiver's process/TCP interface on Linux."""
 
 import concurrent.futures
+import contextlib
 import json
 import os
 from pathlib import Path
@@ -17,7 +18,8 @@ import unittest
 if sys.platform != "linux":
     sys.exit("Receiver checks require Linux (Unix sockets and SO_PEERCRED).")
 
-RECEIVER = (Path(__file__).resolve().parents[3] / "cli/src/Abox/Sbx/application_ports.py").read_text(encoding="utf-8")
+RECEIVER = Path(os.environ.get("ABOX_APPLICATION_PORTS_RECEIVER",
+    Path(__file__).resolve().parents[3] / "cli/src/Abox/Sbx/application_ports.py")).read_text(encoding="utf-8")
 
 
 class ReceiverChecks(unittest.TestCase):
@@ -45,11 +47,13 @@ class ReceiverChecks(unittest.TestCase):
         except (FileNotFoundError, ConnectionRefusedError):
             pass
 
-    def invoke(self, *ports):
+    def invoke(self, *ports, child_python=None):
         return subprocess.run(
-            [sys.executable, "-I", "-c", "import sys; SOURCE=sys.stdin.read(); exec(compile(SOURCE,'<receiver>','exec'))",
+            [sys.executable, "-I", "-c",
+             "import os,sys; sys.executable=os.environ.get('ABOX_TEST_CHILD_PYTHON',sys.executable); SOURCE=sys.stdin.read(); exec(compile(SOURCE,'<receiver>','exec'))",
              *map(str, ports)], input=RECEIVER, text=True, capture_output=True,
-            env={**os.environ, "HOME": self.home}, timeout=20)
+            env={**os.environ, "HOME": self.home,
+                 **({"ABOX_TEST_CHILD_PYTHON": child_python} if child_python else {})}, timeout=20)
 
     def ensure(self, port):
         result = self.invoke(port)
@@ -112,6 +116,51 @@ class ReceiverChecks(unittest.TestCase):
         # Assert
         self.assertEqual([relay] * 4, repeated)
         self.assertEqual(1, len(json.loads(self.invoke(8203, 8203).stdout)))
+
+    def test_connections_beyond_the_active_limit_are_closed(self):
+        # Arrange: hold all 128 application connections open.
+        with contextlib.ExitStack() as connections:
+            application = connections.enter_context(socket.create_server(("127.0.0.1", 0), backlog=128))
+            application.settimeout(10)
+            port = application.getsockname()[1]
+            relay = self.ensure(port)
+            for _ in range(128):
+                connections.enter_context(socket.create_connection(("127.0.0.1", relay), timeout=10))
+                target, _ = application.accept()
+                connections.enter_context(target)
+            # Act: no 129th worker may wait indefinitely on another target.
+            with socket.create_connection(("127.0.0.1", relay), timeout=3) as overflow:
+                # Assert
+                self.assertEqual(b"", overflow.recv(1))
+
+    def test_failed_startup_child_is_reaped_without_persisting_and_retry_recovers(self):
+        # Arrange: substitute only the detached executable, not the receiver bytes.
+        child = os.path.join(self.home, "not-ready-python")
+        pid_path = os.path.join(self.home, "child.pid")
+        with open(child, "w") as stream:
+            stream.write("#!" + sys.executable + "\n"
+                         "import os,sys,time\n"
+                         "open(os.path.join(os.environ['HOME'],'child.pid'),'w').write(str(os.getpid()))\n"
+                         "os.write(int(sys.argv[-1]),b'wrong')\n"
+                         "time.sleep(60)\n")
+        os.chmod(child, 0o700)
+        # Act
+        result = self.invoke(8203, child_python=child)
+        # Assert: only a ready relay may be saved or acknowledged.
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("failed readiness", result.stderr)
+        self.assertEqual("", result.stdout)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "8203.port")))
+        pid = int(Path(pid_path).read_text())
+        try:
+            with self.assertRaises(ProcessLookupError):
+                os.kill(pid, 0)
+        except AssertionError:
+            # Fixture-owned negative-control child only; never terminate by relay state.
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGTERM)
+            raise
+        self.ensure(8203)
 
     def test_offset_change_refuses_old_bindings_including_no_longer_discovered_apps(self):
         # Arrange: one old app is no longer discovered, but its binding remains.
