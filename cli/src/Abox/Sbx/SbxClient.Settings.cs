@@ -6,8 +6,6 @@ namespace Abox.Sbx;
 
 public sealed partial class SbxClient
 {
-    private const string AllowedSourcesKey = KitSourceAllowlist.Key;
-
     /// <summary>Preserves the evaluated allowlist, adding only the requested repository prefix.</summary>
     public async Task EnsureKitSourceAllowedAsync(
         string repositoryPrefix,
@@ -40,7 +38,7 @@ public sealed partial class SbxClient
         if (source == "envvar")
         {
             throw new AboxException(
-                $"Cannot allow kit repository '{repositoryPrefix}': '{AllowedSourcesKey}' is controlled by an environment variable. Ask your administrator to allow this repository; no sandbox was replaced."
+                $"Cannot allow kit repository '{repositoryPrefix}': '{KitSourceAllowlist.Key}' is controlled by an environment variable. Ask your administrator to allow this repository; no sandbox was replaced."
             );
         }
 
@@ -48,14 +46,14 @@ public sealed partial class SbxClient
         var result = await runner.RunAsync(
             new ProcessRequest(
                 ExecutableName,
-                ["settings", "set", AllowedSourcesKey, JsonSerializer.Serialize(updated)]
+                ["settings", "set", KitSourceAllowlist.Key, JsonSerializer.Serialize(updated)]
             ),
             cancellationToken
         );
         if (!result.Succeeded)
         {
             throw new AboxException(
-                $"Cannot allow kit repository '{repositoryPrefix}': 'sbx settings set {AllowedSourcesKey}' failed: {Describe(result)}. Administrator constraints must permit this repository; no sandbox was replaced."
+                $"Cannot allow kit repository '{repositoryPrefix}': 'sbx settings set {KitSourceAllowlist.Key}' failed: {Describe(result)}. Administrator constraints must permit this repository; no sandbox was replaced."
             );
         }
 
@@ -78,7 +76,7 @@ public sealed partial class SbxClient
         }
 
         throw new AboxException(
-            $"The update of '{AllowedSourcesKey}' did not preserve the allowlist and allow '{repositoryPrefix}' in the evaluated settings. Check environment overrides, administrator policy and concurrent settings changes; no sandbox was replaced."
+            $"The update of '{KitSourceAllowlist.Key}' did not preserve the allowlist and allow '{repositoryPrefix}' in the evaluated settings. Check environment overrides, administrator policy and concurrent settings changes; no sandbox was replaced."
         );
     }
 
@@ -87,19 +85,22 @@ public sealed partial class SbxClient
     )
     {
         var result = await runner.RunAsync(
-            new ProcessRequest(ExecutableName, ["settings", "get", AllowedSourcesKey, "--json"]),
+            new ProcessRequest(
+                ExecutableName,
+                ["settings", "get", KitSourceAllowlist.Key, "--json"]
+            ),
             cancellationToken
         );
         if (!result.Succeeded)
         {
             throw new AboxException(
-                $"'sbx settings get {AllowedSourcesKey}' failed: {Describe(result)}. No sandbox was replaced."
+                $"'sbx settings get {KitSourceAllowlist.Key}' failed: {Describe(result)}. No sandbox was replaced."
             );
         }
 
         using var document = Deserialize<JsonDocument>(
             result.StandardOutput,
-            $"sbx settings get {AllowedSourcesKey}"
+            $"sbx settings get {KitSourceAllowlist.Key}"
         );
         return KitSourceAllowlist.DecodeRecord(document.RootElement);
     }
@@ -162,7 +163,7 @@ public sealed partial class SbxClient
         catch (Exception exception) when (exception is UnauthorizedAccessException or IOException)
         {
             throw new AboxException(
-                $"Cannot lock updates to '{AllowedSourcesKey}'. Close other abox processes and check permissions for the abox lock directory in your local application data, then retry. No settings were changed and no sandbox was replaced.",
+                $"Cannot lock updates to '{KitSourceAllowlist.Key}'. Close other abox processes and check permissions for the abox lock directory in your local application data, then retry. No settings were changed and no sandbox was replaced.",
                 exception
             );
         }
