@@ -15,6 +15,9 @@ import threading
 import time
 
 
+SAVED_RELAY_CONFLICT = "A saved relay port conflicts with a requested application port; nothing was replaced."
+
+
 def fail(message):
     raise RuntimeError(message)
 
@@ -237,7 +240,7 @@ def known_relays(root):
 
 def reject_binding_conflicts(ports, saved, offset, bindings):
     if set(ports) & set(saved.values()):
-        fail("A saved relay port conflicts with a requested application port; nothing was replaced.")
+        fail(SAVED_RELAY_CONFLICT)
     if offset is None:
         return
     # Protect even undiscovered apps and cancellation before the .port was saved.
@@ -254,7 +257,7 @@ def ensure_owned_relays(root, ports, reserved, saved):
     for port in ports:
         relay_port = start(root, port, saved.get(port), set(ports) | reserved | set(saved.values()))
         if relay_port in ports:
-            fail("A saved relay port conflicts with a requested application port; nothing was replaced.")
+            fail(SAVED_RELAY_CONFLICT)
         # Persist only after readiness. A failed save intentionally leaves the live
         # control socket discoverable, so retry can recover without killing a relay.
         save_port(os.path.join(root, str(port) + ".port"), relay_port)

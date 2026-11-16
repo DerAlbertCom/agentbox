@@ -2,6 +2,7 @@
 
 import base64
 from contextlib import contextmanager
+from enum import IntEnum
 import fcntl
 import hashlib
 import json
@@ -13,10 +14,26 @@ import ssl
 import stat
 import sys
 import time
+from typing import NamedTuple, Optional
 
 
 NODE_SOURCE_LIMIT = 1024 * 1024
 MAX_NODE_SOURCES = 16
+
+
+class DevelopmentCertificateOutcome(IntEnum):
+    # Private receiver contract, also named in SbxClient.DevelopmentCertificate.cs.
+    StaleParents = 42
+    ProcessEnvironmentsUnavailable = 43
+    NodeExtraCaIncomplete = 44
+    RuntimeBusy = 75
+    InvalidConfiguration = 78
+
+
+class CertificateOperation(NamedTuple):
+    mode: str
+    transfer: str
+    payload: Optional[bytes]
 
 
 def require(condition):
@@ -187,10 +204,7 @@ def write_atomic(root, name, payload):
     temporary = ".transfer-" + secrets.token_hex(16) + ".tmp"
     output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=root)
     try:
-        with os.fdopen(output, "wb") as destination:
-            destination.write(payload)
-            destination.flush()
-            os.fsync(destination.fileno())
+        write_and_sync(output, payload)
         os.replace(temporary, name, src_dir_fd=root, dst_dir_fd=root)
         os.fsync(root)
     finally:
@@ -313,7 +327,7 @@ def launch_environment(root, uid, command):
     except (CallerCAInputError, NodeTrustCapacityError):
         sys.stderr.write("abox HTTPS: Node trust is NOT configured. Check NODE_EXTRA_CA_CERTS (readable regular PEM file, at most 1 MiB; maximum 16 distinct trust inputs). Preserve/fix the caller input or inspect unused owned node pairs, then retry 'abox ports'. Ordinary/recovery commands retain the caller's original Node setting and protected Kestrel configuration.\n")
         if is_agent(command) and not recovery:
-            return 78
+            return DevelopmentCertificateOutcome.InvalidConfiguration
         node = "-"
     print(config["password"] + " " + node)
 
@@ -323,7 +337,7 @@ def parent_launch_refusal(current, command, recovery):
         return None
     sys.stderr.write("abox HTTPS: " + ("stale Herdr/agent parent" if current is False else "cannot inspect existing agent process environment (/proc permissions)") + "; existing agents are NOT confirmed configured. Save/exit and ordinary transport remain available. Explicitly initialize fresh parents through abox; no restart was performed.\n")
     if is_agent(command) and not recovery:
-        return 42 if current is False else 43
+        return DevelopmentCertificateOutcome.StaleParents if current is False else DevelopmentCertificateOutcome.ProcessEnvironmentsUnavailable
     return None
 
 
@@ -342,6 +356,11 @@ def remove_abandoned_transfers(root):
 
 def write_transfer(root, temporary, payload):
     output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=root)
+    write_and_sync(output, payload)
+
+
+def write_and_sync(output, payload):
+    # Private-runtime descriptor ownership only; root public trust stays separate.
     with os.fdopen(output, "wb") as destination:
         destination.write(payload)
         destination.flush()
@@ -387,10 +406,7 @@ class CertificateCommit:
         # Preserve the final staging-file cleanup even when writing fails.
         output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=self.root)
         try:
-            with os.fdopen(output, "wb") as destination:
-                destination.write(payload)
-                destination.flush()
-                os.fsync(destination.fileno())
+            write_and_sync(output, payload)
             check_contents(self.root, self.uid)
             # Stable path/password: renewal replaces only the certificate bytes.
             os.replace(temporary, target, src_dir_fd=self.root, dst_dir_fd=self.root)
@@ -407,39 +423,38 @@ def runtime_status(root, uid):
     try:
         node_bundle(root, uid)
     except (CallerCAInputError, NodeTrustCapacityError):
-        return 44
+        return DevelopmentCertificateOutcome.NodeExtraCaIncomplete
     current = parents_current(config, uid)
-    return 0 if current is True else 42 if current is False else 43
+    return 0 if current is True else DevelopmentCertificateOutcome.StaleParents if current is False else DevelopmentCertificateOutcome.ProcessEnvironmentsUnavailable
 
 
 def dispatch(root, uid, operation):
-    mode, transfer, payload = operation
     if root is None:
-        require(mode in ("prepare", "cleanup"))
-        if mode == "prepare":
+        require(operation.mode in ("prepare", "cleanup"))
+        if operation.mode == "prepare":
             print(secrets.token_hex(32))
         return
-    temporary = ".transfer-" + transfer + ".tmp"
-    if mode == "prepare":
+    temporary = ".transfer-" + operation.transfer + ".tmp"
+    if operation.mode == "prepare":
         print(read_config(root, uid)["password"] if "config.json" in os.listdir(root) else secrets.token_hex(32))
         return
-    if mode == "refresh-bootstrap":
+    if operation.mode == "refresh-bootstrap":
         read_config(root, uid)
         ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
         read_public_certificate(root, uid)
         write_atomic(root, "bootstrap.py", SOURCE.encode("utf-8"))
         return
-    if mode == "status":
+    if operation.mode == "status":
         return runtime_status(root, uid)
-    if mode == "cleanup":
+    if operation.mode == "cleanup":
         remove_transfer(root, temporary)
         return
     remove_abandoned_transfers(root)
     commit = CertificateCommit(root, uid)
-    if mode == "activate":
-        commit.activate(temporary, payload)
+    if operation.mode == "activate":
+        commit.activate(temporary, operation.payload)
     else:
-        commit.commit(temporary, "active.json", payload)
+        commit.commit(temporary, "active.json", operation.payload)
 
 
 def run():
@@ -454,7 +469,7 @@ def run():
     require(mode in ("stage", "activate", "prepare", "status", "cleanup", "refresh-bootstrap") and re.fullmatch(r"[0-9a-f]{32}", transfer) is not None)
     payload = read_payload() if mode in ("stage", "activate") else None
     with locked_runtime(uid, create=mode in ("stage", "activate")) as root:
-        return dispatch(root, uid, (mode, transfer, payload))
+        return dispatch(root, uid, CertificateOperation(mode, transfer, payload))
 
 
 def interrupted(signum, frame):
@@ -469,12 +484,12 @@ try:
     result = run()
 except RuntimeBusy:
     sys.stderr.write("abox HTTPS: protected runtime is busy after a bounded lock wait; retry the operation or 'abox ports'. No complete readiness is claimed.\n")
-    sys.exit(75)
+    sys.exit(DevelopmentCertificateOutcome.RuntimeBusy)
 except Exception:
     # No traceback, JSON, certificate, password or raw exception reaches stderr.
     if len(sys.argv) > 1 and sys.argv[1] == "environment":
         sys.stderr.write("abox HTTPS: protected launch configuration is invalid or incomplete (including public.pem or owned Node sources). Check runtime ownership, permissions, mounts and file integrity; retry 'abox ports'. No complete readiness is claimed and no trust configuration was discarded.\n")
-        sys.exit(78)
+        sys.exit(DevelopmentCertificateOutcome.InvalidConfiguration)
     sys.exit(1)
 else:
     sys.exit(result or 0)
