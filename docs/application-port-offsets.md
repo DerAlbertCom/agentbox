@@ -130,6 +130,13 @@ The actual Debug abox executable subsequently passed the full checked-in
   dead saved relays, partial-publication/lost-save acknowledgement recovery and
   explicit-removal/new-offset reuse. Task-owned sandbox cleanup returned 0.
 
+A final post-integration-merge run in fresh
+`abox-issue45-final-b2de4ad5-abox-67BBA` repeated the entire HTTP/default/override/
+conflict/recovery flow, reusing relay **56270** across offsets. All **17 receiver
+checks** passed, now also explicitly checking that a different-offset direct native
+binding is not assumed owned or upgraded. The unrelated binding and configuration
+again survived unchanged; task-owned sandbox cleanup returned 0.
+
 The probe checks chosen host ports are free before creation, refuses an existing
 workspace/sandbox, uses an already available local template with `--pull never`,
 and removes only its task-owned sandbox in `finally`. All sbx calls are argv lists
@@ -152,10 +159,10 @@ the host publication checks. `--templates` lists local templates read-only. Reta
 synthetic workspaces are named in output; remove only those exact task-owned folders.
 Run the Debug solution tests, CSharpier checks and `git diff --check` as well.
 
-Automated Debug verification for this slice: **1808 passed, 15 platform skips,
-zero failures** (1823 total). The skips are the existing Windows file/link privilege
-and case-distinct-directory limitations; they are not counted as passes. Focused
-ports/configuration/adapter/user-secret snapshot checks passed, and the composed
+Final post-merge automated Debug verification for this slice: **1810 passed, 15 platform
+skips, zero failures** (1825 total). Focused ports/configuration/adapter/user-secret
+snapshot checks: **113 passed, one platform skip** (114 total). The skips are the existing Windows file/link privilege
+and case-distinct-directory limitations; they are not counted as passes. The composed
 help output exposes `--offset` without loading runtime configuration. The solution
 and offset-probe builds each had **zero warnings/errors**. CSharpier checks for
 `cli` and the offset probe, plus `git diff --check`, passed. No Release verification
