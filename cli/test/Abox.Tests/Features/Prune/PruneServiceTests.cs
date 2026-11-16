@@ -166,6 +166,37 @@ public sealed class PruneServiceTests
         await _sbx.Received().StopSandboxAsync("a-running-one", Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RemovalRefusalDoesNotPreventLaterIndividualRemovals(bool full)
+    {
+        // Arrange
+        _sbx.ListTemplatesAsync(Arg.Any<CancellationToken>())
+            .Returns([
+                Template(KitSource, "refused", "refused", "2026-11-01T00:00:00Z"),
+                Template(KitSource, "removed", "removed", "2026-11-01T00:00:00Z"),
+            ]);
+        _sbx.RemoveTemplateAsync($"{KitSource}:refused", Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(1, "synthetic in-use refusal"));
+
+        // Act
+        var act = () =>
+            _service.PruneTemplatesAsync(new PruneRequest(full, false), CancellationToken.None);
+
+        // Assert
+        if (full)
+            (await act()).Should().Be(0);
+        else
+            await act.Should().ThrowAsync<AboxException>().WithMessage($"*{KitSource}:refused*");
+        await _sbx.Received(1)
+            .RemoveTemplateAsync($"{KitSource}:removed", Arg.Any<CancellationToken>());
+        _console.AllText.Should().Contain($"Removed {KitSource}:removed.");
+        _console
+            .AllText.Should()
+            .Contain(full ? $"sbx keeps {KitSource}:refused" : "synthetic in-use refusal");
+    }
+
     /// <summary>One template image, backdated conveniently.</summary>
     private static TemplateImage Template(
         string repository,
