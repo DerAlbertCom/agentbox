@@ -287,6 +287,8 @@ public sealed partial class PortsCommandTests
 
     [Theory]
     [InlineData("ng serve --port $PORT")]
+    [InlineData("'ng' serve --port $PORT")]
+    [InlineData("ng; other --port 4200")]
     [InlineData("ng serve --port %PORT%")]
     [InlineData("ng serve --port=${PORT:-4200}")]
     [InlineData("ng serve --port 4200 && echo do-not-echo-this-script")]
@@ -308,10 +310,7 @@ public sealed partial class PortsCommandTests
     [InlineData("ng serve --port=4.2e3")]
     [InlineData("ng serve --port='4200")]
     [InlineData("ng serve --port=42\\00")]
-    [InlineData("npx ng serve --port 4200")]
-    [InlineData("cross-env PORT=4200 ng serve --port 4200")]
-    [InlineData("npm run web -- --port 4200")]
-    [InlineData("node custom.js --port 4200")]
+    [InlineData("ng run web:serve --port 4200")]
     public async Task DynamicAmbiguousOrUnsupportedStartPortsFailBeforeAnyMixedProjectPublishing(
         string script
     )
@@ -342,7 +341,55 @@ public sealed partial class PortsCommandTests
     }
 
     [Theory]
+    [InlineData("vite --port 3000")]
+    [InlineData("next dev --port 3000")]
+    [InlineData("node custom.js --port 4200")]
+    [InlineData("'vite' --port 3000")]
+    [InlineData("vite --port '$PORT' && echo do-not-echo-this-script")]
+    [InlineData("vite --port 'unclosed")]
+    [InlineData("\"node custom.js --port 4200")]
+    [InlineData("npx ng serve --port 4200")]
+    [InlineData("cross-env PORT=4200 ng serve --port 4200")]
+    [InlineData("npm run web -- --port 4200")]
+    public async Task NonAngularStartScriptsDoNotBlockMixedDotnetPublishing(string script)
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File(
+            "folder/api/Properties/launchSettings.json",
+            """{"profiles":{"http":{"applicationUrl":"http://localhost:5000"}}}"""
+        );
+        fixture.Root.File(
+            "folder/other/package.json",
+            System.Text.Json.JsonSerializer.Serialize(new { scripts = new { start = script } })
+        );
+
+        // Act
+        var exit = await fixture.Run();
+
+        // Assert
+        exit.Should().Be(0);
+        fixture
+            .Console.AllText.Should()
+            .Contain("| 5000 | 15000")
+            .And.NotContain("do-not-echo-this-script");
+        await fixture
+            .Sbx.Received(1)
+            .EnsureApplicationPortsAsync(
+                fixture.Name,
+                Arg.Is<IReadOnlyList<ApplicationPortMapping>>(mappings =>
+                    mappings.Count == 1 && mappings[0] == new ApplicationPortMapping(5000, 15000)
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
     [InlineData("ng serve --port 4203")]
+    [InlineData("ng dev --port 4203")]
+    [InlineData("ng dev web --port='4203'")]
+    [InlineData("'ng' serve --port 4203")]
+    [InlineData("\"ng\" s --port=4203")]
     [InlineData("ng serve --port=4203")]
     [InlineData("ng s web --configuration development --port 4203 --host localhost")]
     [InlineData("ng serve --port '4203'")]

@@ -49,15 +49,19 @@ The command reads explicit ports beneath the folder from:
   `Properties/launchSettings.json`.
 - `angular.json`: every project's `architect.serve` (or `targets.serve`) `options.port`
   and every named `configurations.<name>.port`, whether currently selected or not.
-- `package.json`: the exact `scripts.start` entry, for direct `ng serve` / `ng s`
+- `package.json`: the exact `scripts.start` entry, for direct `ng serve` / `ng s` / `ng dev`
   commands with one `--port 4200` or `--port=4200`. Literal single/double quoting of
   the value or argument is supported. No scripts or tooling are executed to scan.
 
 Angular ports must be literal integers; no implicit default 4200, environment-variable
 expansion, wrapper commands (`npx`, `cross-env`, npm scripts), shell operators or
-duplicate `--port` flags are interpreted. A start script with an explicit `--port`
-in an unsupported/dynamic form fails with a fix hint; put a literal serve port in
-`angular.json` and remove that dynamic flag instead. Other scripts/targets are ignored.
+duplicate `--port` flags are interpreted. A recognized `ng` start script with an
+explicit `--port` in an unsupported/dynamic form fails with a fix hint; put a literal
+serve port in `angular.json` and remove that dynamic flag instead. Non-`ng` start
+commands (including wrappers, Vite, Next and custom Node servers) are ignored even
+when they contain `--port`; configure their Angular port in `angular.json` if needed.
+Runtime environment overrides such as Angular's `PORT` are not evaluated and can
+make the actual listener differ from the static plan. Other scripts/targets are ignored.
 All inputs and mapped ranges are validated **before publishing anything**.
 It prints each source occurrence, warns about duplicates and publishes each distinct
 mapping once. No `abox.json`, team sources or build is needed. It never creates or

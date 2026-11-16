@@ -17,13 +17,13 @@ internal static partial class AngularStartScript
         if (start.ValueKind != JsonValueKind.String)
             throw new FormatException();
         var script = start.GetString()!;
-        if (!PortArgument().IsMatch(script))
+        if (!AngularCommand().IsMatch(script) || !PortArgument().IsMatch(script))
             return;
         var args = LiteralArguments(script);
         if (
             args.Count < 3
             || args[0] != "ng"
-            || args[1] is not ("serve" or "s")
+            || args[1] is not ("serve" or "s" or "dev")
             || args.Contains("--")
         )
             throw new FormatException();
@@ -102,4 +102,7 @@ internal static partial class AngularStartScript
 
     [GeneratedRegex(@"(?<![\w-])--port(?![\w-])", RegexOptions.CultureInvariant)]
     private static partial Regex PortArgument();
+
+    [GeneratedRegex("^\\s*(?:ng|'ng'|\"ng\")(?=\\s|$|[;&|<>])", RegexOptions.CultureInvariant)]
+    private static partial Regex AngularCommand();
 }

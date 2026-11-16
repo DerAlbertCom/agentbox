@@ -39,7 +39,7 @@ There is no breadth cap; cancellation is checked during walking/reading. See the
 
 Only the exact `scripts.start` string is examined, not `start:*`, `prestart`,
 `poststart` or referenced scripts. Supported commands start directly with `ng serve`
-or the `ng s` alias; an optional literal project and other literal arguments may
+or the `ng s` / `ng dev` aliases; an optional literal project and other literal arguments may
 follow. Recognized port forms (one flag per script):
 
 ```json
@@ -50,8 +50,16 @@ follow. Recognized port forms (one flag per script):
 {"scripts":{"start":"ng serve \"--port=4200\""}}
 ```
 
+The first command must be the literal token `ng`, `'ng'` or `"ng"`, followed by
+whitespace (or a shell operator, which is then rejected). Non-`ng` commands such as
+`vite --port 3000`, `next dev --port 3000`, `node custom.js --port 4200` and wrappers
+such as `npx ng`, `cross-env ... ng`, or `npm run ...` are ignored, even with explicit
+ports or malformed/quoted/dynamic arguments. They cannot block other discovered
+.NET/Angular ports. Command indirection and concatenated/dynamic command names are
+not interpreted; configure their Angular port in `angular.json` instead.
+
 The value is an unsigned decimal integer 1..65535. Literal single/double quoting
-is stripped; this is **not a shell parser**. When the start script mentions an
+is stripped; this is **not a shell parser**. When a recognized `ng` start script mentions an
 explicit `--port` token, unsupported syntax fails the entire plan, naming the file
 and giving supported forms, without echoing its script contents:
 
@@ -63,8 +71,7 @@ and giving supported forms, without echoing its script contents:
   arguments, not just the port value. Rejected punctuation is
   backslash, dollar, percent, exclamation, backtick, semicolon, pipe, ampersand,
   angle/round/square/curly brackets, hash, asterisk, question mark and tilde.
-- Wrappers/indirection (`npx`, `npm run`, `cross-env`, `node custom.js`, `ng run`),
-  multiple commands, and a `--` argument separator.
+- Unsupported `ng` commands (`ng run`), multiple commands, and a `--` argument separator.
 
 Scripts with no explicit `--port` token are ignored, including unrelated server
 scripts and `--portable`; no environment or default port is inferred. A present
@@ -72,6 +79,13 @@ non-string `start`, non-object scripts/root, or any malformed JSON fails rather
 than pretending to discover no ports. To resolve unsupported dynamic flags,
 configure a literal serve port in `angular.json` and remove the dynamic flag from
 `start`; adding configuration alone does not bypass invalid explicit script input.
+Static discovery does not inspect the runtime environment: Angular's `PORT`
+environment variable takes precedence over the serve `port` option (including an
+explicit `--port`) at startup, so the
+static table can differ from the actual listener. No environment expression is
+evaluated and no runtime/default port is inferred.
+The aliases, default localhost binding and environment precedence follow the
+[Angular CLI serve reference](https://angular.dev/cli/serve) (checked 2026-11-16).
 
 ## Shared publishing/reporting
 
