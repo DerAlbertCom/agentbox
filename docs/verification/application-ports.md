@@ -245,8 +245,7 @@ It also exited 0 and removed only its task-owned sandbox. This guards against fi
 localhost by occupying an app's existing/future wildcard listener.
 
 No call was made to mutate the user sandbox, its running Deals API or its 18203
-mapping. Its live native-only failure is separately recorded in the integration
-branch's `docs/agents/story-3-deals-verification.md`; HTTPS certificates remain #46.
+mapping. HTTPS production-flow evidence is [recorded separately](https/real-host-production-verification.md).
 
 ### Retired live harness
 

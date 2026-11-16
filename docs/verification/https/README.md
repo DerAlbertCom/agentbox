@@ -5,8 +5,8 @@ along with the earlier certificate/transfer probe folders. Historical results be
 are preserved, not rerun. [Independent receiver checks](#retained-receiver-checks)
 remain in this folder and need none of those projects.
 
-Current PEM/bootstrap recovery fixes and red/green results are recorded in
-[the PEM regression record](../../agents/story-3-pem-fixes.md), following
+Current PEM/bootstrap recovery behavior is documented in
+[the HTTPS contract](../../https-development-certificates.md), following
 [recovery-fixes.md](recovery-fixes.md) and the earlier implementation and
 Debug/Release reruns in [review-fixes.md](review-fixes.md). The record below is historical:
 the new client uses sandbox **system trust**, and ordinary stale-agent transport
@@ -26,12 +26,10 @@ host dev-certs export, host private-key/store/trust mutation, default host/brows
 TLS success, independent Linux-host run, Copilot shell-tool execution or actual
 Herdr desktop connection.
 The activation implementer did not retry/bypass the then-blocked real-host staging
-operation or touch `rwe-ai-sbx-41bc30`/Deals. The
-[separate manual verifier](../../agents/story-3-host-certificate-verification.md)
-later completed the actual CLI export and explicit Deals activation with default
-Windows-host TLS (Swagger HEAD 200) and sandbox TLS (HEAD 404), exact host leaf and
-unchanged host trust. That supersedes the earlier denial but remains manual proof,
-not production real-host propagation, a browser reload or completion of #46.
+operation or touch `rwe-ai-sbx-41bc30`/Deals. The later
+[real-host production record](real-host-production-verification.md) distinguishes
+actual production provisioning from the separately configured manual Deals setup.
+This synthetic run remains separate from that real-host evidence.
 
 All runtime tests here use a fresh `abox-issue46-activation-*` disposable sandbox
 created through a verification-only `SbxClient` partial with a cached template,

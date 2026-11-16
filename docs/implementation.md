@@ -866,10 +866,9 @@ the [tracker closure clarification](https://github.com/DerAlbertCom/agentbox/iss
 is pinned to `5b40b570aff9fb76b9c6379e55569eef83dc2df9`: actual Release setup exited
 before app startup, strict host/system/Node TLS passed at 8443 → 18443, and repeat
 setup, bootstrap-only refresh and cleanup passed. Separately,
-[manual Windows verification](agents/story-3-host-certificate-verification.md)
-completed exact host CLI export/copy and explicit Deals activation with default
-host TLS (Swagger HEAD 200) and sandbox TLS (HEAD 404), without changing host trust.
-That manual Deals result remains distinct from production-fixture evidence. The user
+[the manual Deals preservation checks](verification/https/real-host-production-verification.md#preservation-and-still-missing-gates)
+confirmed default host TLS (Swagger HEAD 200) without changing that manually
+configured sandbox. That result remains distinct from production-fixture evidence. The user
 confirmed the existing Deals browser lock at 18203 and working Herdr SSH. Copilot is
 excluded from this acceptance; independent Linux-host proof is deferred. No real-host
 renewal was authorized or performed. Those excluded/deferred items are not new #47

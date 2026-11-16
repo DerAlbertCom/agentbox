@@ -304,18 +304,14 @@ editing its own files concurrently.
 
 [The production-path verification record](verification/https/README.md) uses
 synthetic export mocks, real disposable .NET 10 Kestrel activation and actual local
-tool subprocesses. Separately, [the manual Windows-host verifier](agents/story-3-host-certificate-verification.md)
-completed an actual CLI export of the existing trusted host identity and explicit
-Deals activation after the earlier permission denial was resolved. The unchanged
-relay served that exact leaf with default host TLS (Swagger HEAD 200), and sandbox
-default TLS also passed (HEAD 404); host trust was unchanged. Its separately
-authorized public sandbox trust entry is manual setup, not production behavior.
-Production now installs public sandbox trust itself; earlier manual trust remains
-historical evidence, not proof of this implementation. The review-fixes tests use
-only disposable synthetic certificates. A fresh verifier must follow
+tool subprocesses. Separately, [the manual Deals preservation checks](verification/https/real-host-production-verification.md#preservation-and-still-missing-gates)
+confirmed default host TLS (Swagger HEAD 200) without changing that manually
+configured sandbox. Manual setup remains historical context, not proof of
+production certificate provisioning. Production installs public sandbox trust
+itself; the review-fixes tests use only disposable synthetic certificates.
+A fresh verifier must follow
 [the clean production-verification gate](verification/https/production-verification.md).
-That earlier manual proof is not a production `abox ports` real-host run. The later
-[separate real-host production record](verification/https/real-host-production-verification.md)
+[The separate real-host production record](verification/https/real-host-production-verification.md)
 does demonstrate the production flow on its exact recorded candidate SHA only;
 it must not be relabelled as real-host verification of subsequent code changes.
 Its historical outstanding-gates text is superseded by the scoped #46 closure
