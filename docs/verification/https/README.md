@@ -1,5 +1,10 @@
 # #46 activation verification - 2026-11-16
 
+PR #48 removed the activation probe project, its `Program.cs` and tool driver,
+along with the earlier certificate/transfer probe folders. Historical results below
+are preserved, not rerun. [Independent receiver checks](#retained-receiver-checks)
+remain in this folder and need none of those projects.
+
 Current PEM/bootstrap recovery fixes and red/green results are recorded in
 [the PEM regression record](../../agents/story-3-pem-fixes.md), following
 [recovery-fixes.md](recovery-fixes.md) and the earlier implementation and
@@ -35,22 +40,13 @@ upgrade, publication, global setting, credential/authentication change or billed
 model prompt is needed. Explicit core stop/start operations below were confined to
 that new disposable sandbox, never an existing user core/app.
 
-## Reproduce
+## Retired activation harness
 
-From the task checkout, with .NET 10 runtime packs already cached and sbx 0.51.0:
-
-```powershell
-$env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-dotnet build cli/agentbox.slnx -c Debug -m:1
-dotnet run --project docs/verification/https/ActivationProbe.csproj -c Debug -- host `
-  docker.io/library/cao-docker-ai-sandbox:latest
-```
-
-Use only an **already cached** template you are authorized to run. The simpler
-`docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792` also demonstrated direct/
-sh/Bash activation but contains none of the agent tools. `templates` is a read-only
-inventory mode; `tool-help <template>` creates/removes its own disposable sandbox
-and records installed CLI help under ignored task-checkout `.abox` files.
+The [archived helper sources](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https)
+preserve the live harness used below. Its project commands no longer apply to this
+checkout. Removing it also removes the ready-made synthetic ASP.NET/tool subprocess
+and real-host target preparation/cleanup harness; receiver tests do not replace
+those integration checks. The following describes its historical operation.
 
 The host helper publishes a self-contained synthetic ASP.NET Core/.NET 10 app into
 an otherwise fresh ignored workspace. A **separate setup process** exercises
@@ -68,7 +64,23 @@ and a per-client in-memory **synthetic public anchor**, with no validation callb
 or insecure option. Exact peer DER and the synthetic HTTP marker are required.
 This is not evidence that a real Windows/Linux/browser trust store trusts the app.
 
-## Demonstrated behavior
+## Retained receiver checks
+
+[ReceiverChecks.py](ReceiverChecks.py) and [RunReceiverChecks.ps1](RunReceiverChecks.ps1)
+exercise the production embedded Python/shell scripts directly, independently of
+the removed .NET projects. From the repository root, with the approved image
+already cached locally:
+
+```powershell
+pwsh -File docs/verification/https/RunReceiverChecks.ps1
+```
+
+The guarded runner uses new `--rm --pull never --network none` containers, no host
+mounts/exports or real certificates, and synthetic identities only. Its root trust
+changes are confined to the disposable container. It also checks mounted runtime
+and public-trust destination rejection in a separate disposable container.
+
+## Demonstrated behavior (historical)
 
 - Initial enable and renewed identity: new direct apphost, noninteractive `sh` and
   Bash apps selected the exact leaf after the setup helper exited.

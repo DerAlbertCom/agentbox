@@ -132,27 +132,12 @@ creates when none qualifies](https://github.com/dotnet/aspnetcore/blob/547fc16b9
 An existing older trusted identity must not silently become a newly generated,
 untrusted identity merely because the newer export command succeeds.
 
-## Reproduce / remaining gate
+## Retired helper / historical remaining gate
 
-From the repository root, with the local .NET SDK, cached Linux x64 .NET 10.0.15
-runtime packs and an **already available** shell template (no installation or
-publication), choose a **new**, task-owned `.abox/abox-issue46-*` workspace:
-
-```powershell
-$env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-$env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
-dotnet run --project docs/agents/story-3-certificate-probe -- host `
-  '.abox/abox-issue46-cert-<fresh-id>' `
-  'docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792'
-```
-
-[Probe source](story-3-certificate-probe/Program.cs); all sbx invocations use
-`SbxClient` and argv lists via its verification-only source-linked partial, as in
-#43's existing RuntimeProbe. It refuses an existing workspace/sandbox, creates
-with `--pull never --static-mcp none`, and removes only its task-owned sandbox in
-`finally`. Host workspace contains synthetic code/binaries only and is retained
-for inspection; remove that exact workspace afterward. Raw child output/errors
-are suppressed; only allowlisted synthetic public metadata/status is emitted.
+PR #48 removed this probe project and its folder. The
+[archived source](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/agents/story-3-certificate-probe)
+is retained in Git history, not runnable from the current checkout. The observations
+and verification counts below describe the original spike, not a cleanup rerun.
 
 **Still unresolved:** persistent **explicit** Kestrel configuration selecting the
 exact protected copied PFX for new apps across direct argv, Herdr/long-lived core
@@ -172,5 +157,5 @@ Verification: two full live probe runs; final probe Debug build **zero warnings 
 errors**; CSharpier check passed for all three probe project/source files;
 whitespace checks passed for the note and probe sources. Published dependency
 metadata confirmed both runtime packs were 10.0.15. Product solution tests were
-not rerun because no product code changed. The note and probe sources are retained
-as research/evidence only; unrelated work was preserved.
+not rerun because no product code changed. This note remains as research/evidence;
+the helper sources are archived above. Unrelated work was preserved.

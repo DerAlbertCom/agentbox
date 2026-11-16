@@ -1,5 +1,12 @@
 # Fresh-verifier gate: real-host production flow
 
+**Historical procedure:** PR #48 removed the activation probe and its target
+preparation/cleanup helper. The
+[pre-removal procedure and sources](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https)
+remain archived, not runnable as a complete procedure from this checkout. The
+steps below explain the earlier gate; a future run needs a separately prepared
+disposable target and explicit authorization. Probe removal performed no live run.
+
 **Windows Release production/default-TLS gate executed by a fresh verifier.**
 [The real-host evidence](real-host-production-verification.md) records the exact
 latest tested candidate `5b40b570aff9fb76b9c6379e55569eef83dc2df9` (PEM/bootstrap
@@ -15,25 +22,17 @@ authorization to export the existing host localhost identity into a new disposab
 sandbox. This procedure never uses the manually configured Deals sandbox,
 runner/API/relay, host key export helper or manual trust entries.
 
-## Prepare a clean target
+## Historical target preparation
 
-1. Build the exact candidate CLI and helper. Record Git SHA, OS, SDK and sbx
-   versions. Use an already cached, approved clean template containing Python 3.8+,
+1. The verifier built the exact candidate CLI and helper, recording Git SHA, OS,
+   SDK and sbx versions, with an already cached, approved clean template containing Python 3.8+,
    `sh`, .NET 10 SDK and the Debian-style `ca-certificates` store/updater. Do not
    install prerequisites into a user sandbox to make this pass.
 
-   ```powershell
-   $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-   dotnet build cli/agentbox.slnx -c Release -m:1
-   dotnet build docs/verification/https/ActivationProbe.csproj -c Release -m:1
-   dotnet run --no-build -c Release --project docs/verification/https/ActivationProbe.csproj -- `
-     prepare-production docker.io/library/cao-docker-ai-sandbox:latest
-   ```
-
-   This helper creates a new random `abox-issue46-activation-production-*`
+   The retired helper's `prepare-production` mode created a new random `abox-issue46-activation-production-*`
    workspace/sandbox, a trivial certificate-unaware web app and launch settings
-   for sandbox port **8443**. It refuses existing names and verifies no prior abox
-   HTTPS runtime/trust directory. It does **not** export/configure a certificate.
+   for sandbox port **8443**. It refused existing names and verified no prior abox
+   HTTPS runtime/trust directory. It did **not** export/configure a certificate.
    Copy its exact workspace and sandbox identity into the verification record.
    Review the template's public CA inventory: no preexisting localhost/host leaf,
    manual runtime/environment or trust import may supply the success condition.
@@ -79,12 +78,9 @@ runner/API/relay, host key export helper or manual trust entries.
    partial sandbox trust/forwarding/runtime state; record and retry only this
    disposable, never call it complete based on a later manual workaround.
 
-5. In another terminal, launch the certificate-unaware app **after** setup exited:
-
-   ```powershell
-   & dotnet $abox run shell --location $workspace -- sh -c `
-     'exec dotnet run --project "$WORKSPACE_DIR/Verifier.csproj" --no-launch-profile --urls https://0.0.0.0:8443'
-   ```
+5. The verifier launched the helper-generated certificate-unaware app **after**
+   setup exited, through actual `abox run shell`. That generated app/launch command
+   is part of the retired harness, not a fixture supplied by this checkout.
 
 6. Require the marker `abox-production-verifier` at
    `https://localhost:18443/` with **default host TLS validation** (e.g.
@@ -112,15 +108,10 @@ runner/API/relay, host key export helper or manual trust entries.
 
 ## Cleanup and report
 
-Stop only the verifier app/clients, then remove the exact helper-owned target:
-
-```powershell
-dotnet run --no-build -c Release --project docs/verification/https/ActivationProbe.csproj -- `
-  cleanup "$workspace"
-```
-
-Require the helper's fresh inventory confirmation of sandbox absence and workspace
-removal. Preserve only public source and sanitized results. Report each gate
+The retired helper's `cleanup` mode stopped only verifier-owned work and removed
+its exact target, confirming sandbox absence and workspace removal. It is no longer
+available in this checkout; any future verification must plan equally targeted
+cleanup in advance. Preserve only public source and sanitized results. Report each gate
 separately: production real-host export/activation, default host TLS/exact leaf,
 browser, sandbox system TLS, Node, repeat/renewal, Copilot shell, Herdr desktop,
 independent Linux host, Debug/Release, cleanup and unchanged host trust. Any missing

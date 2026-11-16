@@ -1,8 +1,9 @@
-"""Exercise the receiver's process/TCP interface inside the disposable sandbox."""
+"""Exercise the production receiver's process/TCP interface on Linux."""
 
 import concurrent.futures
 import json
 import os
+from pathlib import Path
 import signal
 import socket
 import struct
@@ -11,6 +12,12 @@ import sys
 import tempfile
 import threading
 import unittest
+
+
+if sys.platform != "linux":
+    sys.exit("Receiver checks require Linux (Unix sockets and SO_PEERCRED).")
+
+RECEIVER = (Path(__file__).resolve().parents[3] / "cli/src/Abox/Sbx/application_ports.py").read_text(encoding="utf-8")
 
 
 class ReceiverChecks(unittest.TestCase):

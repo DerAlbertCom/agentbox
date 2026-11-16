@@ -1,5 +1,10 @@
 # Real-host production HTTPS verification — 2026-11-16
 
+PR #48 retired the activation probe project/helper; its
+[source is archived before removal](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https).
+The SHA-pinned observations and artifact hashes below remain historical, not
+results rerun for cleanup or helpers available in the current checkout.
+
 ## Scope and acceptance boundary
 
 This is **actual Windows-host production-flow evidence**, not the synthetic export

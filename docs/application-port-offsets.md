@@ -137,8 +137,8 @@ Four real receiver checks failed against the pre-change receiver; after implemen
 the guard all **16 receiver process/TCP checks passed** in disposable sandbox
 `abox-issue45-green-66814670-abox-52842`, removed successfully.
 
-The actual Debug abox executable subsequently passed the full checked-in
-[`OffsetProbe`](verification/application-ports/OffsetProbe) in new task-owned sandbox
+The actual Debug abox executable subsequently passed the then-checked-in
+[`OffsetProbe`](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/OffsetProbe) in new task-owned sandbox
 `abox-issue45-live-be43bf4f-abox-22EA0`:
 
 - A synthetic localhost-only HTTP server on sandbox 8345 was reached at host **28345**
@@ -168,23 +168,12 @@ through `SbxClient`. No install, registry publication, runtime restart/upgrade,
 global settings, certificate/trust mutation, real secrets, user sandbox or Deals
 application was involved. This is not an independent Unix-host sbx verification.
 
-From the repository root, with the .NET 10 SDK and healthy sbx 0.51.0+:
-
-```powershell
-dotnet build cli/agentbox.slnx -c Debug
-dotnet run --project docs/verification/application-ports/OffsetProbe -- `
-  "C:/path/to/NEW/abox-issue45-<fresh-id>" `
-  "docker.io/library/sandbox-kit-assembled:<existing-local-tag>" `
-  "cli/src/Abox/bin/Debug/net10.0/abox.dll"
-```
-
-The host ports **8345, 18345, 28345, 38345, 48345** must be free. The current probe
-first rejects unproven direct bindings at offsets 0, 10000 and 20000 with unchanged
-inventory, then explicitly removes each probe-owned exact binding as the operator
-before running the folder/default/override flow. `--receiver-only` skips
-the host publication checks. `--templates` lists local templates read-only. Retained
-synthetic workspaces are named in output; remove only those exact task-owned folders.
-Run the Debug solution tests, CSharpier checks and `git diff --check` as well.
+PR #48 removed the offset/runtime probe projects and their folders. The linked
+archive is historical, not runnable from the current checkout; the recorded live
+runs were not repeated for removal. The independent 17 process/TCP regressions
+were [retained outside the projects](verification/application-ports.md#retained-receiver-checks).
+They do not replace the removed actual-CLI/sbx host-publication harness. Run the
+solution tests, CSharpier checks and `git diff --check` for current automated coverage.
 
 Final post-merge automated Debug verification for this slice: **1810 passed, 15 platform
 skips, zero failures** (1825 total). Focused ports/configuration/adapter/user-secret

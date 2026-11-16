@@ -1,5 +1,10 @@
 # Application ports: shared discovery and HTTP publishing (#43, #44)
 
+PR #48 removed the runtime probe projects and synthetic app folders. Live results
+below remain historical; their helpers are linked at the pre-cleanup commit, not
+available in this checkout. [Independent receiver checks](#retained-receiver-checks)
+remain runnable without a probe project. No live publishing was rerun for removal.
+
 ## Discovery and publishing contract
 
 - Location is `--location`, then `defaultLocation`, then the current directory.
@@ -142,11 +147,11 @@ Early disposable probe `abox-issue43-probe-a6f280c1` established:
    Existing unrelated mappings survived. Host listener inspection showed only
    `127.0.0.1` for the tested mappings. The task-owned sandbox was removed.
 
-The checked-in [runtime probe](application-ports/RuntimeProbe) then exercised the
+The now-retired [runtime probe](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/RuntimeProbe) then exercised the
 **actual Debug abox executable** against disposable sandbox
 `abox-issue43-live-72d48a01-abox-F74D5`:
 
-- A self-contained Debug [synthetic .NET HTTP application](application-ports/SyntheticHttp)
+- A self-contained Debug [synthetic .NET HTTP application](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/SyntheticHttp)
   served `abox-issue43-dotnet-http-marker` from sandbox port 8203.
 - `abox ports --location ...` exited 0; a **subsequent** host request to
   `http://localhost:18203` returned that marker, after abox had exited.
@@ -243,41 +248,27 @@ No call was made to mutate the user sandbox, its running Deals API or its 18203
 mapping. Its live native-only failure is separately recorded in the integration
 branch's `docs/agents/story-3-deals-verification.md`; HTTPS certificates remain #46.
 
-### Reproduce
+### Retired live harness
 
-From the repository root, with .NET 10 SDK, sbx 0.51.0+ healthy/signed in and an
-**already available local Linux x64 shell template** (replace the example with one
-from your local inventory; this probe does not publish an image or change trust):
+The runtime/synthetic-app archives above preserve the helper used for these results.
+Its project commands no longer apply to this checkout. Removing it also removes
+the ready-made sbx/actual-CLI HTTP and stop/start harness; the standalone checks
+below cover the Python receiver, not host forwarding or application availability.
 
-```powershell
-dotnet build cli/agentbox.slnx -c Debug
-dotnet run --project docs/verification/application-ports/RuntimeProbe -- `
-  "D:/path/to/task-owned/abox-issue43-<fresh-id>" `
-  "docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792" `
-  "cli/src/Abox/bin/Debug/net10.0/abox.dll"
+### Retained receiver checks
+
+[ReceiverChecks.py](application-ports/ReceiverChecks.py) now loads the production
+`cli/src/Abox/Sbx/application_ports.py` directly. Run in a disposable Linux checkout
+with Python 3.8+ as a non-root user (no .NET project, sbx or npm needed):
+
+```sh
+python3 -I docs/verification/application-ports/ReceiverChecks.py
 ```
 
-The workspace must not exist and its leaf must start `abox-issue43-`. The probe
-refuses an already-existing sandbox identity, creates one disposable sandbox with
-`--pull never --static-mcp none`, and removes it in `finally`. All sbx calls go
-through `SbxClient` with argv lists; the verification-only partial adds no shipped
-entry point. Host abox settings/state are isolated with per-process XDG variables.
-Only synthetic files are used. The .NET app is published Debug/self-contained into
-that new workspace; no application/runtime installation in an existing sandbox is
-needed. Ports 18203–18206 must initially be free. The synthetic workspace is retained
-for inspection; remove **that exact task-owned directory** when finished. If cleanup
-fails, the probe prints the sandbox name and cleanup warning; do not prune broadly.
-Append `--sandbox-localhost` for the **required positive** localhost-only-app check;
-it must return zero, including the host response after abox exits. Without the flag,
-the app uses a wildcard bind, which must also work without relay/app-port collision.
-Both modes run the current real receiver checks first, preserve an unrelated direct native
-mapping, reject an exact requested direct mapping with unchanged inventory, then explicitly
-remove only that probe-owned binding as the operator before retrying. They verify HTTP
-again after stop/start and restarting the synthetic app. Verification-only `--port=8213` chooses
-a different synthetic app port and its next three ports, still using the shipped
-offset 10000; this probe does not exercise the product's custom-offset option or change user app startup settings.
-The probe refuses initially occupied test ports rather than modifying other mappings;
-do not run it concurrently with another verifier using its chosen four host ports.
+The 17 checks use temporary HOME directories and real local sockets/processes;
+they do not read user settings, publish host ports or call sbx. They retain the
+binary/half-close, relay lifetime/reuse/restart, offset conflict/recovery and
+filesystem safety regressions formerly hosted by the removed projects.
 
 ## Automated verification and limitations
 
@@ -318,3 +309,18 @@ sandbox mutations were performed. These #43 runs predate Angular;
 and actual dev-server evidence. Offsets #45 are now covered by the linked offset
 contract/evidence. HTTPS #46 and automatic create/recreate lifecycle #47 remain
 intentionally unimplemented.
+
+## Probe-removal verification (2026-11-16)
+
+The cleanup removes all nine PR-added .NET probe projects and the Angular npm
+fixture; `cli/src`, `cli/test/Abox.Tests` and pre-existing user-secrets probes are
+unchanged. Both solution builds passed with zero warnings/errors; the complete
+direct xUnit Debug and Release runs each had **2026 passed, 21 explicit skips,
+zero failures/errors**. CSharpier checked **252 CLI files**.
+
+The relocated **17 application-port receiver checks** and retained **38 HTTPS
+receiver checks** passed in fresh offline disposable Linux containers, with HTTPS
+mounted-destination rejection also passing. No host mounts, host certificates,
+live sbx/apps or user sandboxes were used. This is not new host-forwarding, actual
+Angular, production TLS or automatic create/replace acceptance evidence; the
+removed live harness coverage remains historical.

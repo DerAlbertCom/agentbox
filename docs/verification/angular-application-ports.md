@@ -1,5 +1,10 @@
 # Angular application-port discovery (#44)
 
+PR #48 removed the Angular runtime probe and its npm fixture folder. The live
+results below are historical, with source links pinned before removal. There is
+no ready-made Angular live harness in the current checkout; no Angular run was
+repeated for cleanup. Composed CLI/transport tests remain in `cli/test/Abox.Tests`.
+
 ## Supported static scope
 
 `abox ports` scans Angular and .NET sources together beneath the selected location.
@@ -140,13 +145,12 @@ Run:
 ```powershell
 dotnet test cli/agentbox.slnx -c Debug
 dotnet csharpier check cli
-dotnet csharpier check docs/verification/application-ports
 git diff --check
 ```
 
 ## Earlier synthetic transport check (not Angular acceptance)
 
-The checked-in [AngularRuntimeProbe](application-ports/AngularRuntimeProbe) was run
+The now-retired [AngularRuntimeProbe](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/AngularRuntimeProbe) was run
 against minimum **sbx 0.51.0** and the actual Debug `abox.dll`, in newly created
 task-owned sandbox `abox-issue44-angular-7e541-abox-B89F1`, using an already cached
 local template `docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792` with
@@ -177,7 +181,7 @@ separate run closes the actual-dev-server gap, not by relabelling that listener.
 
 ## Actual Angular end-to-end verification (Windows, 2026-11-16)
 
-The probe now copies the checked-in [minimal Angular app](application-ports/SyntheticAngular),
+The probe copied the then-checked-in [minimal Angular app](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/SyntheticAngular),
 including its npm lockfile, into a **new disposable workspace**. Its framework
 **22.2.4**, CLI/build **22.2.6**, TypeScript **6.0.3**, RxJS **7.8.2** and tslib
 **2.9.1** are exact pins, matching the inspected Deals frontend's Angular 22
@@ -226,7 +230,7 @@ minimum sbx **0.51.0**, the same cached local template above, actual Debug abox:
   or IPv6 host publication. Protected/competing ports were not used.
 - `finally` removed only the fresh task-owned sandbox (exit 0), ending its Node
   process/relays, then removed that **exact** synthetic workspace, dependencies
-and npm cache. Reproducible source/lockfile stay in Git, not generated outputs.
+  and npm cache. Source/lockfile are now archived in Git history, not generated outputs.
 
 A second complete real-Angular run after merging offset integration `8cca672`
 at **`eaa74ec`** passed in **`abox-issue44-real-angular-e1c05-abox-04E2C`**:
@@ -266,29 +270,9 @@ passed. Probe host ports 18354/18355 had no remaining listener after cleanup.
 The exact task-owned red-test and lock-generation temporary directories were
 also removed. No Release verification is claimed.
 
-### Reproduce
+### Retired reproduction instructions
 
-From the repo root, with an existing compatible host Node/npm and Linux x64
-Node/Python template, choose two free alternate host ports:
-
-```powershell
-dotnet build cli/agentbox.slnx -c Debug
-dotnet run --project docs/verification/application-ports/AngularRuntimeProbe -- --inventory
-dotnet run --project docs/verification/application-ports/AngularRuntimeProbe -- `
-  "C:/path/to/approved/temp/abox-issue44-<fresh-id>" `
-  "docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792" `
-  "cli/src/Abox/bin/Debug/net10.0/abox.dll" 8354 `
-  "C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js"
-```
-
-Use your existing host npm's `npm-cli.js` path (no global install). The workspace
-must not exist. The integer argument selects the synthetic sandbox port; its host
-port is +10000 and the next host port is also used. The probe refuses
-protected/occupied host ports and existing sandbox identities. All sbx calls use
-`SbxClient` argv lists (including verification-only helpers); abox host config/state
-is isolated via child-process XDG variables. No user sandbox/Deals API, host trust
-or certificates, global settings/restarts/upgrades, app sources outside new
-synthetic fixtures, real secrets or registry publication were touched.
-The probe removes its exact workspace only after successful sandbox removal; if
-sandbox cleanup fails, it prints the name and retains the workspace for targeted
-cleanup. Never prune broadly or remove a workspace still mounted by a sandbox.
+The pinned probe/fixture links above preserve the previous implementation and
+lockfile. Its project commands no longer apply to this checkout. A new live
+Angular verification would need a separately prepared disposable app/target;
+unit/transport tests and the historical HTTP results do not prove a new live run.

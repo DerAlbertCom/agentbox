@@ -51,22 +51,13 @@ for a real-host operation. The existing user sandbox, running Deals app, relay,
 profiles, launch settings and root `run-abox.ps1` were not touched. No installation,
 upgrade, global setting, registry publication, push, issue or PR mutation occurred.
 
-## Synthetic runtime probe
+## Historical synthetic runtime probe
 
-From this checkout, with a cached shell template and .NET 10 available:
-
-```powershell
-$env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-dotnet run --project docs/agents/story-3-transfer-probe/TransferProbe.csproj -- `
-  'docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792'
-```
-
-The source-linked verification adapter follows the existing #43/#46 probe pattern;
-all sbx calls remain inside `SbxClient`, including verification-only creation and
-fixture checks. It refuses an existing identity, creates a fresh `abox-issue46-transfer-*`
-sandbox with `--pull never --static-mcp none`, and removes only that sandbox in
-`finally`. Host workspace is an empty task-owned ignored directory and is removed.
-No app, host forwarding or real certificate store is involved.
+PR #48 removed this probe project and its folder. Its
+[archived sources](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/agents/story-3-transfer-probe)
+and the results below record the earlier synthetic runs, not a cleanup rerun or
+a runnable helper in the current checkout. Independent production receiver checks
+remain available in [the HTTPS verification folder](../verification/https/README.md#retained-receiver-checks).
 
 The initial complete run on the Windows host passed:
 

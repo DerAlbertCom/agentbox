@@ -29,8 +29,8 @@ bindings, or resume the separately blocked host-certificate copy.
 recorded here is retired. Current abox refuses all unproven direct native bindings,
 including offset 10000, until an operator deliberately removes the exact binding.
 This does not invalidate the observations at `c9ceeb1`, require touching this sandbox,
-or change reuse of its already-confirmed abox relay mapping. The retained `--apply`
-helper describes the old one-shot check and is not a current upgrade procedure;
+or change reuse of its already-confirmed abox relay mapping. The retired `--apply`
+helper described the old one-shot check and is not a current upgrade procedure;
 do not rerun it. No new live Deals verification is claimed by this documentation note.
 
 ### Narrow production-adapter upgrade and repeat
@@ -38,7 +38,7 @@ do not rerun it. No new live Deals verification is claimed by this documentation
 - Rechecked exact selected identity **`rwe-ai-sbx-41bc30`**, already running;
   sbx client **0.51.0**. No broad `abox ports` discovery against `D:/dev/rwe` or
   other project was run.
-- The evidence helper in `docs/agents/story-3-deals-relay-probe/` references
+- The historical evidence helper ([archived source](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/agents/story-3-deals-relay-probe)) referenced
   the production Abox project. Every sbx invocation goes through public
   `SbxClient` methods with argv lists; the helper adds no sbx entry point or
   alternate relay implementation. Its observing `IProcessRunner` records runtime
@@ -111,24 +111,19 @@ certificate/key was exported, copied or written to disk.
 
 ### Scope, remaining blocker and verification commands
 
-This evidence commit contains this note and the helper's `Program.cs` and
-`RelayProbe.csproj`; generated build outputs remain ignored. During the recorded
+The original evidence commit contained this note and the helper's sources.
+PR #48 removed the probe project and its folder; the archive above is historical,
+not runnable from the current checkout. During the recorded
 live verification, the helper Debug build passed with **zero warnings/errors**;
-`--apply` and the separate post-exit `--check` both exited **0**. Recorded commands
-(not rerun for documentation housekeeping):
-
-```text
-dotnet build docs/agents/story-3-deals-relay-probe/RelayProbe.csproj -c Debug
-dotnet run --project docs/agents/story-3-deals-relay-probe/RelayProbe.csproj -c Debug --no-restore -- --apply
-dotnet run --project docs/agents/story-3-deals-relay-probe/RelayProbe.csproj -c Debug --no-build -- --check
-```
+`--apply` and the separate post-exit `--check` both exited **0**. These were not
+rerun for probe removal.
 
 `--apply` is a one-shot native-upgrade verifier that requires the original native
 mapping; do not rerun it now merely to inspect state. Repeat safety was exercised
 by its two calls to the production adapter. `--check` is read-only apart from
 normal TLS connection attempts. No full solution tests/builds were requested for
-this live verification. `dotnet csharpier check
-docs/agents/story-3-deals-relay-probe` and `git diff --check` both passed.
+this live verification. The helper's CSharpier check and `git diff --check`
+both passed at that time.
 
 The remaining host-certificate transport/use gate is **still BLOCKED by
 `external_directory`** pending the user's explicit access grant for the protected

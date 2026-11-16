@@ -167,9 +167,10 @@ redirects, response-body retrieval or business endpoint request was used.
 The earlier failed pre-copy diagnostic callback returned only
 `errors == SslPolicyErrors.None`; **the successful host check has no callback**.
 
-[Public helper source and usage](story-3-host-certificate-probe/README.md) are
-retained for evidence. Debug and Release builds passed with **zero warnings /
-errors**; framing self-tests passed a round-trip and **7** invalid/truncated/
+[Public helper source and usage](https://github.com/DerAlbertCom/agentbox/blob/4ad3b459368789e72400769017153cc1269b49f3/docs/agents/story-3-host-certificate-probe/README.md)
+are archived in Git history: PR #48 removed the probe project and its folder.
+The following are historical results, not a cleanup rerun. Debug and Release builds
+passed with **zero warnings/errors**; framing self-tests passed a round-trip and **7** invalid/truncated/
 corrupt/oversized cases without filesystem changes; CSharpier passed. The
 read-only helper preflight initially needed BOM-aware JSON handling for the
 unchanged launch profile. Product/app source was not edited and product solution
