@@ -104,6 +104,33 @@ public sealed class TeamBuildStoreTests
             .WithMessage("*abox build --team sample --tag latest*");
     }
 
+    [Theory]
+    [InlineData("not json")]
+    [InlineData("null")]
+    [InlineData(
+        "{\"Squad\":\"ac\",\"Tag\":\"latest\",\"Reference\":\"agentbox-rwest-sample:latest\",\"Reference\":\"agentbox-rwest-other:latest\"}"
+    )]
+    public void UnreadableQualifiedBuildsNeverFallBackOrChangeLegacyArtifacts(string qualified)
+    {
+        // Arrange
+        using var root = new TempDirectory();
+        var store = new BuildStore(AboxPaths.For(root.Path, root.Path));
+        const string original =
+            "{\"Squad\":\"ac\",\"Tag\":\"latest\",\"Reference\":\"agentbox-rwest-sample:latest\"}";
+        var legacyPath = root.File("builds/ac/latest/build.json", original);
+        var qualifiedPath = root.File("builds/sample/ac/latest/build.json", qualified);
+
+        // Act
+        var load = () => store.Load("sample", "ac", "latest");
+
+        // Assert
+        load.Should()
+            .Throw<AboxException>()
+            .WithMessage("*abox build --team sample --tag latest*");
+        File.ReadAllText(legacyPath).Should().Be(original);
+        File.ReadAllText(qualifiedPath).Should().Be(qualified);
+    }
+
     [Fact]
     public void ConflictingLegacyOwnershipMarkersAreNotGuessedFromTheLastValue()
     {
