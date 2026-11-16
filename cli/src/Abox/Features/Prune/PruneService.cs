@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.RegularExpressions;
 using Abox.Infrastructure;
 using Abox.Sbx;
@@ -132,112 +133,101 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
     /// What of the template images is stale: everything that is not the newest
     /// assembled set, not an uncertain set or its potential kit sources, and of a known age and id.
     /// </summary>
-    public static PrunePlan Plan(IReadOnlyList<TemplateImage> images)
-    {
-        var builds = new Dictionary<string, List<TemplateImage>>(StringComparer.Ordinal);
-
-        foreach (var image in images)
-        {
-            if (IsRepository(image, AssembledRepository))
-            {
-                var buildId = BuildIdOf(image.Tag);
-                if (!builds.TryGetValue(buildId, out var build))
-                {
-                    build = [];
-                    builds.Add(buildId, build);
-                }
-                build.Add(image);
-            }
-        }
-
-        var newest =
-            builds.Count == 0
-                ? DateTimeOffset.MinValue
-                : builds.Values.Max(build => NewestAt(build));
-        var keptIds = builds
-            .Values.Where(build => NewestAt(build) == newest)
-            .SelectMany(build => build)
-            .Where(image => image.Id.Length > 0)
-            .Select(image => image.Id)
-            .ToHashSet(StringComparer.Ordinal);
-        var uncertainBuilds = UncertainBuilds(images);
-
-        var keep = new List<TemplateImage>();
-        var remove = new List<TemplateImage>();
-
-        foreach (var image in images)
-        {
-            // An image without an age or identity cannot be judged, so it stays.
-            if (!HasKnownMetadata(image))
-            {
-                keep.Add(image);
-                continue;
-            }
-
-            if (IsRepository(image, AssembledRepository))
-            {
-                var stays =
-                    builds.TryGetValue(BuildIdOf(image.Tag), out var build)
-                    && build.Contains(image)
-                    && (
-                        NewestAt(build) == newest || uncertainBuilds.Contains(BuildIdOf(image.Tag))
-                    );
-                (stays ? keep : remove).Add(image);
-            }
-            else if (
-                IsRepository(image, KitSourceRepository)
-                && uncertainBuilds.Count == 0
-                && !keptIds.Contains(image.Id)
-            )
-            {
-                remove.Add(image);
-            }
-            else
-            {
-                keep.Add(image);
-            }
-        }
-
-        return new PrunePlan(remove, keep);
-    }
+    public static PrunePlan Plan(IReadOnlyList<TemplateImage> images) =>
+        Classify(images, everything: false);
 
     /// <summary>
     /// The set of a full prune: every kit image of a known age and id, except uncertain
     /// assembled sets and their potential kit sources. sbx refuses images a sandbox needs
     /// at removal time; the command reports those refusals without failing.
     /// </summary>
-    public static PrunePlan Everything(IReadOnlyList<TemplateImage> images)
+    public static PrunePlan Everything(IReadOnlyList<TemplateImage> images) =>
+        Classify(images, everything: true);
+
+    private static PrunePlan Classify(IReadOnlyList<TemplateImage> images, bool everything)
     {
+        var facts = RetentionFactsOf(images);
         var keep = new List<TemplateImage>();
         var remove = new List<TemplateImage>();
-        var uncertainBuilds = UncertainBuilds(images);
-
         foreach (var image in images)
         {
-            // Full prune does not override uncertain identity, age or dependencies.
-            if (
-                !HasKnownMetadata(image)
-                || !IsKnownRepository(image)
-                || (
-                    IsRepository(image, AssembledRepository)
-                    && uncertainBuilds.Contains(BuildIdOf(image.Tag))
-                )
-                || (IsRepository(image, KitSourceRepository) && uncertainBuilds.Count > 0)
-            )
-            {
-                keep.Add(image);
-            }
-            else
-            {
-                remove.Add(image);
-            }
+            (ShouldKeep(image, facts, everything) ? keep : remove).Add(image);
         }
-
         return new PrunePlan(remove, keep);
     }
 
-    private static bool IsKnownRepository(TemplateImage image) =>
-        IsRepository(image, AssembledRepository) || IsRepository(image, KitSourceRepository);
+    private static bool ShouldKeep(TemplateImage image, RetentionFacts facts, bool everything)
+    {
+        // Full prune does not override uncertain identity, age or dependencies.
+        if (!HasKnownMetadata(image))
+            return true;
+
+        if (IsRepository(image, AssembledRepository))
+        {
+            var group = facts.Builds[BuildIdOf(image.Tag)];
+            return group.IsUncertain || (!everything && group.NewestAt == facts.NewestAt);
+        }
+
+        if (IsRepository(image, KitSourceRepository))
+        {
+            // An uncertain assembled group may depend on any source, not only a shared id.
+            return facts.HasUncertainBuilds
+                || (!everything && facts.NewestImageIds.Contains(image.Id));
+        }
+
+        return true;
+    }
+
+    private sealed record BuildFacts(
+        DateTimeOffset NewestAt,
+        bool IsUncertain,
+        FrozenSet<string> ImageIds
+    );
+
+    private sealed record RetentionFacts(
+        FrozenDictionary<string, BuildFacts> Builds,
+        DateTimeOffset NewestAt,
+        FrozenSet<string> NewestImageIds,
+        bool HasUncertainBuilds
+    );
+
+    private static RetentionFacts RetentionFactsOf(IReadOnlyList<TemplateImage> images)
+    {
+        var builds = images
+            .Where(image => IsRepository(image, AssembledRepository))
+            .GroupBy(image => BuildIdOf(image.Tag), StringComparer.Ordinal)
+            .ToFrozenDictionary(group => group.Key, SummarizeBuild, StringComparer.Ordinal);
+        var newest =
+            builds.Count == 0
+                ? DateTimeOffset.MinValue
+                : builds.Values.Max(build => build.NewestAt);
+        var newestIds = builds
+            .Values.Where(build => build.NewestAt == newest)
+            .SelectMany(build => build.ImageIds)
+            .ToFrozenSet(StringComparer.Ordinal);
+        return new RetentionFacts(
+            builds,
+            newest,
+            newestIds,
+            builds.Values.Any(build => build.IsUncertain)
+        );
+    }
+
+    private static BuildFacts SummarizeBuild(IEnumerable<TemplateImage> images)
+    {
+        var newest = DateTimeOffset.MinValue;
+        var uncertain = false;
+        var ids = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var image in images)
+        {
+            if (image.CreatedAt is { } createdAt && createdAt > newest)
+                newest = createdAt;
+            uncertain |= !HasKnownMetadata(image);
+            if (!string.IsNullOrEmpty(image.Id))
+                ids.Add(image.Id);
+        }
+        return new BuildFacts(newest, uncertain, ids.ToFrozenSet(StringComparer.Ordinal));
+    }
 
     private static bool IsRepository(TemplateImage image, string repository) =>
         image.Repository.Equals(repository, StringComparison.Ordinal)
@@ -245,13 +235,6 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
 
     private static bool HasKnownMetadata(TemplateImage image) =>
         image.CreatedAt is not null && !string.IsNullOrWhiteSpace(image.Id);
-
-    // Missing assembled metadata cannot establish independence of any kit source.
-    private static HashSet<string> UncertainBuilds(IReadOnlyList<TemplateImage> images) =>
-        images
-            .Where(image => IsRepository(image, AssembledRepository) && !HasKnownMetadata(image))
-            .Select(image => BuildIdOf(image.Tag))
-            .ToHashSet(StringComparer.Ordinal);
 
     /// <summary>The build a tag of the assembled repository belongs to.</summary>
     private static string BuildIdOf(string tag)
@@ -266,9 +249,6 @@ public sealed partial class PruneService(ISbxClient sbx, IConsole console)
             ? tag[..^TemplateSuffix.Length]
             : tag;
     }
-
-    private static DateTimeOffset NewestAt(IReadOnlyList<TemplateImage> build) =>
-        build.Max(image => image.CreatedAt ?? DateTimeOffset.MinValue);
 
     /// <summary>The ids of the sets a plan keeps, for the report.</summary>
     private static string KeptBuilds(PrunePlan plan)
