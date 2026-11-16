@@ -95,6 +95,14 @@ git diff --check
 - Focused public adapter activation/readiness checks: **10 passed**, no skips.
 - Focused discovery command tests on Windows: **1 passed, 4 link-privilege skips**;
   same five tests in a fresh non-root Linux container: **5 passed**, no skips.
+- Expanded Release Linux-container regression set (`PortsCommandTests`,
+  `DevelopmentHttpsTests`, `DevelopmentCertificateActivationTests`): **177 passed**,
+  no skips/failures. An initial binary-only attempt failed the certificate fixtures'
+  source-checkout prerequisite (19 fixture failures, not product failures). The
+  successful rerun extracted a public `git archive` of implementation commit
+  `cc41935596e96ba782120e6507b8ac7c7364cd73` inside the new container, copied the
+  matching Release binaries beneath that checkout, and ran as uid 1000. No guard
+  was disabled, no host mount/network was supplied, and the container was removed.
 - CSharpier checked **243 CLI files**; `git diff --check` passed.
 
 ## Remaining gates and safety boundaries
