@@ -5,10 +5,11 @@ statically detected ASP.NET Core Web SDK / `Microsoft.AspNetCore.App` projects, 
 It does not start/restart applications or implement automatic create/replace setup
 (#47). **#46 acceptance remains incomplete.**
 [Windows real-host production evidence](verification/https/real-host-production-verification.md)
-establishes strict host/system/Node TLS and repeat safety on candidate
-`4f5719e09e8946a311c93e0cc77a20bbd20052bc`, not on the later PEM/bootstrap-only
-recovery changes. Current synthetic regression checks and historical manual evidence
-remain distinct. Browser reload, independent Linux-host verification, actual Copilot
+establishes strict host/system/Node TLS, repeat safety and bootstrap-only refresh on
+exact candidate `5b40b570aff9fb76b9c6379e55569eef83dc2df9` (implementation `fdd1916`).
+Its supplemental UTF-8 caller-CA check and synthetic regression checks remain
+distinct from the full production CLI run and historical manual evidence.
+Browser reload, independent Linux-host verification, actual Copilot
 shell-tool/Herdr desktop, real-host renewal and exact 18203 production proof remain open.
 
 ## Prerequisites and host export
@@ -190,7 +191,16 @@ the sandbox is a last resort, **destructive to nonpersisted sandbox files/worktr
 and running sessions**; save work first and review the create confirmation. abox never
 deletes/recreates a sandbox automatically to recover a bootstrap mismatch.
 
-and the shell replaces itself with the original argv. Python is never the app's
+**Known storage-write limitation:** disk-full or read-only runtime write failures
+currently fail closed for all configured launches, including ordinary save/recovery
+commands; Node bundle preparation writes even when a bundle already exists.
+Bootstrap-only refresh also requires writable runtime storage. A trusted operator
+can deliberately use raw `sbx exec` outside the abox wrapper to save work or repair
+storage, or free storage externally. This escape bypasses the protected abox launch
+contract; it is not HTTPS readiness or an automatic fail-open fallback. abox does
+not automatically delete user data or recreate a sandbox to recover storage.
+
+The shell replaces itself with the original argv. Python is never the app's
 exec parent: CPython's ignored SIGPIPE/SIGXFSZ and locale initialization cannot
 leak into the child. Inherited user-ignored signals remain ignored; native child
 termination and signal cancellation are not mislabeled configuration error 78.
@@ -232,8 +242,9 @@ abox run shell -- opencode service stop
 # Then reopen OpenCode through abox's shell or properly initialized Herdr.
 ```
 
-These recovery commands and ordinary save/exit transport remain available; no silent
-restart occurs. Exit other stale agents yourself, open fresh ones, then rerun
+These recovery commands and ordinary save/exit transport remain available subject
+to the protected-state/storage requirements above; no silent restart occurs.
+Exit other stale agents yourself, open fresh ones, then rerun
 `abox ports`. An ordinary hc restart may preserve its old environment. Closing an
 OpenCode UI does not necessarily stop its service. Existing apps require an
 explicit restart for a reliable renewal contract; no universal hot-reload claim
@@ -251,6 +262,8 @@ links, are followed **only as the unprivileged application user**. Reads are bou
 and nonblocking; directories/devices/FIFOs, unreadable/oversize inputs and invalid
 PEM fail Node readiness. For a nonempty input, at least one complete `CERTIFICATE`
 PEM block is required and each block is validated as ASCII using SSL in memory.
+Only the `CERTIFICATE` label is supported; legacy `X509 CERTIFICATE` labels remain
+an unsupported compatibility case, even where Node/OpenSSL accepts them.
 Non-ASCII comments, Bag Attributes and other bytes **outside** these blocks are
 allowed, matching Node/OpenSSL; original bytes still determine the digest and are
 stored/merged unchanged, not decoded or reserialized. Malformed/incomplete certificate

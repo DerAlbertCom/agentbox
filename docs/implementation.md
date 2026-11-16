@@ -820,9 +820,11 @@ Debian-style CA store; only public PEM reaches root. Node's protected extra-CA
 bundle preserves the caller's original roots. A compact shell exec parent reads
 hash-verified installed bootstrap code, avoiding CPython signal/locale inheritance
 and the previous per-exec source-size regression. Runtime reads/writes share the
-exclusive setup lock with a signal-cancellable three-second contention retry (not
-parallel shared readers). Node-only failures preserve ordinary/recovery access,
-the caller's original Node setting and protected Kestrel defaults, while readiness
+exclusive setup lock with signal-cancellable contention retries: five seconds for
+launches, three seconds for other operations, including cleanup within its separate
+five-second host budget (not parallel shared readers). Caller-CA input/capacity
+failures preserve ordinary/recovery access, the caller's original Node setting
+and protected Kestrel defaults, while readiness
 and recognized agent launches fail actionably. Caller-selected CA symlinks are
 read as the application user; abox-owned runtime paths remain strict no-follow.
 See the HTTPS contract for prerequisites, bounded bundles and partial
@@ -838,13 +840,18 @@ arbitrary old Unix shell's environment, and raw sbx launches bypass this contrac
 
 Production export/activation and synthetic exact-leaf .NET 10/real-local-tool
 verification are present, but #46 acceptance remains incomplete; see
-[the scoped production-path record](verification/https/README.md). Separately,
+[the scoped production-path record](verification/https/README.md). The latest
+[Windows real-host production evidence](verification/https/real-host-production-verification.md)
+is pinned to `5b40b570aff9fb76b9c6379e55569eef83dc2df9`: actual Release setup exited
+before app startup, strict host/system/Node TLS passed at 8443 → 18443, and repeat
+setup, bootstrap-only refresh and cleanup passed. Separately,
 [manual Windows verification](agents/story-3-host-certificate-verification.md)
 completed exact host CLI export/copy and explicit Deals activation with default
 host TLS (Swagger HEAD 200) and sandbox TLS (HEAD 404), without changing host trust.
-That does not establish a production real-host `abox ports` run, browser reload,
-Copilot's actual shell tool, the host Herdr desktop or independent Linux-host
-evidence. No #47 automatic create/replace/lifecycle integration is implemented.
+That manual Deals result is not production acceptance evidence. Production browser
+reload, Copilot's actual shell tool, the host Herdr desktop, independent Linux-host
+evidence, real-host renewal and isolated exact 18203 production proof remain open.
+No #47 automatic create/replace/lifecycle integration is implemented.
 
 ### `abox prune [--full] [--sbx]`
 

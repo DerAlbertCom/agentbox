@@ -1,14 +1,17 @@
 # #46 activation verification - 2026-11-16
 
-Current recovery/concurrency fixes and red/green results are recorded in
-[recovery-fixes.md](recovery-fixes.md), following the earlier implementation and
+Current PEM/bootstrap recovery fixes and red/green results are recorded in
+[the PEM regression record](../../agents/story-3-pem-fixes.md), following
+[recovery-fixes.md](recovery-fixes.md) and the earlier implementation and
 Debug/Release reruns in [review-fixes.md](review-fixes.md). The record below is historical:
 the new client uses sandbox **system trust**, and ordinary stale-agent transport
 is no longer blocked. The [real-host production gate](production-verification.md) was
-subsequently executed on exact candidate `4f5719e09e8946a311c93e0cc77a20bbd20052bc`;
-see [its separate evidence](real-host-production-verification.md). This does not
-verify later PEM/bootstrap recovery changes, and the remaining acceptance gates
-are explicitly retained. None of the synthetic results below is real-host proof.
+subsequently executed on exact PEM/bootstrap candidate
+`5b40b570aff9fb76b9c6379e55569eef83dc2df9`; see
+[its separate evidence](real-host-production-verification.md), including repeat
+setup, bootstrap-only refresh and the supplemental UTF-8 caller-CA check. Older
+candidate results stay separately pinned, and the remaining acceptance gates are
+explicitly retained. None of the synthetic results below is real-host proof.
 
 ## Scope and result
 
