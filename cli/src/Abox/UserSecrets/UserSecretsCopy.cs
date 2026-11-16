@@ -80,7 +80,7 @@ public sealed class UserSecretsCopy(AboxConfig config, UserSecretsHost host, ISb
         var policy = new UserSecretOriginalPolicy(config.UserSecretsDenyList, force);
         foreach (var store in stores)
         foreach (var (key, value) in store.Values)
-            safetyOverride |= policy.Check(store.Id, key, value);
+            safetyOverride |= policy.EnsureAllowedAndReportForceOverrideUsed(store.Id, key, value);
         return new PreparedUserSecrets(stores, safetyOverride, force, projects);
     }
 

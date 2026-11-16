@@ -11,6 +11,8 @@ internal sealed record ConnectionField(string Key, int Start, int Length);
 // Consumers must opt into inspecting it, never search inside another field's value,
 // and never treat Complete=false as an empty connection string. StoppedAt is the
 // parser cursor, not the next field's start; no missing syntax is inferred.
+// These outcomes describe parsing, not mandatory recovery behavior: Oracle needs
+// its bounded original remainder rather than the attempted prefix for recognition.
 internal sealed record ConnectionStringScan(
     bool Complete,
     bool Unique,

@@ -458,6 +458,8 @@ public sealed class UserSecretsOracleCommandTests
         "Data Source=localhost:1521/synthetic-service;Data Source=remote.test:1521/synthetic-service"
     )]
     [InlineData("Data Source=localhost:1521/synthetic-service;Host=remote.test;Port=1521")]
+    [InlineData("Data Source=localhost:1521/synthetic-service;pOrT=1521")]
+    [InlineData("Data Source=localhost:1521/synthetic-service;Address=remote.test")]
     [InlineData("Data Source=localhost:1521/synthetic-service;Password='synthetic;password")]
     [InlineData("Password='synthetic;password';Data Source='//localhost:1521/synthetic-service")]
     [InlineData("Data Source='//localhost:1521/synthetic-service' unexpected")]
