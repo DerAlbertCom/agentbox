@@ -6,6 +6,21 @@ namespace Abox.Sbx;
 /// </summary>
 public interface ISbxClient
 {
+    Task<string> GetDevelopmentCertificatePasswordAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+    Task ActivateDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
+        CancellationToken cancellationToken
+    );
+    Task VerifyDevelopmentCertificateActivationAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+
     /// <summary>The first sbx version abox works with.</summary>
     const string MinimumVersion = "0.51.0";
 

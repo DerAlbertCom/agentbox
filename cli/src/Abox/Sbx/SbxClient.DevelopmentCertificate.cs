@@ -12,10 +12,114 @@ public sealed partial class SbxClient
         ReadDevelopmentCertificateReceiver
     );
 
-    public async Task StageDevelopmentCertificateAsync(
+    public Task StageDevelopmentCertificateAsync(
         string sandbox,
         ReadOnlyMemory<byte> pfx,
         string password,
+        CancellationToken cancellationToken
+    ) => TransferDevelopmentCertificateAsync(sandbox, pfx, password, "stage", cancellationToken);
+
+    public Task ActivateDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
+        CancellationToken cancellationToken
+    ) => TransferDevelopmentCertificateAsync(sandbox, pfx, password, "activate", cancellationToken);
+
+    public async Task<string> GetDevelopmentCertificatePasswordAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            var result = await runner.RunAsync(
+                new ProcessRequest(
+                    ExecutableName,
+                    [
+                        "exec",
+                        sandbox,
+                        "python3",
+                        "-I",
+                        "-c",
+                        DevelopmentCertificateReceiver.Value,
+                        "prepare",
+                        Guid.NewGuid().ToString("N"),
+                    ],
+                    StandardInput: "",
+                    OutputPolicy: ProcessOutputPolicy.CapturedSensitive
+                ),
+                cancellationToken
+            );
+            var password = result.StandardOutput.Trim();
+            if (
+                !result.Succeeded
+                || !System.Text.RegularExpressions.Regex.IsMatch(password, "^[0-9a-f]{64}$")
+            )
+                throw new AboxException("Cannot prepare protected HTTPS runtime configuration.");
+            return password;
+        }
+        catch (OperationCanceledException)
+        {
+            throw new OperationCanceledException(
+                "HTTPS runtime preparation canceled.",
+                cancellationToken
+            );
+        }
+        catch (Exception)
+        {
+            throw new AboxException(
+                "Cannot prepare protected HTTPS runtime configuration. Check Python 3.8+, non-root execution and owner-only nonmounted /tmp paths. Child diagnostics were suppressed."
+            );
+        }
+    }
+
+    public async Task VerifyDevelopmentCertificateActivationAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ProcessResult result;
+        try
+        {
+            result = await RunDevelopmentCertificateReceiverAsync(
+                sandbox,
+                "status",
+                Guid.NewGuid().ToString("N"),
+                null,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw new OperationCanceledException(
+                "HTTPS activation check canceled.",
+                cancellationToken
+            );
+        }
+        catch (Exception)
+        {
+            throw new AboxException(
+                "Cannot verify protected HTTPS launch configuration; child diagnostics were suppressed."
+            );
+        }
+        if (result.ExitCode == 42)
+            throw new AboxException(
+                "HTTPS certificate copied, but existing Herdr/agent parents are stale: full activation is NOT complete. Explicitly exit existing Copilot/OpenCode/pi/Claude Code parents and open fresh ones through abox. Save work and obtain consent before stopping core-managed sessions. For an existing Herdr core, deliberately run 'abox run shell -- hc server restart --fresh' if supported by installed hc; otherwise explicitly run 'abox run shell -- hc server stop', then 'abox run shell -- hc server start'. For a stale OpenCode service, explicitly run 'abox run shell -- opencode service stop', then reopen it through abox. Nothing was restarted automatically. Then retry 'abox ports'. Already-running apps require explicit restart for renewal."
+            );
+        if (!result.Succeeded)
+            throw new AboxException(
+                "Cannot verify protected HTTPS launch configuration. Check runtime file ownership, permissions and process visibility; no complete activation is claimed."
+            );
+    }
+
+    private async Task TransferDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
+        string mode,
         CancellationToken cancellationToken
     )
     {
@@ -59,13 +163,13 @@ public sealed partial class SbxClient
         {
             var result = await RunDevelopmentCertificateReceiverAsync(
                 sandbox,
-                "stage",
+                mode,
                 transfer,
                 frame,
                 cancellationToken
             );
             if (!result.Succeeded)
-                throw new AboxException("Certificate staging failed.");
+                throw new AboxException("Certificate transfer failed.");
         }
         catch (Exception exception)
         {
@@ -91,15 +195,15 @@ public sealed partial class SbxClient
             if (exception is OperationCanceledException)
                 throw new OperationCanceledException(
                     cleaned
-                        ? "Certificate staging canceled; retry after checking runtime state."
-                        : "Certificate staging canceled; remote temporary cleanup is unconfirmed. Remove task-owned .transfer-*.tmp files from the protected runtime certificate directory before retrying.",
+                        ? "Certificate transfer canceled; retry after checking runtime state."
+                        : "Certificate transfer canceled; remote temporary cleanup is unconfirmed. Remove task-owned .transfer-*.tmp files from the protected runtime certificate directory before retrying.",
                     cancellationToken
                 );
             throw new AboxException(
-                "Cannot stage the development certificate. Check Python 3.8+, the non-root application user, ordinary owner-only runtime paths and mount layout. Child diagnostics were suppressed. "
+                "Cannot transfer the development certificate. Check Python 3.8+, the non-root application user, ordinary owner-only runtime paths and mount layout. Child diagnostics were suppressed. "
                     + (
                         cleaned
-                            ? "Retry after correcting the destination; any previously staged bundle is retained unless the completed commit was not acknowledged."
+                            ? "Retry after correcting the destination; an existing active certificate is retained unless the completed commit was not acknowledged. Initial protected configuration may already be present; no rollback is promised."
                             : "Remote temporary cleanup is unconfirmed; remove task-owned .transfer-*.tmp files from the protected runtime certificate directory before retrying."
                     )
             );

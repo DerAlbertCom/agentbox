@@ -1,121 +1,176 @@
-# Development HTTPS: staging is not activation
+# Development HTTPS: exact identity and persistent activation
 
-**#46 is not complete. `abox ports` does not export a host certificate or configure
-Kestrel yet.** Forwarding a TLS port does not establish host trust. A new sandbox
-certificate, generic `CurrentUser/My` import, an insecure client or a shell-only
-profile is not a substitute for serving the exact existing trusted host identity.
+`abox ports` now configures a protected, explicit Kestrel default certificate for
+statically detected ASP.NET Core Web SDK projects, in addition to publishing ports.
+It does not start/restart applications or implement automatic create/replace setup
+(#47). **#46 acceptance remains incomplete:** real host CLI export/use, default
+host/browser TLS, independent Linux-host verification and a Copilot shell-tool run
+are not established by the synthetic evidence below.
 
-## Implemented groundwork
+## Prerequisites and host export
 
-`ProtectedTemporaryDirectory` establishes an owner-only directory **before** an
-exporter could write: a protected, inheritable current-user-only DACL on Windows,
-0700 on Unix. Linked ancestors are rejected. Scoped disposal removes partial
-exports after success, exceptions or cancellation, and reports cleanup failures
-without replacing the primary error or exposing raw child diagnostics. It does
-not itself export a certificate or validate a host certificate's trust.
+- An existing, currently valid, exportable ASP.NET Core development identity:
+  `CN=localhost`, localhost DNS SAN, usable private key and **Full** host trust.
+  Resolve missing/untrusted certificates yourself; abox never automatically runs
+  standalone `--trust`, `--clean`, `--import`, installs tools or substitutes a new
+  identity. No host trust-store changes or sandbox certificate-store import occurs.
+- An **already installed** SDK containing a compatible dev-certs CLI. abox discovers
+  `dotnet --list-sdks`, reads the tool's certificate-format constant from its PE
+  metadata without loading it, then executes its explicit DLL with `dotnet exec`.
+  Certificate format is not SDK major version. An older-format existing identity
+  must be eligible for an installed tool or setup fails actionably, before export;
+  there is no native-store private-key export fallback.
+- The selected tool's machine-readable report must contain one eligible identity.
+  Ambiguous, empty, malformed, untrusted or nonexportable reports never authorize
+  export. Successful metadata exit status alone is not trust evidence.
 
-`SbxClient.StageDevelopmentCertificateAsync` accepts an **already authorized and
-validated** PFX/password. The caller must establish the actual exported identity,
-private-key usability, dates, localhost SAN and current host trust first. This
-technical adapter deliberately does not infer trust from arbitrary PFX bytes.
+Export uses `https --export-path ... --password ... --format Pfx`, with a generated
+password. `ProtectedTemporaryDirectory` creates an owner-only directory **before**
+the CLI writes: inheritable current-user-only Windows DACL, or Unix 0700. Linked
+ancestors are rejected. Child-only settings disable SDK first-run certificate
+generation/telemetry and direct tool-created temporary files into private staging.
+Sensitive export output is discarded even with `--verbose`; metadata is privately
+captured. Raw exceptions/diagnostics never become user-facing errors. Partial
+exports are scoped for cleanup on success, failure and cancellation; cleanup
+warnings preserve the primary failure without printing private material.
 
-- Every runtime operation uses `SbxClient` argv, with the actual default exec user,
-  not root. Linux and Python 3.8+ are prerequisites; nothing is installed.
-- PFX and password travel only through sensitive, closed-after-write UTF-8 stdin.
-  Framing checks a version marker, bounded byte length and SHA-256 digest; the
-  receiver additionally validates JSON/base64 structure. The checksum detects
-  damaged framing, **not** a malicious transport peer.
-- The destination is `/tmp/abox-https-<effective uid>/active.json`: a 0700 owned
-  directory, with 0600 ordinary single-link owned files. Root execution, symlinks,
-  wrong ownership, permissive permissions and unexpected entries fail closed.
-  Ancestor/descendant mounts other than the container root filesystem are
-  rejected using `/proc/self/mountinfo`. A mounted/persistent `/tmp` is unsupported;
-  there is no fallback into HOME, APPDATA, a workspace or a build directory.
-- PFX bytes are unchanged base64 in a versioned private bundle together with their
-  password. One same-directory atomic rename activates **the whole bundle**;
-  concurrent readers cannot see a new PFX paired with an old password. The bundle
-  is **not a PFX path Kestrel can consume directly**, and is not launch configuration.
-- An owned 0600 lock prevents simultaneous writes; contention fails for retry,
-  rather than hanging. A later successful writer removes only validated abandoned
-  `.transfer-<id>.tmp` files while holding the lock. Refresh keeps one bundle and
-  one lock, not a series of obsolete certificate generations.
-- Failed/canceled local calls attempt separate bounded cleanup of their exact
-  transfer ID. Cleanup uncertainty is reported. Lost acknowledgements may mean
-  the whole new bundle committed: there is no rollback or secure-erasure claim.
+The actual PFX is loaded ephemerally, checked for the expected thumbprint, subject,
+format extension, dates, localhost SAN and usable RSA private key (sign/verify),
+and correlated with a **fresh** exact Full-trust report before transfer. Its PFX
+bytes are not reserialized or replaced by another certificate.
 
-No command, launcher, create/replace flow, build or publication path invokes these
-helpers yet. A successful staging call must not be reported as “HTTPS configured.”
-Future shared HTTPS orchestration must stay outside command slices, and only be
-connected after the gates below are resolved; #47 lifecycle work is not included.
-That future flow must retain the immutable entry-time `FolderConfig` snapshot and
-pass the selected offset explicitly to `AppPorts.PublishAsync`; certificate staging
-does not select offsets or reinterpret forwarding ownership/conflicts.
+**CLI race limitation:** dev-certs has no identity selector or atomic existing-only
+export switch. Prevalidation prevents the known unsupported-format/missing-candidate
+creation path; postvalidation rejects changed identities. It cannot prevent CLI
+creation during concurrent store deletion/renewal between those checks. Do not
+change certificates concurrently; no absolute TOCTOU/store-mutation guarantee is
+made. The product decision requires this CLI rather than a native export fallback.
+Its password argument is visible to privileged process-argument inspection for the
+export's lifetime; output suppression cannot remove that CLI limitation.
 
-## Prerequisites and unresolved decisions
+## Detection and shared setup
 
-1. **Existing-only host export.** The contract is the host's existing trusted ASP.NET
-   Core certificate, not a newly generated alternative. The inspected `dotnet
-   dev-certs` export path can create a certificate if no current-format candidate
-   qualifies, and has no identity selector or existing-only switch. Pre/post
-   checks can reject the resulting identity but cannot prevent host creation during
-   a renewal/deletion race. A decision is needed on an exact, read-only-store export
-   mechanism versus the ticket's requested CLI-export mechanism; this work has not
-   assumed approval for that change. No production exporter is implemented.
-2. **Trust correlation.** `--check --trust` succeeding does not prove that the
-   exported certificate is the trusted candidate. Validate fresh machine-readable
-   metadata against the actual loaded PFX before transport, including multiple
-   candidates, changed identities and empty/malformed successful output. This is
-   not implemented by the staging adapter. Missing/unusable/untrusted certificates
-   need user-operated recovery, never automatic host `--trust`, `--clean`, `--import`
-   or creation. `dotnet dev-certs https --check --trust` is a read-only prerequisite
-   check, not export-identity or browser-validation evidence.
-3. **Persistent exact selection across launch paths.** Canonical Kestrel default
-   Path/Password configuration remains preferred. `/etc/sandbox-persistent.sh`
-   through BASH_ENV misses direct argv and noninteractive `sh`. A shared exec
-   bootstrap would cover abox shell/direct argv/exec/pipe, but a new transport's
-   environment cannot initialize an already-running Herdr core or agent parent.
-   A supported explicit fresh-parent procedure plus stale-parent detection and
-   real tool-path evidence is still required. No bootstrap, profile, core or
-   launcher modification has been made; there is no approved shell-only acceptance.
+The shared `ApplicationPorts` discovery reads ordinary bounded `.csproj`, `.fsproj`
+and `.vbproj` XML for an explicit `Microsoft.NET.Sdk.Web` project SDK (including
+literal version suffixes and `Sdk Name` elements). It never evaluates MSBuild,
+imports, targets, scripts or package tasks. Standard artifact/link exclusions still
+apply. Computed/import-only custom SDKs are not inferred. Such projects need an
+explicit supported SDK declaration to opt into this static detection contract.
 
-CLI PFX export's `--password` would unavoidably expose its generated password to
-process-argument inspection for the export process's lifetime. Sensitive output
-policies do not eliminate that exposure. The staging adapter adds **no** password
-arguments or environment settings. Its transient .NET strings and Python memory
-are not securely erasable; scoping/cleanup is not a memory-forensics guarantee.
+Non-Web/non-.NET folders perform **no host dotnet certificate operation**. An
+explicit Web SDK project requires certificate setup even without discovered launch
+ports. Shared `DevelopmentHttps` orchestration lives outside command slices, so
+#47 can reuse it through `AppPorts.PublishAsync` with the immutable entry-time folder
+snapshot's **explicitly selected offset**, without a second command implementation.
+No lifecycle integration is included here.
 
-## Restart, recovery and trust boundary
+Port conflicts/offset validation retain #44/#45 behavior: unproven native direct
+bindings are conflicts at every offset, never automatically unpublished. HTTPS
+failure can occur after forwarding succeeds; no rollback of mappings or a committed
+certificate is promised. Correct the prerequisite and rerun folder-qualified
+`abox ports --location "<folder>" [--offset N]`.
 
-Staging alone changes no app's certificate. Even after an activation mechanism is
-implemented, assume running applications must restart to adopt a renewed identity;
-new settings may additionally require fresh shells, agent parents and a correctly
-initialized Herdr core. An ordinary core restart may preserve the old environment.
-No automatic restart or disruption of existing applications is authorized here.
-Explicit application endpoint certificates/custom TLS callbacks may override the
-default; there is no universal forced-TLS configuration promise.
+## Runtime storage and atomic refresh
 
-For staging failures, correct ownership/type/mode/mount issues and retry. Preserve
-unrelated entries; do not recursively delete an unfamiliar runtime directory. If
-cleanup is unconfirmed, identify the task-owned transfer under the protected runtime
-directory before removing its `.transfer-<id>.tmp`; a normal successful retry also
-cleans validated abandoned transfers. After an abnormal host export failure, inspect
-the task-owned `abox-certificate-*` directory identified by its caller and remove
-remaining private files. Crash/power loss cleanup is best effort, not guaranteed.
+Every runtime operation uses `SbxClient`, argv lists, the actual default non-root
+application user, and sensitive length/digest-framed stdin. Linux, Python 3.8+,
+`sh`, `id` and readable `/proc` are prerequisites for configured sandboxes. Nothing
+is installed. The receiver checks the size, SHA-256, JSON/base64 framing and rejects
+links, nonregular/multiply-linked files, wrong ownership, unexpected entries and
+permissive modes. Mountinfo validation rejects persistent/mounted `/tmp`, ancestors
+or descendants of the selected runtime directory; there is no HOME/workspace/build
+directory fallback.
 
-Giving a sandbox PFX plus password grants its application user and root access to
-the host's localhost private identity. It is not a general CA trust grant. Do not
-snapshot a provisioned sandbox as a template: manual snapshots can capture runtime
-secrets. The adapter does not install a certificate or trust anchor in either host
-or sandbox certificate stores. Host Windows, Linux system/curl and browser trust
-are separate verification surfaces.
+Persistent runtime-only files under `/tmp/abox-https-<effective uid>/` are:
 
-Filesystem checks are not an authorization barrier against a malicious application
-user or root editing its own files/mounts concurrently. The adapter assumes the
-selected sandbox and host exporter are trusted with this private identity.
+- `active.pfx`: unchanged encrypted PFX bytes, ordinary single-link 0600 file.
+- `config.json`: protected 0600 configuration with the canonical path and generated
+  password. It is not an appsettings file or a public shell profile.
+- `.lock`: private nonblocking writer lock. The containing directory is 0700.
 
-## Evidence scope
+The **path and password remain stable for the lifetime of that sandbox's HTTPS
+configuration**. Each export uses that same generated password. Refresh therefore
+needs one atomic same-directory PFX replacement, not two independently renamed
+files or stale inherited password/PFX pairs. No agent needs to read a new password
+to adopt a renewed file. Successful cleanup retains one active PFX/config/lock,
+not an unbounded generation history. Initial setup commits configuration before
+the first PFX; an interruption there causes launches to fail closed, never fall
+back to an unrelated development certificate. A retry reuses that configuration.
 
-[The task status and reproduction record](agents/story-3-transfer-status.md) separate
-synthetic transport verification from host certificate export/use and launch-path
-verification. No Windows host browser success, real Deals host-certificate identity,
-independent Linux-host run or complete #46 acceptance is claimed by this groundwork.
+Separate bounded cleanup attempts remove the exact transfer's private temporary
+file after failure/cancellation. A successful serialized retry removes validated
+abandoned transfer files. Contended writers fail for retry rather than hang.
+After a lost acknowledgement the new PFX may already be committed; no rollback,
+power-loss durability or secure-erasure claim is made. The earlier private
+`StageDevelopmentCertificateAsync` bundle adapter remains a transport-only seam;
+production setup uses activation and removes a validated old transport bundle.
+
+## Launch propagation and existing parents
+
+All `SbxClient.ExecAsync` launches cross a quiet shared bootstrap, including shell
+and explicit argv, hidden `abox exec` and byte-transparent `abox pipe` (Herdr's
+transport). Without HTTPS state it directly executes the original argv without
+requiring Python. With state, it validates protected runtime configuration, sets:
+
+```text
+ASPNETCORE_Kestrel__Certificates__Default__Path
+ASPNETCORE_Kestrel__Certificates__Default__Password
+```
+
+and replaces itself with the original argv. It does not consume stdin, interpolate
+user arguments into a shell script, print secrets, change workdir/TTY flags or
+replace a child's exit code. This is a persistent file-backed exec contract, not
+`BASH_ENV`/profile-only environment changes that disappear with abox.
+
+**Unix cannot mutate another process's environment.** Existing shells, agents and
+cores must be deliberately replaced by fresh parents initialized through abox.
+Setup and subsequent configured launches inspect same-user process environments
+for recognizable hc/herdr-core, Copilot, OpenCode, pi and Claude Code entrypoints,
+including native `.exe` packaging and common Node/Bun entrypoints. A stale relevant
+parent blocks full activation and launches with an actionable diagnostic (42).
+Uninspectable relevant process state fails closed. Herdr's launcher checks this
+before opening the desktop, rather than reporting success for a stale remote core.
+Readiness is a snapshot, not an atomic process-lifetime lease. Renamed/custom
+wrappers and arbitrary pre-existing shell descendants cannot be universally
+identified: **fresh parent creation through abox remains required**.
+Launching directly with raw `sbx exec` bypasses this supported bootstrap contract.
+
+Save work and obtain consent before recovery; abox does **not** do this itself:
+
+```sh
+# If the installed hc supports --fresh:
+abox run shell -- hc server restart --fresh
+
+# Older hc (verified 0.1.17 has no --fresh): explicitly stop, then initialize anew.
+# Stop can interrupt core-managed sessions.
+abox run shell -- hc server stop
+abox run shell -- hc server start
+
+# Existing OpenCode's service, not just its client, must have a fresh environment:
+abox run shell -- opencode service stop
+# Then reopen OpenCode through abox's shell or properly initialized Herdr.
+```
+
+These exact recovery commands are allowed through a stale-parent gate; no silent
+restart occurs. Exit other stale agents yourself, open fresh ones, then rerun
+`abox ports`. An ordinary hc restart may preserve its old environment. Closing an
+OpenCode UI does not necessarily stop its service. Existing apps require an
+explicit restart for a reliable renewal contract; no universal hot-reload claim
+is made. Custom endpoint certificates, TLS callbacks and tool-specific environment
+filters can override/remove these defaults and are outside the default contract.
+
+## Trust boundary and evidence
+
+PFX plus password grants the sandbox application user/root the host's localhost
+private identity. Do not snapshot a provisioned sandbox as a template. No material
+is intentionally added to app sources, images, build data, publication or host trust
+stores. Strings/process memory are not securely erasable. Ownership/link/mount
+checks are not an authorization barrier against a malicious application user/root
+editing its own files concurrently.
+
+[The verification record](verification/https/README.md) distinguishes synthetic
+export mocks, real disposable .NET 10 Kestrel activation and actual local tool
+subprocesses from still-unverified host CLI export, browser/default trust, Copilot,
+desktop Herdr and independent Linux-host cases. The separate real-host verifier's
+external-directory tool denial is **not** evidence of CLI ineligibility or export
+failure; see [its context record](agents/story-3-host-certificate-verification.md).

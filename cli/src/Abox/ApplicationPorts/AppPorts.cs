@@ -1,12 +1,13 @@
 using System.Text.Json;
 using Abox.Configuration;
+using Abox.Https;
 using Abox.Infrastructure;
 using Abox.Sbx;
 
 namespace Abox.ApplicationPorts;
 
 /// <summary>Shared discovery, reporting and runtime publishing for an already selected sandbox.</summary>
-public sealed class AppPorts(ISbxClient sbx, IConsole console)
+public sealed class AppPorts(ISbxClient sbx, IConsole console, DevelopmentHttps https)
 {
     public async Task PublishAsync(
         string location,
@@ -16,7 +17,8 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
     )
     {
         FolderConfig.SelectPortOffset(null, offset);
-        var occurrences = await AppPortDiscovery.DiscoverAsync(location, cancellationToken);
+        var plan = await AppPortDiscovery.DiscoverAsync(location, cancellationToken);
+        var occurrences = plan.Occurrences;
         foreach (var occurrence in occurrences)
             if ((long)occurrence.Port + offset is < 1 or > 65535)
                 throw new AboxException(
@@ -25,6 +27,8 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
         if (occurrences.Count == 0)
         {
             console.WriteLine("No explicit application ports found; nothing published.");
+            if (plan.HasDotnetProjects)
+                await https.ConfigureAsync(sandbox, cancellationToken);
             return;
         }
 
@@ -63,7 +67,13 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
             throw;
         }
         console.WriteLine(
-            "Application ports published on 127.0.0.1 via sandbox relays (existing matching mappings reused). HTTPS certificates are not configured by this command."
+            "Application ports published on 127.0.0.1 via sandbox relays (existing matching mappings reused)."
         );
+        if (plan.HasDotnetProjects)
+            await https.ConfigureAsync(sandbox, cancellationToken);
+        else
+            console.WriteLine(
+                "No explicit ASP.NET Core Web SDK project found; HTTPS certificates are not configured for this folder."
+            );
     }
 }

@@ -87,8 +87,13 @@ fix the conflict and retry. Failure/cancellation can leave mappings and sandbox
 relays in place; there is no rollback. The table is a plan, not proof the app is running.
 
 This supports .NET/Angular discovery and HTTP reachability with configurable offsets.
-HTTPS ports are discovered too, but certificates/trust are **not** configured.
-See [HTTPS status, trust boundaries and remaining gates](docs/https-development-certificates.md).
+Explicit ASP.NET Core Web SDK projects also require the existing trusted host dev
+certificate: abox exports it through a compatible installed dev-certs CLI and
+persists a protected explicit Kestrel default for new apps launched through abox.
+It never changes host trust or silently substitutes another certificate. Existing
+apps/agent/core parents may need **explicit** restarts; stale recognized parents
+prevent full activation success, never trigger automatic restarts. See
+[HTTPS prerequisites, launch/recovery contract and remaining verification gates](docs/https-development-certificates.md).
 Automatic create/recreate publishing is not included yet.
 See [shared discovery/runtime rules](docs/verification/application-ports.md) and
 [Angular scope, supported forms and verification](docs/verification/angular-application-ports.md).

@@ -1,5 +1,17 @@
 # Story #3 / #46: partial staging implementation
 
+## Activation follow-up, 2026-11-16
+
+The activation worktree now implements the host CLI exporter, shared on-demand
+HTTPS setup, consumable protected PFX/configuration, stable password refresh and
+shared exec bootstrap. This file's original staging-only status below is historical.
+Read the current [HTTPS contract](../https-development-certificates.md) and
+[synthetic activation/tool verification](../verification/https/README.md) first.
+No #47 lifecycle integration is included and #46 is not fully accepted: real host
+CLI export/default host TLS/browser trust, Copilot shell-tool verification and an
+independent Linux-host run remain unverified. The separately denied real-host
+staging retry was not retried or bypassed by the activation implementer.
+
 Read alongside [HTTPS research](story-3-https-research.md),
 [the selection refutation](story-3-certificate-mechanism.md),
 [live Deals evidence](story-3-deals-verification.md) and
