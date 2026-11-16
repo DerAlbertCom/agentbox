@@ -6,7 +6,7 @@ namespace Abox.Sbx;
 
 public sealed partial class SbxClient
 {
-    private const string AllowedSourcesKey = "kit.allowedSources";
+    private const string AllowedSourcesKey = KitSourceAllowlist.Key;
 
     /// <summary>Preserves the evaluated allowlist, adding only the requested repository prefix.</summary>
     public async Task EnsureKitSourceAllowedAsync(
@@ -82,7 +82,7 @@ public sealed partial class SbxClient
         );
     }
 
-    private async Task<(string[] Sources, string Source)> ReadAllowedSourcesAsync(
+    private async Task<KitSourceAllowlist> ReadAllowedSourcesAsync(
         CancellationToken cancellationToken
     )
     {
@@ -101,37 +101,7 @@ public sealed partial class SbxClient
             result.StandardOutput,
             $"sbx settings get {AllowedSourcesKey}"
         );
-        var record = document.RootElement;
-        if (
-            record.ValueKind != JsonValueKind.Object
-            || !record.TryGetProperty("key", out var key)
-            || key.ValueKind != JsonValueKind.String
-            || key.GetString() != AllowedSourcesKey
-            || !record.TryGetProperty("type", out var type)
-            || type.ValueKind != JsonValueKind.String
-            || type.GetString() != "json"
-            || !record.TryGetProperty("source", out var source)
-            || source.ValueKind != JsonValueKind.String
-            || string.IsNullOrWhiteSpace(source.GetString())
-            || !record.TryGetProperty("value", out var value)
-            || value.ValueKind != JsonValueKind.Array
-            || value
-                .EnumerateArray()
-                .Any(entry =>
-                    entry.ValueKind != JsonValueKind.String
-                    || string.IsNullOrWhiteSpace(entry.GetString())
-                )
-        )
-        {
-            throw new AboxException(
-                $"Cannot read '{AllowedSourcesKey}': expected a settings record with a JSON array of nonempty source prefixes. No sandbox was replaced."
-            );
-        }
-
-        return (
-            value.EnumerateArray().Select(entry => entry.GetString()!).ToArray(),
-            source.GetString()!
-        );
+        return KitSourceAllowlist.DecodeRecord(document.RootElement);
     }
 
     private static bool CoversRepository(IEnumerable<string> sources, string repositoryPrefix) =>
