@@ -99,39 +99,49 @@ public sealed class UserSecretSelection
         IReadOnlyList<string> hostIds
     )
     {
-        var result = new List<UserSecretSelection>();
-        var indices = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var result = new SelectionAccumulator();
         foreach (var selection in selections)
-        {
-            var matches = hostIds
-                .Where(id =>
-                    selection.IsPrefixPattern
-                        ? id.StartsWith(selection.Id[..^1], StringComparison.OrdinalIgnoreCase)
-                        : id.Equals(selection.Id, StringComparison.OrdinalIgnoreCase)
-                )
-                .ToArray();
-            if (!selection.IsPrefixPattern && matches.Length == 0)
-                matches = [selection.Id];
-            foreach (var id in matches)
-            {
-                UserSecretId.Validate(id);
-                if (indices.TryGetValue(id, out var index))
-                {
-                    var previous = result[index];
-                    if (!previous.Id.Equals(id, StringComparison.Ordinal))
-                        throw new AboxException(
-                            "Host user-secret store IDs collide case-insensitively. Rename the conflicting host directories; no stores were copied."
-                        );
-                    result[index] = new UserSecretSelection(id, selection, previous);
-                }
-                else
-                {
-                    indices.Add(id, result.Count);
-                    result.Add(new UserSecretSelection(id, selection, null));
-                }
-            }
-        }
+        foreach (var id in selection.MatchingIds(hostIds))
+            result.Add(id, selection);
         return result.ToArray();
+    }
+
+    private IEnumerable<string> MatchingIds(IReadOnlyList<string> hostIds)
+    {
+        var matches = hostIds
+            .Where(id =>
+                IsPrefixPattern
+                    ? id.StartsWith(Id[..^1], StringComparison.OrdinalIgnoreCase)
+                    : id.Equals(Id, StringComparison.OrdinalIgnoreCase)
+            )
+            .ToArray();
+        // An unmatched exact selection must still be validated and read, not silently omitted.
+        return !IsPrefixPattern && matches.Length == 0 ? [Id] : matches;
+    }
+
+    private sealed class SelectionAccumulator
+    {
+        private readonly List<UserSecretSelection> selections = [];
+        private readonly Dictionary<string, int> indices = new(StringComparer.OrdinalIgnoreCase);
+
+        public void Add(string id, UserSecretSelection selection)
+        {
+            UserSecretId.Validate(id);
+            if (!indices.TryGetValue(id, out var index))
+            {
+                indices.Add(id, selections.Count);
+                selections.Add(new UserSecretSelection(id, selection, null));
+                return;
+            }
+            var previous = selections[index];
+            if (!previous.Id.Equals(id, StringComparison.Ordinal))
+                throw new AboxException(
+                    "Host user-secret store IDs collide case-insensitively. Rename the conflicting host directories; no stores were copied."
+                );
+            selections[index] = new UserSecretSelection(id, selection, previous);
+        }
+
+        public UserSecretSelection[] ToArray() => selections.ToArray();
     }
 
     private static UserSecretSelection ParseObject(JsonElement entry)
