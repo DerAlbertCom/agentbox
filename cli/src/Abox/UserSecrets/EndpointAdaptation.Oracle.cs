@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using static Abox.UserSecrets.EndpointSyntax;
 
 namespace Abox.UserSecrets;
 
@@ -23,7 +24,8 @@ internal static partial class EndpointAdaptation
         }
         else
         {
-            var fields = ConnectionFields(value, out var uniqueAndComplete);
+            var scan = ConnectionStringScanner.Scan(value);
+            var fields = scan.Fields;
             var sources = fields
                 .Where(field => field.Key.Equals("Data Source", StringComparison.OrdinalIgnoreCase))
                 .ToArray();
@@ -36,7 +38,7 @@ internal static partial class EndpointAdaptation
                 allValid &= sourceHosts.Valid;
                 replacements.AddRange(sourceHosts.Hosts);
             }
-            if (!uniqueAndComplete)
+            if (!scan.CompleteAndUnique)
             {
                 // The shared field parser intentionally omits an unfinished field. Inspect only
                 // that next field's Data Source, never substrings inside credentials or prose.
@@ -65,7 +67,7 @@ internal static partial class EndpointAdaptation
                 replacements.Count > 0
                 && (
                     !allValid
-                    || !uniqueAndComplete
+                    || !scan.CompleteAndUnique
                     || sources.Length != 1
                     || fields.Count(field => HostFields.Contains(field.Key)) != 1
                     || fields.Any(field =>

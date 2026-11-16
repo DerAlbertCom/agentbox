@@ -6,6 +6,42 @@ namespace Abox.Tests;
 public sealed class UserSecretsEndpointCommandTests
 {
     [Theory]
+    [InlineData("Server=localhost,8004;Password='synthetic-private' trailing")]
+    [InlineData("Server=localhost,8004;Application Name=first;application name=second")]
+    [InlineData("Host=localhost:8004;Password=synthetic-private;broken!")]
+    [InlineData(
+        "postgresql://named.internal:8004/db?host=remote.test,localhost&hostaddr=192.0.2.1,&port=5000,8004"
+    )]
+    [InlineData("postgresql://named.internal/db?hostaddr=192.0.2.1,127.0.0.1&port=5000,8004,5001")]
+    public async Task PartialOrAmbiguousMappedEndpointsRejectAllStoresWithoutPayloadDiagnostics(
+        string endpoint
+    )
+    {
+        // Arrange
+        using var cli = new UserSecretsCliHarness();
+        cli.Configure("""{"userSecrets":["first","sample"]}""");
+        cli.Store("first", """{"Url":"http://localhost:8004/synthetic-private"}""");
+        var source = JsonSerializer.Serialize(new { Endpoint = endpoint });
+        var path = cli.Store("sample", source);
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 8004 });
+
+        // Act
+        var exit = await cli.Run("--force", "--verbose");
+
+        // Assert
+        exit.Should().Be(1, cli.Console.AllText);
+        await cli.NoWrites();
+        (await File.ReadAllTextAsync(path)).Should().Be(source);
+        cli.Console.AllText.Should()
+            .Contain("sample")
+            .And.Contain("Endpoint")
+            .And.Contain("unsupported")
+            .And.NotContain("synthetic-private")
+            .And.NotContain("named.internal");
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task SelectedAndGeneratedEndpointsShareSamePortAdaptationWithoutChangingOtherText(

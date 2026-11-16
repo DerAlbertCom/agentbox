@@ -34,6 +34,14 @@ public sealed class UserSecretsRewriteTests
 
     [Theory]
     [InlineData(
+        ";; Network Address = 'tcp:LOCALHOST,08004' ; Password = 'synthetic;it''s=localhost,8004';;",
+        ";; Network Address = 'tcp:host.docker.internal,08004' ; Password = 'synthetic;it''s=localhost,8004';;"
+    )]
+    [InlineData(
+        "Password=\"synthetic;\"\"quoted\"; Host = '[::1]:08004' ;Application Name=localhost",
+        "Password=\"synthetic;\"\"quoted\"; Host = 'host.docker.internal:08004' ;Application Name=localhost"
+    )]
+    [InlineData(
         "Server=localhost,8004;Database=local;Password='localhost,8004;http://localhost:8004'",
         "Server=host.docker.internal,8004;Database=local;Password='localhost,8004;http://localhost:8004'"
     )]
@@ -67,6 +75,13 @@ public sealed class UserSecretsRewriteTests
     }
 
     [Theory]
+    [InlineData("Password='unfinished;Server=localhost,8004")]
+    [InlineData("Password={synthetic;Host=localhost;Port=8004}")]
+    [InlineData("Server=named.internal,8004;Password='unfinished")]
+    [InlineData("postgresql://localhost:8004/db?hostaddr=192.0.2.1&sslmode=verify-full")]
+    [InlineData(
+        "postgresql://named.internal:8004/db?host=localhost,remote.test&hostaddr=,192.0.2.1&port=5000,8004"
+    )]
     [InlineData("https://sql.internal:8004/path")]
     [InlineData("https://host.docker.internal:8004/path")]
     [InlineData("https://localhost:5432/path")]

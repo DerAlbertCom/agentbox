@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Sockets;
+using static Abox.UserSecrets.EndpointSyntax;
 
 namespace Abox.UserSecrets;
 
