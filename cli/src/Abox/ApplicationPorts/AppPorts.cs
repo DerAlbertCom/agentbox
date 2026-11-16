@@ -16,7 +16,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
     )
     {
         FolderConfig.SelectPortOffset(null, offset);
-        var occurrences = await DotnetLaunchSettings.DiscoverAsync(location, cancellationToken);
+        var occurrences = await AppPortDiscovery.DiscoverAsync(location, cancellationToken);
         foreach (var occurrence in occurrences)
             if ((long)occurrence.Port + offset is < 1 or > 65535)
                 throw new AboxException(
@@ -28,7 +28,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
             return;
         }
 
-        console.WriteLine("Source file (profile) | Sandbox port | Host port");
+        console.WriteLine("Source file (profile/configuration) | Sandbox port | Host port");
         foreach (var occurrence in occurrences)
             console.WriteLine(
                 $"{JsonSerializer.Serialize(occurrence.SourceFile)} ({JsonSerializer.Serialize(occurrence.Profile)}) | {occurrence.Port} | {occurrence.Port + offset}"

@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class PortsCommandTests
+public sealed partial class PortsCommandTests
 {
     [Theory]
     [InlineData("0", 8203)]

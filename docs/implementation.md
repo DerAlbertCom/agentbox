@@ -718,19 +718,24 @@ documents explicitly authorized local declarations on the existing `D:\dev\rwe`
 sandbox and read-only production port discovery; no real secret copy, connectivity
 or authentication check was performed for that change.
 
-### `abox ports [--location <path>] [--offset <n>]` (#43, #45)
+### `abox ports [--location <path>] [--offset <n>]` (#43, #44, #45)
 
 Resolves the existing sandbox with the shared current-first/legacy resolver and
 passes its actual identity to `ApplicationPorts/AppPorts`. Location precedence is
 explicit, `defaultLocation`, current folder. No team sources, build metadata or
 folder configuration is required, and no create/replacement occurs.
 
-The shared module statically discovers all explicit .NET launch-profile URL ports,
+The shared module statically discovers all explicit .NET launch-profile URL ports
+and Angular serve/start-script ports,
 validates the complete plan, prints source occurrences and duplicate warnings, then
 asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset mappings.
 Discovery/reporting/application orchestration stays outside the command slice so
-the later Angular, HTTPS and lifecycle slices can reuse it without importing
-a command.
+the HTTPS and lifecycle slices can reuse it without importing a command.
+`AppPortDiscovery` owns one bounded filesystem walk/read/JSON policy for both formats;
+`DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
+parsing. No extension framework or project-tool execution is involved. Angular #44
+includes options and all named serve configurations, and a conservative literal
+direct-CLI start-script grammar. See [scope/tests/live evidence](verification/angular-application-ports.md).
 
 The command loads `FolderConfig` once before runtime access. Configuration owns
 `portOffset` parsing/validation and `FolderConfig.SelectPortOffset(snapshot, option)`:
