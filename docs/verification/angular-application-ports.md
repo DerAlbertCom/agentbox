@@ -140,7 +140,7 @@ dotnet csharpier check docs/verification/application-ports
 git diff --check
 ```
 
-## Representative live verification (Windows, 2026-11-16)
+## Earlier synthetic transport check (not Angular acceptance)
 
 The checked-in [AngularRuntimeProbe](application-ports/AngularRuntimeProbe) was run
 against minimum **sbx 0.51.0** and the actual Debug `abox.dll`, in newly created
@@ -166,13 +166,73 @@ first; protected/competing 18203–18206, 18213 and 18223 were not used.
 **This is real discovery/abox/sbx/relay/command-exit HTTP evidence, not a real
 Angular `ng serve` run.** The disposable template had Node and Python 3.14.10 but
 no `ng` command. The existing host project dependencies contain only a Windows
-esbuild native package, not the Linux tooling required by this sandbox. No package
-installation or dependency publication was justified or performed. Actual Angular
-dev-server/WebSocket/HMR behavior remains unverified; forwarding is raw TCP and
-does not interpret HTTP or WebSockets. Do not count this synthetic marker as
-independent real-Angular acceptance evidence.
+esbuild native package, not the Linux tooling required by this sandbox. At that
+point no package installation had been authorized/performed. Do not count this
+synthetic marker as independent real-Angular acceptance evidence. The following
+separate run closes the actual-dev-server gap, not by relabelling that listener.
 
-Reproduce from the repo root, choosing two free alternate host ports:
+## Actual Angular end-to-end verification (Windows, 2026-11-16)
+
+The probe now copies the checked-in [minimal Angular app](application-ports/SyntheticAngular),
+including its npm lockfile, into a **new disposable workspace**. Its framework
+**22.2.4**, CLI/build **22.2.6**, TypeScript **6.0.3**, RxJS **7.8.2** and tslib
+**2.9.1** are exact pins, matching the inspected Deals frontend's Angular 22
+scope; the existing Deals app and dependencies are never changed or reused.
+
+Red/green at the live HTTP seam: requiring Angular/Vite HTML first failed against
+the previous Python listener in `abox-issue44-real-red-e1c01-abox-7D5F4`. This was
+an expected failure, with task-owned sandbox cleanup exit 0. Next, sandbox-local
+`npm ci` in `abox-issue44-real-angular-e1c03-abox-DF1AD` failed with
+`UNABLE_TO_GET_ISSUER_CERT_LOCALLY` fetching an npm tarball. It was cleaned up,
+not counted as a pass. No TLS verification bypass or trust/settings change was used.
+
+The authorized alternative is host-side **local npm installation into the new
+mounted fixture only**, selecting Linux x64/glibc optional dependencies and using
+its lockfile (`npm ci --os=linux --cpu=x64 --libc=glibc --ignore-scripts`). The
+cache is inside that disposable workspace. Existing host Node **26.13.1** / npm
+**11.20.0** downloaded 237 packages from the public npm registry; no global
+installation or package/image publication occurred. The actual Angular app then
+ran inside the sandbox with existing Node **24.22.2**, npm **11.21.1** and Python
+**3.14.10** (Python launches/checks Node; it does not serve the application).
+
+Successful real-dev-server run: **`abox-issue44-real-angular-e1c04-abox-6EE9A`**,
+minimum sbx **0.51.0**, the same cached local template above, actual Debug abox:
+
+- Before dependency installation, `abox ports` exited 0, reporting options,
+  named `same` configuration and `scripts.start` on **8354 -> 18354**, plus named
+  `preview` on **8355 -> 18355**. Three occurrences of 8354 warned, with one mapping.
+- A separate sandbox check found **no `node_modules`, npm `prestart` sentinel or
+  application listener** after discovery exited. Scanning neither installed nor
+  ran the app/scripts. The sentinel remained absent throughout the verification.
+- The probe explicitly started local `node node_modules/@angular/cli/bin/ng.js
+  serve --port=8354`, with **no `--host` override**. CLI version output confirmed
+  Angular/CLI versions above; its log showed an Angular application build and
+  `Local: http://localhost:8354/`. Node PID **286** remained alive after bootstrap
+  exec exited. `/proc/net/tcp6` showed only **`::1:8354`** for the app, no wildcard
+  or non-loopback listener. Application JSON remained byte-for-byte unchanged.
+- Two subsequent actual `abox ports` commands each exited 0. **After each abox
+  process exited**, host `http://localhost:18354/` returned the app's HTML title
+  `abox-issue44-angular-index` and Angular/Vite client reference. A separate request
+  to `/main.js` returned the compiled `abox-issue44-real-angular-component` marker.
+  This was the real Angular dev server, not a Python/.NET stand-in.
+- All three inventories were identical: `127.0.0.1:18354 -> 56697/tcp4` and
+  `127.0.0.1:18355 -> 62267/tcp4`. No direct mapping was prepublished or upgraded.
+  Duplicate/rerun reuse retained precisely two relay mappings. Host listener
+  inspection found exactly these **two IPv4 loopback-only listeners**, no wildcard
+  or IPv6 host publication. Protected/competing ports were not used.
+- `finally` removed only the fresh task-owned sandbox (exit 0), ending its Node
+  process/relays, then removed that **exact** synthetic workspace, dependencies
+  and npm cache. Reproducible source/lockfile stay in Git, not generated outputs.
+
+The representative real-Angular HTTP/compiled-app check is now verified.
+**Browser DOM rendering, WebSocket/HMR/live reload, HTTPS and an independent Unix
+host run are not verified here.** Raw TCP forwarding does not itself prove those
+browser behaviors. This is not a claim about running the existing Deals frontend.
+
+### Reproduce
+
+From the repo root, with an existing compatible host Node/npm and Linux x64
+Node/Python template, choose two free alternate host ports:
 
 ```powershell
 dotnet build cli/agentbox.slnx -c Debug
@@ -180,13 +240,18 @@ dotnet run --project docs/verification/application-ports/AngularRuntimeProbe -- 
 dotnet run --project docs/verification/application-ports/AngularRuntimeProbe -- `
   "C:/path/to/approved/temp/abox-issue44-<fresh-id>" `
   "docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792" `
-  "cli/src/Abox/bin/Debug/net10.0/abox.dll" 8344
+  "cli/src/Abox/bin/Debug/net10.0/abox.dll" 8354 `
+  "C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js"
 ```
 
-The workspace must not exist. The last argument selects the synthetic sandbox
-port; its host port is +10000 and the next host port is also used. The probe refuses
+Use your existing host npm's `npm-cli.js` path (no global install). The workspace
+must not exist. The integer argument selects the synthetic sandbox port; its host
+port is +10000 and the next host port is also used. The probe refuses
 protected/occupied host ports and existing sandbox identities. All sbx calls use
 `SbxClient` argv lists (including verification-only helpers); abox host config/state
 is isolated via child-process XDG variables. No user sandbox/Deals API, host trust
 or certificates, global settings/restarts/upgrades, app sources outside new
 synthetic fixtures, real secrets or registry publication were touched.
+The probe removes its exact workspace only after successful sandbox removal; if
+sandbox cleanup fails, it prints the name and retains the workspace for targeted
+cleanup. Never prune broadly or remove a workspace still mounted by a sandbox.

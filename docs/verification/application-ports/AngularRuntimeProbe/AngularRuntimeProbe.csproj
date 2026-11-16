@@ -7,5 +7,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../RuntimeProbe/RuntimeProbe.csproj" />
+    <Content
+      Include="../SyntheticAngular/**/*"
+      Exclude="../SyntheticAngular/node_modules/**;../SyntheticAngular/dist/**;../SyntheticAngular/.angular/**;../SyntheticAngular/.abox/**"
+      Link="fixture/%(RecursiveDir)%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
   </ItemGroup>
 </Project>
