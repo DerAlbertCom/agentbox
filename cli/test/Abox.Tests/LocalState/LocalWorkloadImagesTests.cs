@@ -5,10 +5,12 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class LocalWorkloadImagesTests
+public sealed partial class LocalWorkloadImagesTests : IDisposable
 {
     private readonly TempDirectory _root = new();
     private readonly IProcessRunner _runner = LocalWorkloadTest.Runner();
+
+    public void Dispose() => _root.Dispose();
 
     [Fact]
     public async Task BuildProducesARealUniqueLocalImageAndAThinV3Kit()
@@ -66,6 +68,61 @@ public sealed partial class LocalWorkloadImagesTests
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Fact]
+    public async Task AvailabilityChecksUseTheRecordedImageAndContext()
+    {
+        // Arrange
+        var image = await BuildAsync("runtime");
+        _runner.ClearReceivedCalls();
+
+        // Act
+        await LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
+
+        // Assert
+        await _runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.SequenceEqual(
+                        new[]
+                        {
+                            "--context",
+                            "test-context",
+                            "image",
+                            "inspect",
+                            "--format",
+                            "{{.Id}}",
+                            image.Reference,
+                        }
+                    )
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-a-content-id")]
+    public async Task UnprovenImageIdentityNeverProducesARuntimeKit(string contentId)
+    {
+        // Arrange
+        _runner
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request => request.Arguments.Contains("{{.Id}}")),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new ProcessResult(0, contentId, ""));
+
+        // Act
+        var build = () => BuildAsync("runtime");
+
+        // Assert
+        (await build.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*valid content ID*abox build*again*"
+        );
+        Directory.Exists(Path.Combine(_root.Path, "runtime")).Should().BeFalse();
     }
 
     [Theory]

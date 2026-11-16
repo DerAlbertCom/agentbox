@@ -74,43 +74,66 @@ public static class BuildSources
                 result.Count.ToString(),
                 Path.GetFileName(Path.TrimEndingDirectorySeparator(source))
             );
-            Directory.CreateDirectory(destination);
-            var entries = Entries(source).ToList();
-            foreach (var entry in entries)
-            {
-                var copied = Path.Combine(destination, Path.GetRelativePath(source, entry));
-                if (Directory.Exists(entry))
-                {
-                    Directory.CreateDirectory(copied);
-                    continue;
-                }
-
-                Directory.CreateDirectory(Path.GetDirectoryName(copied)!);
-                File.Copy(entry, copied);
-            }
-
-            if (!OperatingSystem.IsWindows())
-            {
-                foreach (var entry in entries.AsEnumerable().Reverse())
-                {
-                    File.SetUnixFileMode(
-                        Path.Combine(destination, Path.GetRelativePath(source, entry)),
-                        File.GetUnixFileMode(entry)
-                    );
-                }
-            }
-
-            if (DirectoryHash(destination) != manifest.SourceHashes[Path.GetFullPath(source)])
-            {
-                throw new AboxException(
-                    "The local build sources changed while snapshotting. Run 'abox build --no-personal' again."
-                );
-            }
-
+            SnapshotDirectory(source, destination, manifest.SourceHashes[Path.GetFullPath(source)]);
             result[source] = destination;
         }
 
         return result;
+    }
+
+    private static void SnapshotDirectory(string source, string destination, string expectedHash)
+    {
+        Directory.CreateDirectory(destination);
+        var entries = Entries(source).ToList();
+        CopyEntries(source, destination, entries);
+        RestoreModes(source, destination, entries);
+        if (DirectoryHash(destination) != expectedHash)
+        {
+            throw new AboxException(
+                "The local build sources changed while snapshotting. Run 'abox build --no-personal' again."
+            );
+        }
+    }
+
+    private static void CopyEntries(
+        string source,
+        string destination,
+        IReadOnlyList<string> entries
+    )
+    {
+        foreach (var entry in entries)
+        {
+            var copied = Path.Combine(destination, Path.GetRelativePath(source, entry));
+            if (Directory.Exists(entry))
+            {
+                Directory.CreateDirectory(copied);
+                continue;
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(copied)!);
+            File.Copy(entry, copied);
+        }
+    }
+
+    private static void RestoreModes(
+        string source,
+        string destination,
+        IReadOnlyList<string> entries
+    )
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // Restore children first so restrictive directory modes cannot prevent copying.
+        foreach (var entry in entries.Reverse())
+        {
+            File.SetUnixFileMode(
+                Path.Combine(destination, Path.GetRelativePath(source, entry)),
+                File.GetUnixFileMode(entry)
+            );
+        }
     }
 
     private static IEnumerable<string> Directories(BuildManifest manifest)
