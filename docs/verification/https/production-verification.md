@@ -2,9 +2,10 @@
 
 **Windows Release production/default-TLS gate executed by a fresh verifier.**
 [The real-host evidence](real-host-production-verification.md) records the exact
-latest tested candidate `4f5719e09e8946a311c93e0cc77a20bbd20052bc` (including
-integration `13a5f40` / recovery fix `cc41935`), strict host/sandbox system/Node TLS,
-repeat safety and confirmed cleanup. **#46 remains incomplete:** browser UI,
+latest tested candidate `5b40b570aff9fb76b9c6379e55569eef83dc2df9` (PEM/bootstrap
+implementation `fdd1916`), strict host/sandbox system/Node TLS, repeat safety,
+bootstrap-only refresh, supplemental UTF-8 caller-CA checks and confirmed cleanup.
+Older candidate results remain separately pinned. **#46 remains incomplete:** browser UI,
 Copilot shell-tool, Herdr desktop, independent Linux host, real-host renewal and
 exact 18203 production proof were not established. The older pinned run is
 recorded separately; a default-path pass does not clear independent review.
