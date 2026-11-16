@@ -14,7 +14,7 @@ public sealed class UserSecretsRewriteTests
     {
         // Arrange
         using var fixture = new CopyFixture("abox-issue5-local-191454a2");
-        fixture.Inventory = File.ReadAllText(RepositoryFile("local.policy.kit.json"));
+        fixture.Inventory = File.ReadAllText(VerificationFile("local.policy.kit.json"));
         fixture.Store("sample", """{"Url":"https://127.0.0.1:8006/path?x=localhost:8004"}""");
 
         // Act
@@ -131,7 +131,7 @@ public sealed class UserSecretsRewriteTests
     {
         // Arrange
         using var fixture = new CopyFixture();
-        fixture.Inventory = File.ReadAllText(RepositoryFile("published.policy.kit.json"));
+        fixture.Inventory = File.ReadAllText(VerificationFile("published.policy.kit.json"));
         fixture.Store("sample", """{"Url":"http://localhost:8004"}""");
 
         // Act
@@ -384,13 +384,8 @@ public sealed class UserSecretsRewriteTests
             .And.NotContain("synthetic-password");
     }
 
-    private static string RepositoryFile(string name)
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "docs")))
-            directory = directory.Parent;
-        return Path.Combine(directory!.FullName, "docs/verification/user-secrets/metadata", name);
-    }
+    private static string VerificationFile(string name) =>
+        SyntheticTestResources.File(Path.Combine("Verification", name));
 
     private sealed class CopyFixture : IDisposable
     {

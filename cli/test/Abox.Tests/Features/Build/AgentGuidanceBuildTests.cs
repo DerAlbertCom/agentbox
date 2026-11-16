@@ -22,7 +22,7 @@ public sealed class AgentGuidanceBuildTests
     {
         // Arrange
         using var root = new TempDirectory();
-        var source = KitDescriptor.Load(RepositoryKit(kitName))!;
+        var source = KitDescriptor.Load(FixtureKit(kitName))!;
         var kitDirectory = root.Directory_("kits/" + kitName);
         File.Copy(source.DescriptorPath, Path.Combine(kitDirectory, kitName + ".yaml"));
         root.File("teams/sample/ac.abox", $"workload: sample\nkits: [{kitName}]\n");
@@ -101,17 +101,10 @@ public sealed class AgentGuidanceBuildTests
         sbx.ReceivedCalls().Should().BeEmpty();
     }
 
-    private static string RepositoryKit(string name)
+    private static string FixtureKit(string name)
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (
-            directory is not null
-            && !File.Exists(Path.Combine(directory.FullName, "kits", name, name + ".yaml"))
-        )
-        {
-            directory = directory.Parent;
-        }
-        return Path.Combine(directory!.FullName, "kits", name);
+        var descriptor = SyntheticTestResources.File(Path.Combine("Kits", name, name + ".yaml"));
+        return Path.GetDirectoryName(descriptor)!;
     }
 
     private static string Shell() =>
