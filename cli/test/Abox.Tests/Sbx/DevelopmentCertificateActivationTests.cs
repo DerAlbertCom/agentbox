@@ -186,6 +186,7 @@ public sealed class DevelopmentCertificateActivationTests
     [Theory]
     [InlineData("prepare")]
     [InlineData("stage")]
+    [InlineData("refresh-bootstrap")]
     public async Task RuntimeLockTimeoutGivesRetryGuidanceWithoutLeakingChildDiagnostics(
         string mode
     )
@@ -212,13 +213,19 @@ public sealed class DevelopmentCertificateActivationTests
                         CancellationToken.None
                     );
                 }
-                : () =>
-                    client.StageDevelopmentCertificateAsync(
+            : mode == "refresh-bootstrap"
+                ? () =>
+                    client.RefreshDevelopmentCertificateBootstrapAsync(
                         "actual",
-                        new byte[] { 1, 2 },
-                        "password",
                         CancellationToken.None
-                    );
+                    )
+            : () =>
+                client.StageDevelopmentCertificateAsync(
+                    "actual",
+                    new byte[] { 1, 2 },
+                    "password",
+                    CancellationToken.None
+                );
 
         // Assert
         var failure = (await action.Should().ThrowAsync<AboxException>()).Which;
@@ -227,5 +234,35 @@ public sealed class DevelopmentCertificateActivationTests
             .Contain("busy")
             .And.Contain("retry")
             .And.NotContain("private child");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BootstrapRefreshFailureAndCancellationNeverExposeRawDiagnostics(bool cancel)
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                Task.FromException<ProcessResult>(
+                    cancel
+                        ? new OperationCanceledException("private child diagnostics")
+                        : new AboxException("private child diagnostics")
+                )
+            );
+        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+
+        // Act
+        var action = () =>
+            client.RefreshDevelopmentCertificateBootstrapAsync("actual", CancellationToken.None);
+
+        // Assert
+        var failure = cancel
+            ? (Exception)(await action.Should().ThrowAsync<OperationCanceledException>()).Which
+            : (await action.Should().ThrowAsync<AboxException>()).Which;
+        failure.Message.Should().Contain("bootstrap").And.NotContain("private child");
     }
 }

@@ -28,10 +28,18 @@ class RuntimeBusy(Exception):
     pass
 
 
-def acquire_lock(lock):
-    # All operations can write (including launch/status Node bundles). A short
-    # exclusive retry stays below the host cleanup budget and honors signals.
-    deadline = time.monotonic() + 3
+class CallerCAInputError(Exception):
+    pass
+
+
+class NodeTrustCapacityError(Exception):
+    pass
+
+
+def acquire_lock(lock, wait=3):
+    # Cleanup's short wait fits its separate five-second host budget. Launches
+    # retain the original five-second allowance for queued agent-tool bursts.
+    deadline = time.monotonic() + wait
     while True:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -185,7 +193,19 @@ def write_atomic(root, name, payload):
             os.unlink(temporary, dir_fd=root)
 
 
+def read_public_certificate(root, uid):
+    public = os.open("public.pem", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root)
+    with os.fdopen(public, "rb") as source:
+        ordinary_file(os.fstat(source.fileno()), uid)
+        leaf = source.read(16385)
+        require(0 < len(leaf) <= 16384)
+        ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(cadata=leaf.decode("ascii"))
+    return leaf
+
+
 def node_bundle(root, uid):
+    # Protected-state failures must never be treated as recoverable caller input.
+    leaf = read_public_certificate(root, uid)
     original = os.environ.get("NODE_EXTRA_CA_CERTS", "")
     prefix = "/tmp/abox-https-" + str(uid) + "/"
     own = original.startswith(prefix)
@@ -195,33 +215,44 @@ def node_bundle(root, uid):
     else:
         path = original
     content = b""
-    if path:
-        # Caller trust inputs may be system/corporate CA symlinks. Follow them
-        # only as this unprivileged user; abox-owned sources remain no-follow.
-        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if own else 0))
-        with os.fdopen(fd, "rb") as source:
-            info = os.fstat(source.fileno())
-            if own:
-                ordinary_file(info, uid)
-            require(stat.S_ISREG(info.st_mode) and info.st_size <= 1024 * 1024)
-            content = source.read(1024 * 1024 + 1)
-            require(len(content) <= 1024 * 1024)
-    if content:
-        # Validate in memory, without changing or reserializing caller roots.
-        ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(cadata=content.decode("ascii"))
+    try:
+        if path:
+            # Caller trust inputs may be system/corporate CA symlinks. Follow them
+            # only as this unprivileged user; abox-owned sources remain no-follow.
+            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if own else 0))
+            with os.fdopen(fd, "rb") as source:
+                info = os.fstat(source.fileno())
+                if own:
+                    ordinary_file(info, uid)
+                require(stat.S_ISREG(info.st_mode) and info.st_size <= 1024 * 1024)
+                content = source.read(1024 * 1024 + 1)
+                require(len(content) <= 1024 * 1024)
+        if content:
+            # Node/OpenSSL allow non-ASCII comments and Bag Attributes outside PEM.
+            # Validate only complete ASCII certificates; retain the exact caller bytes.
+            blocks = re.findall(rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", content, re.DOTALL)
+            require(blocks and len(blocks) == content.count(b"-----BEGIN CERTIFICATE-----") == content.count(b"-----END CERTIFICATE-----"))
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+            for block in blocks:
+                context.load_verify_locations(cadata=block.decode("ascii"))
+    except (OSError, ValueError):
+        if own:
+            raise
+        raise CallerCAInputError() from None
     name = "node-" + hashlib.sha256(content).hexdigest()
     if own:
         require(path == prefix + name + ".source")
-    if name + ".source" not in os.listdir(root):
+    if name + ".source" in os.listdir(root):
+        fd = os.open(name + ".source", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root)
+        with os.fdopen(fd, "rb") as source:
+            ordinary_file(os.fstat(source.fileno()), uid)
+            require(source.read(1024 * 1024 + 1) == content)
+    else:
         # Bound distinct user trust configurations, never evict a running Node's
         # trust file or silently replace a user's independently selected CA roots.
-        require(sum(entry.endswith(".source") for entry in os.listdir(root)) < 16)
+        if sum(entry.endswith(".source") for entry in os.listdir(root)) >= 16:
+            raise NodeTrustCapacityError()
         write_atomic(root, name + ".source", content)
-    public = os.open("public.pem", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root)
-    with os.fdopen(public, "rb") as source:
-        ordinary_file(os.fstat(source.fileno()), uid)
-        leaf = source.read(16385)
-        require(0 < len(leaf) <= 16384)
     write_atomic(root, name + ".pem", content + b"\n" + leaf)
     return name + ".pem"
 
@@ -234,7 +265,7 @@ def bootstrap(uid):
         lock = os.open(".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=root)
         try:
             ordinary_file(os.fstat(lock), uid)
-            acquire_lock(lock)
+            acquire_lock(lock, 5)
             check_contents(root, uid)
             config = read_config(root, uid)
             ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
@@ -246,7 +277,7 @@ def bootstrap(uid):
                     return 42 if current is False else 43
             try:
                 node = node_bundle(root, uid)
-            except (OSError, ValueError):
+            except (CallerCAInputError, NodeTrustCapacityError):
                 sys.stderr.write("abox HTTPS: Node trust is NOT configured. Check NODE_EXTRA_CA_CERTS (readable regular PEM file, at most 1 MiB; maximum 16 distinct trust inputs). Preserve/fix the caller input or inspect unused owned node pairs, then retry 'abox ports'. Ordinary/recovery commands retain the caller's original Node setting and protected Kestrel configuration.\n")
                 if is_agent(sys.argv[2:]) and not recovery:
                     return 78
@@ -267,7 +298,7 @@ def run():
         return bootstrap(uid)
     require(len(sys.argv) == 3)
     mode, transfer = sys.argv[1:]
-    require(mode in ("stage", "activate", "prepare", "status", "cleanup") and re.fullmatch(r"[0-9a-f]{32}", transfer) is not None)
+    require(mode in ("stage", "activate", "prepare", "status", "cleanup", "refresh-bootstrap") and re.fullmatch(r"[0-9a-f]{32}", transfer) is not None)
     payload = read_payload() if mode in ("stage", "activate") else None
     root = open_root(uid, mode in ("stage", "activate"))
     if root is None:
@@ -285,12 +316,18 @@ def run():
             if mode == "prepare":
                 print(read_config(root, uid)["password"] if "config.json" in os.listdir(root) else secrets.token_hex(32))
                 return
+            if mode == "refresh-bootstrap":
+                read_config(root, uid)
+                ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
+                read_public_certificate(root, uid)
+                write_atomic(root, "bootstrap.py", SOURCE.encode("utf-8"))
+                return
             if mode == "status":
                 config = read_config(root, uid)
                 ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
                 try:
                     node_bundle(root, uid)
-                except (OSError, ValueError):
+                except (CallerCAInputError, NodeTrustCapacityError):
                     return 44
                 current = parents_current(config, uid)
                 return 0 if current is True else 42 if current is False else 43
@@ -366,12 +403,12 @@ for event in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
 try:
     result = run()
 except RuntimeBusy:
-    sys.stderr.write("abox HTTPS: protected runtime is busy after 3 seconds; retry the operation or 'abox ports'. No complete readiness is claimed.\n")
+    sys.stderr.write("abox HTTPS: protected runtime is busy after a bounded lock wait; retry the operation or 'abox ports'. No complete readiness is claimed.\n")
     sys.exit(75)
 except Exception:
     # No traceback, JSON, certificate, password or raw exception reaches stderr.
     if len(sys.argv) > 1 and sys.argv[1] == "environment":
-        sys.stderr.write("abox HTTPS: protected launch configuration is invalid or incomplete. Check runtime ownership/mounts; retry 'abox ports'. No trust configuration was discarded.\n")
+        sys.stderr.write("abox HTTPS: protected launch configuration is invalid or incomplete (including public.pem or owned Node sources). Check runtime ownership, permissions, mounts and file integrity; retry 'abox ports'. No complete readiness is claimed and no trust configuration was discarded.\n")
         sys.exit(78)
     sys.exit(1)
 else:

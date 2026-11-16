@@ -4,8 +4,11 @@ Current recovery/concurrency fixes and red/green results are recorded in
 [recovery-fixes.md](recovery-fixes.md), following the earlier implementation and
 Debug/Release reruns in [review-fixes.md](review-fixes.md). The record below is historical:
 the new client uses sandbox **system trust**, and ordinary stale-agent transport
-is no longer blocked. The [fresh real-host production gate](production-verification.md)
-remains unexecuted; none of these synthetic results closes that gate.
+is no longer blocked. The [real-host production gate](production-verification.md) was
+subsequently executed on exact candidate `4f5719e09e8946a311c93e0cc77a20bbd20052bc`;
+see [its separate evidence](real-host-production-verification.md). This does not
+verify later PEM/bootstrap recovery changes, and the remaining acceptance gates
+are explicitly retained. None of the synthetic results below is real-host proof.
 
 ## Scope and result
 

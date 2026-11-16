@@ -25,6 +25,7 @@ import signal
 import subprocess
 import sys
 import time
+import threading
 import unittest
 
 SOURCE = Path('development_certificate.py').read_text()
@@ -44,7 +45,9 @@ def encoded(payload):
     return b'ABOX-CERTIFICATE-1\n%d\n%s\n' % (len(payload), hashlib.sha256(payload).hexdigest().encode()) + payload
 
 
-def frame(pfx=b'synthetic-private-bytes', password=PASSWORD, public='synthetic-public-only'):
+def frame(pfx=b'synthetic-private-bytes', password=PASSWORD, public=None):
+    if public is None:
+        public = Path('/tmp/abox-public-one').read_text()
     return encoded(json.dumps(dict(version=1, pfx=base64.b64encode(pfx).decode(), password=password, public=public)).encode())
 
 
@@ -245,6 +248,45 @@ class ReceiverChecks(unittest.TestCase):
         status = self.receiver('status', env={**os.environ, 'NODE_EXTRA_CA_CERTS': '/missing-user-trust'})
         self.assertEqual(44, status.returncode)
 
+    def test_node_extra_ca_accepts_nonascii_metadata_without_changing_caller_bytes(self):
+        # Arrange: Node accepts UTF-8 comments/Bag Attributes outside ASCII PEM.
+        self.activate()
+        extra = '/tmp/abox-user-metadata.pem'
+        tools = '/tmp/abox-metadata-agent-tools'
+        os.mkdir(tools)
+        Path(tools + '/opencode').write_text('#!/bin/sh\nexit 37\n')
+        os.chmod(tools + '/opencode', 0o755)
+        variants = [('# Unternehmenswurzeln für Köln\n').encode() + Path('/etc/ssl/certs/ca-certificates.crt').read_bytes(),
+                    ('Bag Attributes\n    friendlyName: Entwicklung für Köln\n').encode() + self.renewed,
+                    b'# opaque metadata \xff\xfe\n' + self.renewed + '\n# Ende ✓\n'.encode()]
+        node = 'const t=require("tls");t.createSecureContext({ca:require("fs").readFileSync(process.argv[1])});if(t.getCACertificates&&!t.getCACertificates("extra").length)process.exit(2);'
+        for content in variants:
+            with self.subTest(prefix=content[:60]):
+                Path(extra).write_bytes(content)
+                environment = {**os.environ, 'NODE_EXTRA_CA_CERTS': extra}
+                accepted = subprocess.run(['node', '-e', node, extra], env=environment,
+                                          capture_output=True, preexec_fn=user, timeout=5)
+                self.assertEqual(0, accepted.returncode, accepted.stderr)
+                self.assertEqual(b'', accepted.stderr)
+                # Act
+                status = self.receiver('status', env=environment)
+                launched = self.launch(['printenv', 'NODE_EXTRA_CA_CERTS'], env=environment)
+                # Assert: digest/storage are of ORIGINAL bytes, not extracted PEM.
+                self.assertEqual(0, status.returncode, status.stderr)
+                self.assertEqual(0, launched.returncode, launched.stderr)
+                self.assertEqual(b'', launched.stderr)
+                bundle = ROOT + '/node-' + hashlib.sha256(content).hexdigest() + '.pem'
+                self.assertEqual(bundle, launched.stdout.decode().strip())
+                self.assertEqual(content, Path(bundle[:-4] + '.source').read_bytes())
+                self.assertEqual(content + b'\n' + self.public, Path(bundle).read_bytes())
+                self.assertEqual(content, Path(extra).read_bytes())
+                loaded = self.launch(['node', '-e', node, bundle], env=environment)
+                self.assertEqual(0, loaded.returncode, loaded.stderr)
+                self.assertEqual(b'', loaded.stderr)
+                agent = self.launch(['opencode', '--version'], env={**environment, 'PATH': tools + ':' + os.environ['PATH']})
+                self.assertEqual(37, agent.returncode, agent.stderr)
+                self.assertEqual(b'', agent.stderr)
+
     def test_node_invalid_inputs_preserve_caller_environment_kestrel_and_recovery_exit(self):
         # Arrange: caller-selected files are read as the application user, never root.
         self.activate()
@@ -257,8 +299,14 @@ class ReceiverChecks(unittest.TestCase):
         private = '/tmp/abox-root-only-extra'
         Path(private).write_bytes(self.public)
         os.chmod(private, 0o600)
-        invalid = '/tmp/abox-invalid-extra.pem'
-        Path(invalid).write_bytes(b'not a PEM certificate')
+        malformed = []
+        for index, content in enumerate((b'not a PEM certificate', '# Keine Zertifikate ✓\n'.encode(),
+                                         b'-----BEGIN CERTIFICATE-----\nbroken\n-----END CERTIFICATE-----',
+                                         self.public + b'\n-----BEGIN CERTIFICATE-----\nincomplete',
+                                         self.public.replace(b'MI', b'\xff\xfe', 1))):
+            path = '/tmp/abox-invalid-extra-' + str(index)
+            Path(path).write_bytes(content)
+            malformed.append(path)
         tools = '/tmp/abox-node-recovery-tools'
         os.makedirs(tools, exist_ok=True)
         script = '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$NODE_EXTRA_CA_CERTS" "$ASPNETCORE_Kestrel__Certificates__Default__Path" "$ASPNETCORE_Kestrel__Certificates__Default__Password"; exit 37\n'
@@ -268,7 +316,7 @@ class ReceiverChecks(unittest.TestCase):
         commands = [['sh', '-c', script[10:]], ['hc', 'server', 'stop'], ['hc', 'server', 'start'],
                     ['hc', 'server', 'restart', '--fresh'], ['opencode', 'service', 'stop']]
         # Act / Assert
-        for path in ('/missing-user-trust', directory, oversized, fifo, private, invalid):
+        for path in ['/missing-user-trust', directory, oversized, fifo, private] + malformed:
             environment = {**os.environ, 'NODE_EXTRA_CA_CERTS': path, 'PATH': tools + ':' + os.environ['PATH']}
             for command in commands:
                 with self.subTest(path=path, command=command):
@@ -294,6 +342,52 @@ class ReceiverChecks(unittest.TestCase):
         self.assertEqual(b'', result.stderr)
         self.assertEqual(self.renewed + b'\n' + self.public, Path(result.stdout.decode().strip()).read_bytes())
         self.assertEqual(0, self.receiver('status', env=environment).returncode)
+
+    def test_invalid_owned_node_state_fails_closed_instead_of_blames_caller_ca(self):
+        # Arrange: first create valid owned state through the production launch.
+        for damage in ('missing-public', 'empty-public', 'invalid-public', 'public-mode',
+                       'missing-source', 'invalid-source', 'changed-source'):
+            with self.subTest(damage=damage):
+                shutil.rmtree(ROOT, ignore_errors=True)
+                self.activate()
+                initial = self.launch(['printenv', 'NODE_EXTRA_CA_CERTS'])
+                self.assertEqual(0, initial.returncode, initial.stderr)
+                bundle = initial.stdout.decode().strip()
+                source = bundle[:-4] + '.source'
+                if damage == 'missing-public':
+                    os.unlink(ROOT + '/public.pem')
+                elif damage == 'empty-public':
+                    Path(ROOT + '/public.pem').write_bytes(b'')
+                elif damage == 'invalid-public':
+                    Path(ROOT + '/public.pem').write_bytes(b'sensitive-invalid-public')
+                elif damage == 'public-mode':
+                    os.chmod(ROOT + '/public.pem', 0o644)
+                elif damage == 'missing-source':
+                    os.unlink(source)
+                elif damage == 'invalid-source':
+                    Path(source).write_bytes(b'sensitive-invalid-source')
+                else:
+                    Path(source).write_bytes(self.renewed)
+                environment = {**os.environ, 'NODE_EXTRA_CA_CERTS': bundle}
+                # Act / Assert: even recovery cannot use untrusted protected state.
+                status = self.receiver('status', env=environment)
+                self.assertNotEqual(0, status.returncode)
+                self.assertNotEqual(44, status.returncode)
+                for command in (['sh', '-c', 'printf must-not-run'], ['hc', 'server', 'stop'], ['opencode', '--version']):
+                    result = self.launch(command, env=environment)
+                    self.assertEqual(78, result.returncode, result.stderr)
+                    self.assertEqual(b'', result.stdout)
+                    self.assertIn(b'protected', result.stderr)
+                    self.assertNotIn(b'Check NODE_EXTRA_CA_CERTS', result.stderr)
+                    self.assertNotIn(b'sensitive-invalid', result.stderr)
+                    self.assertNotIn(PASSWORD.encode(), result.stderr)
+                if 'public' in damage:
+                    # A bad caller path cannot hide an independently damaged owned leaf.
+                    invalid_caller = {**os.environ, 'NODE_EXTRA_CA_CERTS': '/missing-user-trust'}
+                    self.assertNotEqual(44, self.receiver('status', env=invalid_caller).returncode)
+                    self.assertEqual(78, self.launch(['true'], env=invalid_caller).returncode)
+                elif damage != 'missing-source':
+                    self.assertNotEqual(0, self.receiver('status').returncode)
 
     def test_framing_damage_never_replaces_active_private_material(self):
         # Arrange
@@ -332,6 +426,7 @@ class ReceiverChecks(unittest.TestCase):
                     try:
                         result = self.launch(['true'])
                         self.assertEqual(78, result.returncode, (name, damage, result.stderr))
+                        self.assertNotEqual(0, self.receiver('refresh-bootstrap').returncode)
                         self.assertNotEqual(0, self.receiver('activate', frame(b'new')).returncode)
                         self.assertEqual(original, Path(path).read_bytes())
                     finally:
@@ -380,6 +475,33 @@ class ReceiverChecks(unittest.TestCase):
         # Assert
         self.assertEqual(b'new-private-bytes', Path(ROOT + '/active.pfx').read_bytes())
         self.assertFalse(any(name.startswith('.transfer-') for name in os.listdir(ROOT)))
+
+    def test_parallel_node_launch_burst_preserves_real_bundle_under_lock_contention(self):
+        # Arrange: synchronize a burst behind one real holder; no outer retries or
+        # millisecond timing assertions. Real Debian roots exercise the costly read.
+        self.activate()
+        extra = '/tmp/abox-burst-extra.pem'
+        content = '# Unternehmenswurzeln für Köln\n'.encode() + Path('/etc/ssl/certs/ca-certificates.crt').read_bytes()
+        Path(extra).write_bytes(content)
+        environment = {**os.environ, 'NODE_EXTRA_CA_CERTS': extra}
+        barrier = threading.Barrier(25, timeout=10)
+        def launch(_):
+            barrier.wait()
+            return self.launch(['printenv', 'NODE_EXTRA_CA_CERTS'], env=environment)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=24) as pool:
+            with open(ROOT + '/.lock', 'rb') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                futures = [pool.submit(launch, index) for index in range(24)]
+                barrier.wait()
+                time.sleep(.3)
+                # Act: release setup; every queued launch must complete normally.
+            results = [future.result() for future in futures]
+        # Assert
+        for result in results:
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(b'', result.stderr)
+            self.assertEqual(content + b'\n' + self.public, Path(result.stdout.decode().strip()).read_bytes())
+        self.assertEqual(1, sum(name.endswith('.source') for name in os.listdir(ROOT)))
 
     def test_lock_contention_and_signal_cancellation_are_bounded_not_invalid_configuration(self):
         # Arrange
@@ -528,9 +650,21 @@ class ReceiverChecks(unittest.TestCase):
             self.assertEqual(b'', result.stdout)
             self.assertIn(b'CLI upgrade', result.stderr)
             self.assertIn(b'abox ports --location <folder>', result.stderr)
+            self.assertIn(b'--refresh-https-bootstrap', result.stderr)
         self.assertEqual(before, Path(ROOT + '/bootstrap.py').read_bytes())
-        self.activate()
+        self.assertEqual(0, self.receiver('refresh-bootstrap', env={**os.environ, 'NODE_EXTRA_CA_CERTS': '/missing-user-trust'}).returncode)
         self.assertEqual(0, self.launch(['true']).returncode)
+
+    def test_bootstrap_only_refresh_does_not_create_or_repair_private_activation(self):
+        # Arrange / Act / Assert
+        self.assertNotEqual(0, self.receiver('refresh-bootstrap').returncode)
+        self.assertFalse(os.path.exists(ROOT))
+        self.activate()
+        before = Path(ROOT + '/bootstrap.py').read_bytes()
+        os.unlink(ROOT + '/active.pfx')
+        self.assertNotEqual(0, self.receiver('refresh-bootstrap').returncode)
+        self.assertEqual(before, Path(ROOT + '/bootstrap.py').read_bytes())
+        self.assertFalse(os.path.exists(ROOT + '/active.pfx'))
 
     def test_uninspectable_same_user_agent_is_not_reported_as_invalid_configuration(self):
         # Arrange: Linux denies environ even to the same user for a nondumpable process.
@@ -559,7 +693,7 @@ class ReceiverChecks(unittest.TestCase):
     def test_node_default_tls_uses_both_host_leaf_and_existing_user_extra_ca(self):
         # Arrange
         self.activate()
-        Path('/tmp/abox-node-user.pem').write_bytes(self.renewed)
+        Path('/tmp/abox-node-user.pem').write_bytes('Bag Attributes\n    friendlyName: Entwicklung für Köln\n'.encode() + self.renewed + '\n# Ende ✓\n'.encode())
         server_code = '''import socket,ssl,sys
 c=ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER); c.load_cert_chain(sys.argv[1],sys.argv[2])
 s=socket.socket(); s.bind(("127.0.0.1",0)); s.listen(); print(s.getsockname()[1],flush=True)

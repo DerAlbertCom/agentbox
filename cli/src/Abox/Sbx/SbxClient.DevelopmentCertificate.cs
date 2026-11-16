@@ -13,7 +13,7 @@ public sealed partial class SbxClient
         ReadDevelopmentCertificateReceiver
     );
     private const string DevelopmentCertificateBusy =
-        "Protected HTTPS runtime is busy after 3 seconds; retry the operation or 'abox ports'. No complete readiness is claimed. Child diagnostics were suppressed. ";
+        "Protected HTTPS runtime is busy after a bounded lock wait; retry the operation or 'abox ports'. No complete readiness is claimed. Child diagnostics were suppressed. ";
 
     public Task StageDevelopmentCertificateAsync(
         string sandbox,
@@ -200,8 +200,44 @@ public sealed partial class SbxClient
             throw new AboxException(DevelopmentCertificateBusy);
         if (!result.Succeeded)
             throw new AboxException(
-                "Cannot verify protected HTTPS launch configuration. Check runtime file ownership, permissions and process visibility; no complete activation is claimed."
+                "Cannot verify protected HTTPS launch configuration. Check runtime file ownership, permissions, public.pem, owned Node source integrity and process visibility; no complete activation is claimed."
             );
+    }
+
+    public async Task RefreshDevelopmentCertificateBootstrapAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    )
+    {
+        const string failure =
+            "Cannot refresh the protected HTTPS bootstrap. Require an existing valid private activation, Python 3.8+, non-root execution and ordinary owner-only nonmounted runtime files (including config.json, active.pfx and public.pem). Correct protected-state ownership/integrity or rerun abox ports for full setup. No host export, root trust or port change was attempted; child diagnostics were suppressed.";
+        cancellationToken.ThrowIfCancellationRequested();
+        ProcessResult result;
+        try
+        {
+            result = await RunDevelopmentCertificateReceiverAsync(
+                sandbox,
+                "refresh-bootstrap",
+                Guid.NewGuid().ToString("N"),
+                null,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw new OperationCanceledException(
+                "HTTPS bootstrap refresh canceled; the atomic reader replacement may already be committed. Retry the explicit refresh; HTTPS readiness was not verified.",
+                cancellationToken
+            );
+        }
+        catch (Exception)
+        {
+            throw new AboxException(failure);
+        }
+        if (result.ExitCode == 75)
+            throw new AboxException(DevelopmentCertificateBusy);
+        if (!result.Succeeded)
+            throw new AboxException(failure);
     }
 
     private async Task TransferDevelopmentCertificateAsync(

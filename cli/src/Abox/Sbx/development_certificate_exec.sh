@@ -20,7 +20,7 @@ try:
  assert hashlib.sha256(source).hexdigest()==sys.argv[1]
  os.close(d)
 except Exception:
- sys.stderr.write("abox HTTPS: protected bootstrap missing or changed (also possible after a CLI upgrade). Launches fail closed; run abox ports --location <folder> with this CLI version to refresh the verified bootstrap, then retry. No installed unverified code was executed.\n")
+ sys.stderr.write("abox HTTPS: protected bootstrap missing or changed (also possible after a CLI upgrade). Launches fail closed; run abox ports --location <folder> --refresh-https-bootstrap with this CLI version to refresh only the verified reader, then retry. This requires valid protected private activation, not host export, project discovery or root trust. No installed unverified code was executed.\n")
  sys.exit(78)
 sys.argv=["abox-https","environment"]+sys.argv[2:]
 exec(compile(source,"<abox-https>","exec"))
