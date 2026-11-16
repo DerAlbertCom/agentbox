@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import signal
+import ssl
 import stat
 import sys
 import time
@@ -21,6 +22,24 @@ def require(condition):
 def ordinary_file(info, uid):
     require(stat.S_ISREG(info.st_mode) and info.st_uid == uid)
     require(stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1)
+
+
+class RuntimeBusy(Exception):
+    pass
+
+
+def acquire_lock(lock):
+    # All operations can write (including launch/status Node bundles). A short
+    # exclusive retry stays below the host cleanup budget and honors signals.
+    deadline = time.monotonic() + 3
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                raise RuntimeBusy() from None
+            time.sleep(.01)
 
 
 def unique_object(pairs):
@@ -177,12 +196,19 @@ def node_bundle(root, uid):
         path = original
     content = b""
     if path:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        # Caller trust inputs may be system/corporate CA symlinks. Follow them
+        # only as this unprivileged user; abox-owned sources remain no-follow.
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if own else 0))
         with os.fdopen(fd, "rb") as source:
             info = os.fstat(source.fileno())
+            if own:
+                ordinary_file(info, uid)
             require(stat.S_ISREG(info.st_mode) and info.st_size <= 1024 * 1024)
             content = source.read(1024 * 1024 + 1)
             require(len(content) <= 1024 * 1024)
+    if content:
+        # Validate in memory, without changing or reserializing caller roots.
+        ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(cadata=content.decode("ascii"))
     name = "node-" + hashlib.sha256(content).hexdigest()
     if own:
         require(path == prefix + name + ".source")
@@ -208,14 +234,7 @@ def bootstrap(uid):
         lock = os.open(".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=root)
         try:
             ordinary_file(os.fstat(lock), uid)
-            deadline = time.monotonic() + 5
-            while True:
-                try:
-                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    require(time.monotonic() < deadline)
-                    time.sleep(.01)
+            acquire_lock(lock)
             check_contents(root, uid)
             config = read_config(root, uid)
             ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
@@ -225,7 +244,14 @@ def bootstrap(uid):
                 sys.stderr.write("abox HTTPS: " + ("stale Herdr/agent parent" if current is False else "cannot inspect existing agent process environment (/proc permissions)") + "; existing agents are NOT confirmed configured. Save/exit and ordinary transport remain available. Explicitly initialize fresh parents through abox; no restart was performed.\n")
                 if is_agent(sys.argv[2:]) and not recovery:
                     return 42 if current is False else 43
-            print(config["password"] + " " + node_bundle(root, uid))
+            try:
+                node = node_bundle(root, uid)
+            except (OSError, ValueError):
+                sys.stderr.write("abox HTTPS: Node trust is NOT configured. Check NODE_EXTRA_CA_CERTS (readable regular PEM file, at most 1 MiB; maximum 16 distinct trust inputs). Preserve/fix the caller input or inspect unused owned node pairs, then retry 'abox ports'. Ordinary/recovery commands retain the caller's original Node setting and protected Kestrel configuration.\n")
+                if is_agent(sys.argv[2:]) and not recovery:
+                    return 78
+                node = "-"
+            print(config["password"] + " " + node)
         finally:
             os.close(lock)
     finally:
@@ -254,8 +280,7 @@ def run():
         lock = os.open(".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=root)
         try:
             ordinary_file(os.fstat(lock), uid)
-            # Do not let a dead/malicious holder hang cancellation recovery.
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquire_lock(lock)
             check_contents(root, uid)
             if mode == "prepare":
                 print(read_config(root, uid)["password"] if "config.json" in os.listdir(root) else secrets.token_hex(32))
@@ -340,10 +365,13 @@ for event in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
 
 try:
     result = run()
+except RuntimeBusy:
+    sys.stderr.write("abox HTTPS: protected runtime is busy after 3 seconds; retry the operation or 'abox ports'. No complete readiness is claimed.\n")
+    sys.exit(75)
 except Exception:
     # No traceback, JSON, certificate, password or raw exception reaches stderr.
     if len(sys.argv) > 1 and sys.argv[1] == "environment":
-        sys.stderr.write("abox HTTPS: protected launch configuration or extra CA file is invalid, incomplete or busy. Check runtime ownership/mounts and NODE_EXTRA_CA_CERTS (readable ordinary file, at most 1 MiB; maximum 16 distinct trust inputs); retry 'abox ports'. No trust configuration was discarded.\n")
+        sys.stderr.write("abox HTTPS: protected launch configuration is invalid or incomplete. Check runtime ownership/mounts; retry 'abox ports'. No trust configuration was discarded.\n")
         sys.exit(78)
     sys.exit(1)
 else:

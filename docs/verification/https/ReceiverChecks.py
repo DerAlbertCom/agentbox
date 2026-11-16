@@ -233,17 +233,67 @@ class ReceiverChecks(unittest.TestCase):
         self.assertEqual(self.renewed + b'\n' + self.renewed, Path(bundle).read_bytes())
         self.assertNotIn(self.public, Path(bundle).read_bytes())
 
-    def test_node_conflicting_unreadable_extra_ca_fails_without_discarding_it(self):
+    def test_node_conflicting_unreadable_extra_ca_keeps_ordinary_recovery_access(self):
         # Arrange
         self.activate()
         # Act
         result = self.launch(['true'], env={**os.environ, 'NODE_EXTRA_CA_CERTS': '/missing-user-trust'})
         # Assert
-        self.assertEqual(78, result.returncode)
-        self.assertIn(b'No trust configuration was discarded', result.stderr)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn(b'Node trust is NOT configured', result.stderr)
         # Setup/readiness must not claim Node activation completed on this input.
         status = self.receiver('status', env={**os.environ, 'NODE_EXTRA_CA_CERTS': '/missing-user-trust'})
         self.assertEqual(44, status.returncode)
+
+    def test_node_invalid_inputs_preserve_caller_environment_kestrel_and_recovery_exit(self):
+        # Arrange: caller-selected files are read as the application user, never root.
+        self.activate()
+        directory = '/tmp/abox-invalid-extra-directory'
+        os.makedirs(directory, exist_ok=True)
+        oversized = '/tmp/abox-oversized-extra'
+        Path(oversized).write_bytes(b'x' * (1024 * 1024 + 1))
+        fifo = '/tmp/abox-extra-fifo'
+        os.mkfifo(fifo)
+        private = '/tmp/abox-root-only-extra'
+        Path(private).write_bytes(self.public)
+        os.chmod(private, 0o600)
+        invalid = '/tmp/abox-invalid-extra.pem'
+        Path(invalid).write_bytes(b'not a PEM certificate')
+        tools = '/tmp/abox-node-recovery-tools'
+        os.makedirs(tools, exist_ok=True)
+        script = '#!/bin/sh\nprintf "%s\\n%s\\n%s\\n" "$NODE_EXTRA_CA_CERTS" "$ASPNETCORE_Kestrel__Certificates__Default__Path" "$ASPNETCORE_Kestrel__Certificates__Default__Password"; exit 37\n'
+        for name in ('hc', 'opencode'):
+            Path(tools + '/' + name).write_text(script)
+            os.chmod(tools + '/' + name, 0o755)
+        commands = [['sh', '-c', script[10:]], ['hc', 'server', 'stop'], ['hc', 'server', 'start'],
+                    ['hc', 'server', 'restart', '--fresh'], ['opencode', 'service', 'stop']]
+        # Act / Assert
+        for path in ('/missing-user-trust', directory, oversized, fifo, private, invalid):
+            environment = {**os.environ, 'NODE_EXTRA_CA_CERTS': path, 'PATH': tools + ':' + os.environ['PATH']}
+            for command in commands:
+                with self.subTest(path=path, command=command):
+                    result = self.launch(command, env=environment)
+                    self.assertEqual(37, result.returncode, result.stderr)
+                    self.assertEqual([path, ROOT + '/active.pfx', PASSWORD], result.stdout.decode().splitlines())
+                    self.assertIn(b'Node trust is NOT configured', result.stderr)
+            self.assertEqual(44, self.receiver('status', env=environment).returncode)
+            refused = self.launch(['opencode', '--version'], env=environment)
+            self.assertEqual(78, refused.returncode)
+            self.assertIn(b'NODE_EXTRA_CA_CERTS', refused.stderr)
+
+    def test_caller_selected_symlink_ca_is_followed_without_elevating_reads(self):
+        # Arrange: model /etc/ssl/certs-style links outside the protected abox root.
+        self.activate()
+        path = '/tmp/abox-corporate-ca.pem'
+        os.symlink('/tmp/abox-public-two', path)
+        environment = {**os.environ, 'NODE_EXTRA_CA_CERTS': path}
+        # Act
+        result = self.launch(['printenv', 'NODE_EXTRA_CA_CERTS'], env=environment)
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(b'', result.stderr)
+        self.assertEqual(self.renewed + b'\n' + self.public, Path(result.stdout.decode().strip()).read_bytes())
+        self.assertEqual(0, self.receiver('status', env=environment).returncode)
 
     def test_framing_damage_never_replaces_active_private_material(self):
         # Arrange
@@ -310,13 +360,8 @@ class ReceiverChecks(unittest.TestCase):
         # Arrange
         self.activate()
         def renew(_):
-            deadline = time.monotonic() + 8
-            while time.monotonic() < deadline:
-                result = self.receiver('activate', frame(b'new-private-bytes'))
-                if result.returncode == 0:
-                    return
-                time.sleep(.01)
-            self.fail('serialized refresh never succeeded')
+            result = self.receiver('activate', frame(b'new-private-bytes'))
+            self.assertEqual(0, result.returncode, result.stderr)
         def launch(_):
             result = self.launch(['sh', '-c', 'test ${#ASPNETCORE_Kestrel__Certificates__Default__Password} = 64'])
             self.assertEqual(0, result.returncode, result.stderr)
@@ -342,8 +387,7 @@ class ReceiverChecks(unittest.TestCase):
         with open(ROOT + '/.lock', 'rb') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             started = time.monotonic()
-            # Act: writer refuses contention; launch reader can be canceled while waiting.
-            self.assertNotEqual(0, self.receiver('activate', frame(b'new')).returncode)
+            # Act: launch configuration can be canceled while waiting for setup.
             process = subprocess.Popen(self.launch_argv(['sleep', '30']), preexec_fn=user,
                                        stdout=subprocess.PIPE, stderr=subprocess.PIPE, start_new_session=True)
             time.sleep(.15)
@@ -354,6 +398,68 @@ class ReceiverChecks(unittest.TestCase):
         self.assertNotEqual(78, process.returncode)
         self.assertNotIn(b'invalid', stderr)
         self.assertEqual(0, self.launch(['true']).returncode)
+
+    def test_setup_cleanup_status_and_launch_wait_for_brief_concurrent_lock_holder(self):
+        # Arrange: force actual overlap with a bootstrap/setup lock, not serial retries.
+        self.activate()
+        temporary = ROOT + '/.transfer-' + 'b' * 32 + '.tmp'
+        Path(temporary).write_bytes(b'abandoned')
+        os.chown(temporary, 1000, 1000)
+        os.chmod(temporary, 0o600)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+            with open(ROOT + '/.lock', 'rb') as lock:
+                fcntl.flock(lock, fcntl.LOCK_EX)
+                # Act
+                futures = [pool.submit(self.receiver, mode, frame(b'new') if mode == 'activate' else None)
+                           for mode in ('prepare', 'status', 'activate', 'cleanup')]
+                futures.append(pool.submit(self.launch, ['sh', '-c', 'test ${#ASPNETCORE_Kestrel__Certificates__Default__Password} = 64']))
+                time.sleep(.3)
+                waiting = [not future.done() for future in futures]
+            results = [future.result() for future in futures]
+        # Assert
+        self.assertTrue(all(waiting), 'brief contention must wait, not fail setup or cleanup')
+        for result in results:
+            self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(b'new', Path(ROOT + '/active.pfx').read_bytes())
+        self.assertFalse(os.path.exists(temporary))
+
+    def test_lock_timeout_has_predictable_busy_diagnostic_without_configuration_failure(self):
+        # Arrange
+        self.activate()
+        with open(ROOT + '/.lock', 'rb') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            started = time.monotonic()
+            # Act
+            result = self.receiver('cleanup')
+        # Assert
+        self.assertGreaterEqual(time.monotonic() - started, 2)
+        self.assertLess(time.monotonic() - started, 5)
+        self.assertEqual(75, result.returncode)
+        self.assertIn(b'busy', result.stderr)
+        self.assertIn(b'retry', result.stderr)
+        self.assertNotIn(b'invalid', result.stderr)
+
+    def test_waiting_setup_and_cleanup_are_signal_cancellable(self):
+        # Arrange
+        self.activate()
+        code = 'SOURCE=' + repr(SOURCE) + '\nexec(compile(SOURCE,"<receiver>","exec"))'
+        with open(ROOT + '/.lock', 'rb') as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            for mode in ('prepare', 'status', 'activate', 'cleanup'):
+                with self.subTest(mode=mode):
+                    process = subprocess.Popen(['python3', '-I', '-c', code, mode, 'b' * 32],
+                                               stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                               preexec_fn=user)
+                    if mode == 'activate':
+                        process.stdin.write(frame(b'new'))
+                        process.stdin.flush()
+                    time.sleep(.15)
+                    # Act
+                    process.terminate()
+                    stdout, stderr = process.communicate(timeout=2)
+                    # Assert
+                    self.assertEqual(143, process.returncode)
+                    self.assertEqual(b'', stdout + stderr)
 
     def test_parent_ignored_sigint_is_preserved_and_normal_termination_is_native(self):
         # Arrange
@@ -408,6 +514,23 @@ class ReceiverChecks(unittest.TestCase):
         self.assertEqual(78, result.returncode)
         self.assertIn(b'bootstrap missing or changed', result.stderr)
         self.assertNotIn(b'DO NOT EXECUTE', result.stderr)
+
+    def test_cli_upgrade_hash_mismatch_explains_refresh_even_for_ordinary_recovery(self):
+        # Arrange: correct protected installation, but a different CLI source hash.
+        self.activate()
+        before = Path(ROOT + '/bootstrap.py').read_bytes()
+        # Act / Assert: never execute unverified installed code or skip Kestrel setup.
+        for command in (['true'], ['hc', 'server', 'stop'], ['opencode', '--version']):
+            argv = self.launch_argv(command)
+            argv[4] = '0' * 64
+            result = subprocess.run(argv, capture_output=True, preexec_fn=user, timeout=5)
+            self.assertEqual(78, result.returncode)
+            self.assertEqual(b'', result.stdout)
+            self.assertIn(b'CLI upgrade', result.stderr)
+            self.assertIn(b'abox ports --location <folder>', result.stderr)
+        self.assertEqual(before, Path(ROOT + '/bootstrap.py').read_bytes())
+        self.activate()
+        self.assertEqual(0, self.launch(['true']).returncode)
 
     def test_uninspectable_same_user_agent_is_not_reported_as_invalid_configuration(self):
         # Arrange: Linux denies environ even to the same user for a nondumpable process.
@@ -556,9 +679,8 @@ with c.wrap_socket(a,server_side=True) as t: t.recv(1)
         # Arrange / Act
         with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
             results = list(pool.map(lambda _: self.receiver('activate', frame()), range(8)))
-        # Assert: lock contention is retryable, never mismatched state or a traceback.
-        self.assertTrue(any(result.returncode == 0 for result in results))
-        self.assertTrue(all(result.returncode in (0, 1) and not result.stderr for result in results))
+        # Assert: normal concurrent setup retries its own lock, not the whole operation.
+        self.assertTrue(all(result.returncode == 0 and not result.stderr for result in results))
         self.activate()
         self.assertEqual(0, self.launch(['true']).returncode)
         self.assertFalse(any(name.startswith('.transfer-') for name in os.listdir(ROOT)))
@@ -577,8 +699,25 @@ with c.wrap_socket(a,server_side=True) as t: t.recv(1)
             self.assertEqual(0, result.returncode, result.stderr)
         full = self.launch(['true'], env={**os.environ, 'NODE_EXTRA_CA_CERTS': paths[16]})
         # Assert
-        self.assertEqual(78, full.returncode)
+        self.assertEqual(0, full.returncode)
         self.assertIn(b'maximum 16', full.stderr)
+        environment = {**os.environ, 'NODE_EXTRA_CA_CERTS': paths[16]}
+        preserved = self.launch(['printenv', 'NODE_EXTRA_CA_CERTS'], env=environment)
+        self.assertEqual(paths[16], preserved.stdout.decode().strip())
+        self.assertEqual(44, self.receiver('status', env=environment).returncode)
+        self.assertEqual(78, self.launch(['opencode', '--version'], env=environment).returncode)
+        tools = '/tmp/abox-cap-recovery-tools'
+        os.makedirs(tools, exist_ok=True)
+        script = 'printf "%s\\n%s\\n%s\\n" "$NODE_EXTRA_CA_CERTS" "$ASPNETCORE_Kestrel__Certificates__Default__Path" "$ASPNETCORE_Kestrel__Certificates__Default__Password"; exit 37\n'
+        for name in ('hc', 'opencode'):
+            Path(tools + '/' + name).write_text('#!/bin/sh\n' + script)
+            os.chmod(tools + '/' + name, 0o755)
+        for command in (['sh', '-c', script], ['hc', 'server', 'stop'], ['hc', 'server', 'start'],
+                        ['hc', 'server', 'restart', '--fresh'], ['opencode', 'service', 'stop']):
+            recovered = self.launch(command, env={**environment, 'PATH': tools + ':' + os.environ['PATH']})
+            self.assertEqual(37, recovered.returncode, recovered.stderr)
+            self.assertEqual([paths[16], ROOT + '/active.pfx', PASSWORD], recovered.stdout.decode().splitlines())
+            self.assertIn(b'Node trust is NOT configured', recovered.stderr)
         self.assertEqual(16, sum(name.endswith('.source') for name in os.listdir(ROOT)))
         self.assertEqual(0, self.launch(['true'], env={**os.environ, 'NODE_EXTRA_CA_CERTS': paths[0]}).returncode)
 

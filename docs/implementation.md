@@ -820,7 +820,12 @@ Debian-style CA store; only public PEM reaches root. Node's protected extra-CA
 bundle preserves the caller's original roots. A compact shell exec parent reads
 hash-verified installed bootstrap code, avoiding CPython signal/locale inheritance
 and the previous per-exec source-size regression. Runtime reads/writes share the
-setup lock. See the HTTPS contract for prerequisites, bounded bundles and partial
+exclusive setup lock with a signal-cancellable three-second contention retry (not
+parallel shared readers). Node-only failures preserve ordinary/recovery access,
+the caller's original Node setting and protected Kestrel defaults, while readiness
+and recognized agent launches fail actionably. Caller-selected CA symlinks are
+read as the application user; abox-owned runtime paths remain strict no-follow.
+See the HTTPS contract for prerequisites, bounded bundles and partial
 trust/activation recovery.
 
 Existing recognizable hc/OpenCode/Copilot/pi/Claude parents with missing/mismatched

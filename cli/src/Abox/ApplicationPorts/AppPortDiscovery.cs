@@ -24,6 +24,7 @@ internal static class AppPortDiscovery
         {
             var source = Path.GetRelativePath(location, file);
             var applicableProject = false;
+            var projectTextRead = false;
             try
             {
                 if (
@@ -48,6 +49,7 @@ internal static class AppPortDiscovery
                         detectEncodingFromByteOrderMarks: true
                     );
                     var declaration = await text.ReadToEndAsync(token);
+                    projectTextRead = true;
                     // This is only the conservative error policy, not detection:
                     // malformed XML explicitly mentioning ASP.NET must not opt out.
                     applicableProject =
@@ -137,9 +139,9 @@ internal static class AppPortDiscovery
                             or UnauthorizedAccessException
                 )
             {
-                // Unsupported/unreadable unrelated projects are not port files.
-                // Never evaluate them merely because they share this workspace.
-                if (IsDotnetProject(file) && !applicableProject)
+                // Only bytes actually read can establish an unrelated project.
+                // Inaccessible/linked XML must not silently opt out of HTTPS.
+                if (IsDotnetProject(file) && projectTextRead && !applicableProject)
                     continue;
                 var hint = Path.GetFileName(file) switch
                 {
