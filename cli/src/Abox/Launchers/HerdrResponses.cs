@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace Abox.Launchers;
 
 // hc 0.1.17's machine.list response and herdr-app 0.1.16's status response.
-// Validate the whole relevant shape before interpreting absence or health.
+// Validate the whole relevant shape before interpreting absence or responsiveness.
 internal static class HerdrResponses
 {
     internal static bool ContainsMachine(string json, string name)
@@ -25,7 +25,7 @@ internal static class HerdrResponses
         return found;
     }
 
-    internal static void RequireHealthyStatus(string json)
+    internal static int ReadConfigurationDiagnosticCount(string json)
     {
         const string command = "herdr-app status";
         using var document = Parse(json, command);
@@ -35,10 +35,9 @@ internal static class HerdrResponses
         foreach (var error in errors.EnumerateArray())
             if (error.ValueKind != JsonValueKind.String)
                 throw Invalid(command, "'errors' must contain only strings");
-        if (errors.GetArrayLength() > 0)
-            throw new AboxException(
-                "'herdr-app status' reports app errors. Inspect 'herdr-app status' and fix the app configuration before retrying. No app or core was restarted."
-            );
+        // Released window.rs gathers config/mod/layout diagnostics here. They do
+        // not make a responsive window unready, unlike a singular control error.
+        return errors.GetArrayLength();
     }
 
     private static JsonDocument Parse(string json, string command)

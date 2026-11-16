@@ -38,7 +38,7 @@ internal sealed class VerifiedPublicationRegistry(
         foreach (var kit in kits.Where(kit => !kit.IsLocal))
         {
             var descriptors = await InspectAsync(
-                new Inspection(kit.Reference, "mixin"),
+                new Inspection(kit.Reference, PublicationImageKind.Mixin),
                 cancellationToken
             );
             foreach (var descriptor in descriptors)
@@ -78,13 +78,7 @@ internal sealed class VerifiedPublicationRegistry(
             request.Reference,
             ReadPushedDigest(metadata, request.Reference)
         );
-        await InspectAsync(
-            new Inspection(
-                pinned,
-                request.Kind == PublicationImageKind.Mixin ? "mixin" : "workload"
-            ),
-            cancellationToken
-        );
+        await InspectAsync(new Inspection(pinned, request.Kind), cancellationToken);
         return pinned;
     }
 
@@ -104,7 +98,10 @@ internal sealed class VerifiedPublicationRegistry(
             true,
             cancellationToken
         );
-        await InspectAsync(new Inspection(requestedReference, "workload"), cancellationToken);
+        await InspectAsync(
+            new Inspection(requestedReference, PublicationImageKind.Workload),
+            cancellationToken
+        );
     }
 
     private static string ReadPushedDigest(string metadata, string reference)
@@ -133,14 +130,17 @@ internal sealed class VerifiedPublicationRegistry(
         }
     }
 
-    private sealed record Inspection(string Reference, string Kind, int Depth = 0);
+    private sealed record Inspection(string Reference, PublicationImageKind Kind, int Depth = 0);
 
     private async Task<IReadOnlyList<JsonElement>> InspectAsync(
         Inspection inspection,
         CancellationToken cancellationToken
     )
     {
-        var (reference, kind, depth) = inspection;
+        var (reference, _, depth) = inspection;
+        // The frontend processes a set into a workload descriptor. Convert only
+        // at the OCI descriptor boundary, retaining the image kind internally.
+        var kind = inspection.Kind == PublicationImageKind.Mixin ? "mixin" : "workload";
         if (depth > 4)
             throw new AboxException(
                 $"Registry artifact '{reference}' has too many nested image indexes."
