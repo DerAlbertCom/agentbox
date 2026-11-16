@@ -1,23 +1,12 @@
 namespace Abox.Tests;
 
-/// <summary>Certificate fixtures stay in this checkout, never the blocked host-export staging directory.</summary>
+/// <summary>Synthetic certificate fixtures stay beside the test executable, not in host-export staging.</summary>
 internal sealed class CertificateTestDirectory : IDisposable
 {
     public CertificateTestDirectory()
     {
-        var checkout = new DirectoryInfo(AppContext.BaseDirectory);
-        while (
-            checkout is not null
-            && !System.IO.File.Exists(
-                System.IO.Path.Combine(checkout.FullName, "CODING_STANDARDS.md")
-            )
-        )
-            checkout = checkout.Parent;
-        if (checkout is null)
-            throw new InvalidOperationException("Certificate fixtures require a source checkout.");
         Path = System.IO.Path.Combine(
-            checkout.FullName,
-            ".abox",
+            AppContext.BaseDirectory,
             "certificate-tests",
             Guid.NewGuid().ToString("N")
         );
