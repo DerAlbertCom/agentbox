@@ -15,7 +15,6 @@ public sealed class ApplicationPortsTests : IDisposable
     private bool acknowledgeWithoutPublishing;
     private string relayInventory = "[{\"application_port\":8203,\"relay_port\":58203}]";
     private ProcessResult? relayFailure;
-    private bool acknowledgeWithoutUnpublishing;
     private readonly SbxClient client;
 
     public ApplicationPortsTests()
@@ -29,7 +28,7 @@ public sealed class ApplicationPortsTests : IDisposable
                 calls.Add(request);
                 if (request.Arguments.Contains("python3") && relayFailure is not null)
                     return relayFailure;
-                if (request.Arguments.Contains("--unpublish") && !acknowledgeWithoutUnpublishing)
+                if (request.Arguments.Contains("--unpublish"))
                     inventory =
                         "[{\"host_ip\":\"127.0.0.1\",\"host_port\":19000,\"sandbox_port\":9000,\"protocol\":\"tcp4\"}]";
                 if (request.Arguments.Contains("--publish") && publishFailure is not null)
@@ -156,7 +155,7 @@ public sealed class ApplicationPortsTests : IDisposable
     }
 
     [Fact]
-    public async Task OffsetConflictFromRelayCannotUpgradeAnOtherwiseMatchingDirectNativeMapping()
+    public async Task OffsetConflictFromRelayCannotTakeOverAnOtherwiseMatchingDirectNativeMapping()
     {
         // Arrange
         inventory =
@@ -188,56 +187,27 @@ public sealed class ApplicationPortsTests : IDisposable
         inventory.Should().Contain("18204").And.Contain("8203");
     }
 
-    [Fact]
-    public async Task UpgradesOnlyTheRequestedExactDirectNativeMappingToALocalhostRelay()
+    [Theory]
+    [InlineData(0, 8203)]
+    [InlineData(10000, 18203)]
+    [InlineData(20000, 28203)]
+    public async Task UnprovenDirectNativeBindingsAreConflictsAtEveryOffset(
+        int offset,
+        int hostPort
+    )
     {
         // Arrange
-        inventory = """
-            [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":8203,"protocol":"tcp4"},
-             {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
+        inventory = $$"""
+            [{"host_ip":"127.0.0.1","host_port":{{hostPort}},"sandbox_port":8203,"protocol":"tcp4"},
+              {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
             """;
-
-        // Act
-        await client.EnsureApplicationPortsAsync(
-            "actual",
-            [new(8203, 18203)],
-            CancellationToken.None
-        );
-        await client.EnsureApplicationPortsAsync(
-            "actual",
-            [new(8203, 18203)],
-            CancellationToken.None
-        );
-
-        // Assert
-        var upgrade = calls
-            .Should()
-            .ContainSingle(call => call.Arguments.Contains("--unpublish"))
-            .Which;
-        upgrade
-            .Arguments.Should()
-            .Equal("ports", "actual", "--unpublish", "127.0.0.1:18203:8203/tcp4", "--json");
-        calls.Where(call => call.Arguments.Contains("--publish")).Should().ContainSingle();
-        calls
-            .FindIndex(call => call.Arguments.Contains("python3"))
-            .Should()
-            .BeLessThan(calls.IndexOf(upgrade));
-        inventory.Should().Contain("19000").And.Contain("9000");
-    }
-
-    [Fact]
-    public async Task UnconfirmedDirectMappingRemovalCannotProceedToPublication()
-    {
-        // Arrange
-        acknowledgeWithoutUnpublishing = true;
-        inventory =
-            "[{\"host_ip\":\"127.0.0.1\",\"host_port\":18203,\"sandbox_port\":8203,\"protocol\":\"tcp4\"}]";
+        var original = inventory;
 
         // Act
         var action = () =>
             client.EnsureApplicationPortsAsync(
                 "actual",
-                [new(8203, 18203)],
+                [new(8203, 8203 + offset)],
                 CancellationToken.None
             );
 
@@ -245,19 +215,26 @@ public sealed class ApplicationPortsTests : IDisposable
         await action
             .Should()
             .ThrowAsync<AboxException>()
-            .WithMessage("*did not confirm*upgrade*retry*");
-        calls.Should().NotContain(call => call.Arguments.Contains("--publish"));
+            .WithMessage(
+                $"*conflicting runtime mapping*127.0.0.1:{hostPort}:8203/tcp4*explicitly remove*exact binding*"
+            );
+        calls
+            .Should()
+            .NotContain(call =>
+                call.Arguments.Contains("--unpublish") || call.Arguments.Contains("--publish")
+            );
+        inventory.Should().Be(original);
     }
 
     [Fact]
-    public async Task AllRequestedConflictsAreCheckedBeforeUpgradingAnyDirectMapping()
+    public async Task AllRequestedConflictsAreCheckedBeforePublishingAnyMissingMapping()
     {
         // Arrange
         relayInventory =
             "[{\"application_port\":8203,\"relay_port\":58203},{\"application_port\":8204,\"relay_port\":58204}]";
         inventory = """
-            [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":8203,"protocol":"tcp4"},
-             {"host_ip":"127.0.0.1","host_port":18204,"sandbox_port":9000,"protocol":"tcp4"}]
+            [{"host_ip":"127.0.0.1","host_port":18204,"sandbox_port":8204,"protocol":"tcp4"},
+             {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
             """;
 
         // Act

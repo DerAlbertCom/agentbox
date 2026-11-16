@@ -58,17 +58,20 @@ default is another offset change, not automatic rollback.
 
 - An unchanged invocation reuses exact mappings and owned sandbox relays; it only
   publishes missing bindings. Duplicate source occurrences still share one binding.
-- Before any publication or exact native upgrade, the receiver checks the validated
+- Before any publication, the receiver checks the validated
   TCP-binding snapshot against **all** its saved relay ports and live private control
   sockets. This includes apps no longer discovered, dead relays awaiting restoration,
   and cancellation after a listener started but before its port file was saved.
 - A binding to a known relay at another offset causes an explicit **offset-change
-  conflict**. Different-offset bindings directly targeting a requested app also fail
-  conservatively, without claiming their ownership. No new binding is added and no
+  conflict**. Bindings directly targeting a requested app at another host port also fail
+  conservatively with a **direct-native-mapping conflict**, without claiming ownership
+  or a previous abox invocation. No new binding is added and no
   old binding is removed. abox never infers ownership from the host port alone.
-- Unrelated targets are preserved. Existing exact requested direct native mappings
-  retain #43's explicitly requested localhost-relay upgrade, with full-spec removal
-  and preservation checks; other native bindings are not migrated.
+- Unrelated targets are preserved. **All unproven direct native bindings at a requested
+  host port are conflicts**, including exact `127.0.0.1:<host>:<app>/tcp4` mappings at
+  offsets 0, 10000 and 20000. Matching numbers provide no ownership provenance. Only
+  matching mappings to relays confirmed through abox's private state/control protocol
+  can be reused. No native binding is automatically removed, migrated or taken over.
 - To change offsets, inspect the selected sandbox's inventory and explicitly remove
   only its exact old host-to-relay bindings. Leave relay state intact: the new offset
   reuses those same relays. This slice intentionally has no automatic cleanup/remap
@@ -90,10 +93,26 @@ offset can proceed. Never delete `~/.abox-ports-v1` while bindings still referen
 Normal usage remains through abox; these sbx commands are explicit recovery, not
 an automatically executed cleanup plan.
 
+The same deliberate operator-consent rule applies to a direct native conflict. For
+example, if inventory shows `127.0.0.1:18203:8203/tcp4`, abox will **not** infer that
+the binding is its own, even at default offset 10000. Only if you have inspected it
+and intend to replace it with a relay should you manually run:
+
+```sh
+sbx ports <actual-sandbox-name> --unpublish 127.0.0.1:18203:8203/tcp4 --json
+abox ports --location /path/to/project --offset 10000
+```
+
+Substitute the **exact inspected** spec; do not remove another user's/tool's binding
+to resolve a conflict without their consent. The product never executes this removal.
+The former #43 automatic exact-native upgrade is retired as safety hardening of the
+original unrelated-mapping preservation requirement, not a waiver of that requirement.
+Already-converted abox relay bindings continue to work unchanged.
+
 ## Partial failure and cancellation
 
 There is no cross-process transaction or rollback. Runtime failure or cancellation
-can leave a subset published, exact requested native upgrades absent, and relays
+can leave a subset published and relays
 running. abox reports failure (1) or cancellation (130), with a folder-qualified retry
 that preserves the selected `--offset`. Retry with **that same offset** after fixing
 the cause; confirmed bindings are reused and only missing bindings are published.
@@ -106,6 +125,11 @@ the #43 contract. Unknown or unsafe relay state fails closed; no process is kill
 or unrelated binding adopted as a repair.
 
 ## Verification (Windows, sbx 0.51.0, 2026-11-16)
+
+### Historical offset verification through `8cca672`
+
+The runs below preceded the unproven-direct-binding safety hardening. They remain
+valid evidence of that earlier SHA, not reruns of the current native-conflict contract.
 
 Red/green tests covered missing command/folder precedence first. The new adapter
 tests then failed on missing offset/inventory transport and mixed-offset validation.
@@ -154,7 +178,10 @@ dotnet run --project docs/verification/application-ports/OffsetProbe -- `
   "cli/src/Abox/bin/Debug/net10.0/abox.dll"
 ```
 
-The three host ports **28345, 38345, 48345** must be free. `--receiver-only` skips
+The host ports **8345, 18345, 28345, 38345, 48345** must be free. The current probe
+first rejects unproven direct bindings at offsets 0, 10000 and 20000 with unchanged
+inventory, then explicitly removes each probe-owned exact binding as the operator
+before running the folder/default/override flow. `--receiver-only` skips
 the host publication checks. `--templates` lists local templates read-only. Retained
 synthetic workspaces are named in output; remove only those exact task-owned folders.
 Run the Debug solution tests, CSharpier checks and `git diff --check` as well.
@@ -167,3 +194,60 @@ help output exposes `--offset` without loading runtime configuration. The soluti
 and offset-probe builds each had **zero warnings/errors**. CSharpier checks for
 `cli` and the offset probe, plus `git diff --check`, passed. No Release verification
 is claimed.
+
+### Native-binding safety hardening (current contract)
+
+The three-offset adapter regression first failed against `8cca672`: offset 10000
+silently succeeded after takeover; offsets 0/20000 attempted takeover before failing
+confirmation. After removing the entire native-upgrade path, all three cases pass:
+the full conflicting spec and explicit exact-removal remediation are reported, with
+**no `--publish` or `--unpublish` call** and unchanged unrelated inventory. Composed
+CLI tests use the real adapter at the same three offsets, checking exit 1, no success
+claim, offset-preserving retry guidance and no binding-mutation commands.
+
+The real receiver diagnostic regression first failed in disposable
+`abox-issue45-safety-red-60ec3c50-abox-A620B`: a first-use direct binding at another
+host port was mislabeled as an offset change. All **17 receiver process/TCP checks**
+then passed in `abox-issue45-safety-green-ea6808a7-abox-6E62F`, including the accurate
+direct-native conflict and unchanged saved-relay offset/ownership/recovery checks.
+
+That green sandbox also passed the updated full **actual Debug executable** offset
+probe on minimum sbx **0.51.0**:
+
+- Direct native **8345 -> 8345**, **18345 -> 8345**, and **28345 -> 8345** were each
+  refused at offsets **0, 10000, 20000** with conflict/remediation diagnostics and
+  byte-for-byte unchanged inventories, including unrelated **48345 -> 9345**.
+- Only after each rejection did the probe operator explicitly remove its own exact
+  direct binding. This is authorized disposable-fixture cleanup, **not product cleanup**.
+- Folder offset 20000 reached the localhost-only app at **28345 after abox exited**;
+  repeat reuse passed. Override 30000 refused while that old relay binding existed;
+  the old URL still responded and inventory was unchanged.
+- Operator removal of only that task-owned old relay binding enabled **38345** at
+  offset 30000, reusing relay **60956**. HTTP after abox exit and another repeat
+  passed. Unrelated binding and folder configuration remained unchanged; tested
+  host listeners were IPv4 loopback only. Task-owned sandbox removal exited **0**.
+
+The updated `RuntimeProbe --sandbox-localhost --port=8353` also passed in fresh
+`abox-issue43-safety-bd8599fd-abox-550C4` on sbx 0.51.0. All **17 receiver checks**
+passed again. The current executable rejected direct **18353 -> 8353** without
+changing either binding; after explicit operator removal of that task-owned spec,
+localhost-only .NET HTTP succeeded after abox exit via relay **63321**. Repeat reuse,
+IPv4-loopback-only host listeners, unrelated **18354 -> 8354** preservation, saved
+relay restoration after sandbox stop/start (with separately restarted unchanged app),
+new **18355 -> 8355** publication and occupied **18356** failure all passed. Cleanup
+removed only the task-owned sandbox with exit **0**. These chosen host ports were
+checked free before creation; the existing Deals/API port **18203 was not used**.
+
+Final hardening Debug verification: **1814 passed, 15 platform skips, zero failures**
+(1829 total). Focused ports-command/adapter/folder-offset checks: **109 passed,
+one platform skip** (110 total). The solution, offset probe and runtime probe builds
+had **zero warnings/errors**. CSharpier passed for `cli` and the checked-in application
+port probes; `git diff --check` passed. No Release or independent Unix-host runtime
+verification is claimed. Configuration snapshot code was not changed; the unused
+three-argument `AppPorts.PublishAsync` overload was removed so callers must pass the
+explicit offset selected from their entry-time folder snapshot.
+
+No live user sandbox/API, certificate, trust store, global setting or registry
+publication was touched. Retained workspaces are under the approved temporary
+directory; no broad prune or cleanup was run. Historical automatic-native-upgrade
+checks above remain evidence of their old SHAs only.

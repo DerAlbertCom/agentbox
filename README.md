@@ -57,8 +57,12 @@ abox process is needed. The relay uses a separate sandbox port, so it does not
 reserve or change your application's listener, sources, profiles or startup flags.
 
 Subsequent runs reuse matching relays/mappings and preserve unrelated mappings.
-An exact requested direct native mapping is upgraded to its localhost-capable relay;
-other targets or non-loopback bindings are conflicts, not overwritten mappings.
+An existing direct native mapping at the requested host port is a conflict **at every
+offset, including 10000**: its matching numbers do not prove abox ownership. abox never
+automatically removes or replaces it. Inspect the full binding and, only if you intend
+to replace it, explicitly remove that exact binding before retrying; see the
+[manual recovery examples](docs/application-port-offsets.md#persistent-mapping-and-ownership-contract).
+Other targets or non-loopback bindings are also conflicts, not overwritten mappings.
 A stopped sandbox is started first and its relays are restored, but **apps are not
 started** by this command. Ports occupied by another service fail with a diagnostic;
 fix the conflict and retry. Failure/cancellation can leave mappings and sandbox

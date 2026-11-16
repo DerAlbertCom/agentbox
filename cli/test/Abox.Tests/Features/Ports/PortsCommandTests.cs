@@ -10,6 +10,64 @@ namespace Abox.Tests;
 
 public sealed class PortsCommandTests
 {
+    [Theory]
+    [InlineData("0", 8203)]
+    [InlineData("10000", 18203)]
+    [InlineData("20000", 28203)]
+    public async Task NativeBindingConflictsThroughTheRealAdapterNeverPublishOrUnpublish(
+        string offset,
+        int hostPort
+    )
+    {
+        // Arrange
+        var runner = Substitute.For<IProcessRunner>();
+        using var fixture = new Fixture(runner: runner);
+        fixture.Root.File(
+            "folder/Properties/launchSettings.json",
+            """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
+        );
+        var calls = new List<ProcessRequest>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var request = call.Arg<ProcessRequest>();
+                calls.Add(request);
+                var output = request.Arguments[0] switch
+                {
+                    "version" => """{"client":{"version":"0.51.0"}}""",
+                    "diagnose" => """{"checks":[]}""",
+                    "ls" => $$"""[{"name":"{{fixture.Name}}","status":"running"}]""",
+                    "ports" => $$"""
+                        [{"host_ip":"127.0.0.1","host_port":{{hostPort}},"sandbox_port":8203,"protocol":"tcp4"},
+                         {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
+                        """,
+                    "exec" when request.Arguments.Contains("python3") =>
+                        """[{"application_port":8203,"relay_port":58203}]""",
+                    "exec" => "",
+                    _ => throw new InvalidOperationException("Unexpected runtime operation."),
+                };
+                return new ProcessResult(0, output, "");
+            });
+
+        // Act
+        var exit = await fixture.Run("--offset", offset);
+
+        // Assert
+        exit.Should().Be(1);
+        fixture
+            .Console.AllText.Should()
+            .Contain($"conflicting runtime mapping 127.0.0.1:{hostPort}:8203/tcp4")
+            .And.Contain("explicitly remove only that exact binding")
+            .And.Contain($"--offset {offset}")
+            .And.NotContain("Application ports published");
+        calls
+            .Should()
+            .NotContain(call =>
+                call.Arguments.Contains("--unpublish") || call.Arguments.Contains("--publish")
+            );
+    }
+
     [Fact]
     public async Task OneRunOverrideCannotBypassInvalidSharedFolderConfiguration()
     {
@@ -712,7 +770,7 @@ public sealed class PortsCommandTests
         public string Name => SandboxName.For(Location);
         private readonly ServiceProvider provider;
 
-        public Fixture(AboxConfig? config = null)
+        public Fixture(AboxConfig? config = null, IProcessRunner? runner = null)
         {
             Location = Root.Directory_("folder");
             Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
@@ -725,7 +783,11 @@ public sealed class PortsCommandTests
                 .AddAbox(Console, new TrailingArguments())
                 .AddSingleton(config ?? new AboxConfig { DefaultLocation = Location })
                 .AddSingleton(AboxPaths.For(Root.Path, Root.Path))
-                .AddSingleton(Sbx)
+                .AddSingleton<ISbxClient>(
+                    runner is null
+                        ? Sbx
+                        : new SbxClient(runner, AboxPaths.For(Root.Path, Root.Path))
+                )
                 .AddSingleton(programs)
                 .BuildServiceProvider();
         }

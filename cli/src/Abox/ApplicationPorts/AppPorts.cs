@@ -8,12 +8,6 @@ namespace Abox.ApplicationPorts;
 /// <summary>Shared discovery, reporting and runtime publishing for an already selected sandbox.</summary>
 public sealed class AppPorts(ISbxClient sbx, IConsole console)
 {
-    public Task PublishAsync(
-        string location,
-        string sandbox,
-        CancellationToken cancellationToken
-    ) => PublishAsync(location, sandbox, FolderConfig.SelectPortOffset(null), cancellationToken);
-
     public async Task PublishAsync(
         string location,
         string sandbox,

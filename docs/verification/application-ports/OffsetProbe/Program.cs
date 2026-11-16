@@ -37,7 +37,9 @@ if (
     IPGlobalProperties
         .GetIPGlobalProperties()
         .GetActiveTcpListeners()
-        .Any(endpoint => new[] { folderPort, overridePort, unrelatedPort }.Contains(endpoint.Port))
+        .Any(endpoint =>
+            new[] { 8345, 18345, folderPort, overridePort, unrelatedPort }.Contains(endpoint.Port)
+        )
 )
     throw new InvalidOperationException(
         "Probe host ports must be free; existing listeners are never changed."
@@ -101,6 +103,38 @@ try
         await sbx.PublishDirectProbeMappingAsync(name, 9345, unrelatedPort, token),
         "Unrelated native binding"
     );
+    foreach (var offset in new[] { 0, 10000, 20000 })
+    {
+        var host = 8345 + offset;
+        Require(
+            await sbx.PublishDirectProbeMappingAsync(name, 8345, host, token),
+            $"Probe operator creates unproven direct binding at offset {offset}"
+        );
+        var original = await Bindings();
+        var rejected = await RunPorts(
+            1,
+            "--offset",
+            offset.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        );
+        if (
+            await Bindings() != original
+            || !rejected.StandardError.Contains(
+                $"conflicting runtime mapping 127.0.0.1:{host}:8345/tcp4",
+                StringComparison.Ordinal
+            )
+            || !rejected.StandardError.Contains(
+                "explicitly remove only that exact binding",
+                StringComparison.Ordinal
+            )
+        )
+            throw new InvalidOperationException(
+                $"Direct native binding at offset {offset} was changed or not diagnosed."
+            );
+        Require(
+            await sbx.RemoveExactProbeMappingAsync(name, 8345, host, token),
+            "Probe operator explicitly removes only its task-owned direct binding"
+        );
+    }
     await RunPorts(0);
     using var http = new HttpClient(new SocketsHttpHandler { UseProxy = false })
     {
@@ -109,7 +143,9 @@ try
     await Reach(folderPort);
     await RunPorts(0);
     var before = await Bindings();
-    await RunPorts(1, "--offset", "30000");
+    var offsetConflict = await RunPorts(1, "--offset", "30000");
+    if (!offsetConflict.StandardError.Contains("offset change", StringComparison.Ordinal))
+        throw new InvalidOperationException("Expected explicit offset-change diagnostic.");
     if ((await Bindings()) != before)
         throw new InvalidOperationException("Rejected offset change modified runtime bindings.");
     await Reach(folderPort);
@@ -186,7 +222,7 @@ async Task<string> Bindings()
     return result.StandardOutput;
 }
 
-async Task RunPorts(int expected, params string[] extra)
+async Task<ProcessResult> RunPorts(int expected, params string[] extra)
 {
     var result = await runner.RunAsync(
         new ProcessRequest(
@@ -206,8 +242,7 @@ async Task RunPorts(int expected, params string[] extra)
         throw new InvalidOperationException(
             $"abox ports: expected {expected}, got {result.ExitCode}."
         );
-    if (expected == 1 && !result.StandardError.Contains("offset change", StringComparison.Ordinal))
-        throw new InvalidOperationException("Expected explicit offset-change diagnostic.");
+    return result;
 }
 
 static void Require(ProcessResult result, string operation)

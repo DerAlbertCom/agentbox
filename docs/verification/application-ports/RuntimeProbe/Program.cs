@@ -118,7 +118,23 @@ try
     );
     Require(
         await sbx.PublishDirectProbeMappingAsync(name, sandboxPort, hostPort, token),
-        "Pre-existing requested direct mapping (must upgrade to relay)"
+        "Pre-existing unproven direct mapping (must conflict, never upgrade automatically)"
+    );
+    var beforeConflict = await sbx.ProbePortsAsync(name, token);
+    Require(beforeConflict, "Read original native bindings");
+    var conflict = await RunPorts(1);
+    var afterConflict = await sbx.ProbePortsAsync(name, token);
+    Require(afterConflict, "Read preserved native bindings");
+    if (
+        beforeConflict.StandardOutput != afterConflict.StandardOutput
+        || !conflict.StandardError.Contains("conflicting runtime mapping", StringComparison.Ordinal)
+    )
+        throw new InvalidOperationException(
+            "Unproven direct mapping was changed or not diagnosed."
+        );
+    Require(
+        await sbx.RemoveExactProbeMappingAsync(name, sandboxPort, hostPort, token),
+        "Probe operator explicitly removes only its task-owned direct binding"
     );
     await RunPorts(0);
     var internalHttp = await sbx.ProbeExecAsync(
@@ -230,7 +246,7 @@ async Task StartApplication()
     );
 }
 
-async Task RunPorts(int expected)
+async Task<ProcessResult> RunPorts(int expected)
 {
     var result = await runner.RunAsync(
         new ProcessRequest(
@@ -250,6 +266,7 @@ async Task RunPorts(int expected)
         throw new InvalidOperationException(
             $"abox ports: expected exit {expected}, got {result.ExitCode}."
         );
+    return result;
 }
 
 async Task VerifyInventory()

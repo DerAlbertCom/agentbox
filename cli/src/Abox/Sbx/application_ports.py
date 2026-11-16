@@ -257,11 +257,12 @@ def ensure(ports, reserved, offset, bindings):
         # A binding to any known relay protects even apps no longer discovered, and
         # running control sockets cover cancellation before the .port file was saved.
         if offset is not None:
-            targets = {port: port for port in ports}
-            targets.update({relay: application for application, relay in saved.items()})
+            targets = {relay: application for application, relay in saved.items()}
             for target, host in bindings:
                 if target in targets and host != targets[target] + offset:
                     fail("Requested offset change conflicts with existing host port %s -> sandbox target %s. Explicitly remove the exact old binding before changing offsets, or retry with the previous offset; no bindings were changed." % (host, target))
+                if target in ports and host != target + offset:
+                    fail("Direct native mapping conflict at host port %s -> sandbox target %s; ownership is unknown. Inspect sandbox ports and, only if you intend to replace it, explicitly remove only that exact binding before retrying; no bindings were changed." % (host, target))
         result = []
         for port in ports:
             path = os.path.join(root, str(port) + ".port")
