@@ -372,9 +372,29 @@ public sealed partial class PortsCommandTests
     [InlineData("ng serve --port 4200\nother")]
     [InlineData("ng serve --port 4200 # comment")]
     [InlineData("ng serve --port 4200 --host $HOST")]
+    [InlineData("ng serve --port 4200 --host '$HOST'")]
+    [InlineData("ng serve --port 4200 --host \"%HOST%\"")]
+    [InlineData("ng serve --port 4200 --host 'host!name'")]
+    [InlineData("ng serve --port 4200 --host 'host`name'")]
+    [InlineData("ng serve --port 4200 --host 'host;name'")]
+    [InlineData("ng serve --port 4200 --host 'host|name'")]
+    [InlineData("ng serve --port 4200 --host 'host&name'")]
+    [InlineData("ng serve --port 4200 --host 'host<name'")]
+    [InlineData("ng serve --port 4200 --host 'host>name'")]
+    [InlineData("ng serve --port 4200 --host 'host(name)'")]
+    [InlineData("ng serve --port 4200 --host 'host#name'")]
+    [InlineData("ng serve --port 4200 --host 'host*name'")]
+    [InlineData("ng serve --port 4200 --host 'host?name'")]
+    [InlineData("ng serve --port 4200 --host 'host[name]'")]
+    [InlineData("ng serve --port 4200 --host 'host{name}'")]
+    [InlineData("ng serve --port 4200 --host 'host~name'")]
+    [InlineData("ng serve --port 4200 --host 'host\\name'")]
+    [InlineData("ng serve --port 4200 --host 'host\nname'")]
     [InlineData("ng serve --port 4200 --configuration dev*")]
     [InlineData("ng serve -- --port 4200")]
     [InlineData("ng serve --port 4200 --port=4200")]
+    [InlineData("ng serve --port=4200 '--port' '4200'")]
+    [InlineData("ng serve --port=4200 -- --host localhost")]
     [InlineData("ng serve --port")]
     [InlineData("ng serve --port:4200")]
     [InlineData("ng serve --port:4200 --port 4201")]
@@ -382,6 +402,13 @@ public sealed partial class PortsCommandTests
     [InlineData("ng serve --port=65536")]
     [InlineData("ng serve --port=55536")]
     [InlineData("ng serve --port=4.2e3")]
+    [InlineData("ng serve --port=+4200")]
+    [InlineData("ng serve --port='' ")]
+    [InlineData("ng serve --port=' 4200'")]
+    [InlineData("ng serve --port='4200 '")]
+    [InlineData("ng serve --port=4200.0")]
+    [InlineData("ng serve --port=999999999999999999999999")]
+    [InlineData("ng serve --host='--port 4200'")]
     [InlineData("ng serve --port='4200")]
     [InlineData("ng serve --port=42\\00")]
     [InlineData("ng run web:serve --port 4200")]
@@ -425,6 +452,12 @@ public sealed partial class PortsCommandTests
     [InlineData("npx ng serve --port 4200")]
     [InlineData("cross-env PORT=4200 ng serve --port 4200")]
     [InlineData("npm run web -- --port 4200")]
+    [InlineData("ngserve --port '$PORT'")]
+    [InlineData("NG serve --port 4200")]
+    [InlineData("ng serve --host '$HOST'")]
+    [InlineData("ng serve --portable '$PORT'")]
+    [InlineData("ng serve --port-name '$PORT'")]
+    [InlineData("ng serve --port4200 '$PORT'")]
     public async Task NonAngularStartScriptsDoNotBlockMixedDotnetPublishing(string script)
     {
         // Arrange
@@ -469,6 +502,11 @@ public sealed partial class PortsCommandTests
     [InlineData("ng serve --port '4203'")]
     [InlineData("ng serve --port=\"4203\"")]
     [InlineData("ng serve \"--port=4203\"")]
+    [InlineData(" \t\"ng\"\t's'\t--port\t004203 ")]
+    [InlineData("ng 'dev' web --port 42'03'")]
+    [InlineData("ng serve --port=\"42\"'03'")]
+    [InlineData("ng serve --port 4203 --host ''")]
+    [InlineData("ng serve --port=4203 --configuration 'development local'")]
     public async Task LiteralAngularStartScriptArgumentsAreDiscoveredWithoutExecutingTooling(
         string script
     )
@@ -509,6 +547,36 @@ public sealed partial class PortsCommandTests
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Theory]
+    [InlineData("ng serve --port $PORT", 1)]
+    [InlineData("ng serve --host '$HOST'", 0)]
+    public async Task AngularConfigurationRequiresRemovingDynamicPortFlagsFromStart(
+        string script,
+        int expectedExit
+    )
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File(
+            "folder/web/angular.json",
+            """{"projects":{"web":{"architect":{"serve":{"options":{"port":4200}}}}}}"""
+        );
+        fixture.Root.File(
+            "folder/web/package.json",
+            System.Text.Json.JsonSerializer.Serialize(new { scripts = new { start = script } })
+        );
+
+        // Act
+        var exit = await fixture.Run();
+
+        // Assert
+        exit.Should().Be(expectedExit);
+        if (expectedExit == 1)
+            await fixture.NoPublishing();
+        else
+            fixture.Console.AllText.Should().Contain("| 4200 | 14200");
     }
 
     [Fact]
