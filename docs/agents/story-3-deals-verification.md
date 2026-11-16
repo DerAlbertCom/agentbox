@@ -4,7 +4,129 @@ Use this baseline before arranging the Deals HTTPS verification for
 [#46](https://github.com/DerAlbertCom/agentbox/issues/46). It is separate from
 [#43's synthetic publishing verification](../verification/application-ports.md).
 
-## Current result — authorized live startup, 2026-11-16 11:42 CET
+## Current result — reviewed relay applied, 2026-11-16 12:01 CET
+
+**Host TCP/TLS now reaches the unchanged Deals External API and receives its
+actual sandbox leaf certificate. Trusted HTTPS still fails, as expected: host
+curl returned 60 / HTTP 000; strict `SslStream` rejected `UntrustedRoot`.** No
+certificate-validated HTTP response or Story #3/#46 completion is claimed.
+
+This follow-up used the user-authorized existing sandbox and API, with #43's
+reviewed relay implementation present at merge **`fb4658a`** (verification HEAD
+`c9ceeb1`). It did not restart the API, agents or sandbox, change application
+bindings, or resume the separately blocked host-certificate copy.
+
+### Narrow production-adapter upgrade and repeat
+
+- Rechecked exact selected identity **`rwe-ai-sbx-41bc30`**, already running;
+  sbx client **0.51.0**. No broad `abox ports` discovery against `D:/dev/rwe` or
+  other project was run.
+- The evidence helper in `docs/agents/story-3-deals-relay-probe/` references
+  the production Abox project. Every sbx invocation goes through public
+  `SbxClient` methods with argv lists; the helper adds no sbx entry point or
+  alternate relay implementation. Its observing `IProcessRunner` records runtime
+  inventories and publish/unpublish counts without changing requests.
+- Called production **`EnsureApplicationPortsAsync("rwe-ai-sbx-41bc30",
+  [new(8203, 18203)], token)`**, with exactly this single requested mapping.
+  Initial inventory contained only **`127.0.0.1:18203 -> 8203/tcp4`**. The
+  adapter made the relay ready, removed only that exact full native spec, confirmed
+  an empty inventory, published **`127.0.0.1:18203 -> 60719/tcp4`**, then confirmed
+  the new inventory. There was exactly one unpublish and one publish call.
+- Called the same production method a second time with the same single mapping.
+  It returned successfully with identical inventory and **no further publish or
+  unpublish**. No unrelated mappings existed; before/after comparison confirmed
+  no unrelated changes or additional mappings. This is not a live test with a
+  nonempty unrelated inventory; #43's disposable probes cover that case. No extra
+  mapping was created in this user sandbox just to test preservation.
+- Host listener inspection, including after the setup helper exited, found only
+  **`127.0.0.1:18203`**, still runtime-owned PID **66712**, with no wildcard or
+  IPv6 listener on that host port.
+
+### Unchanged application and retained runtime state
+
+Before and after the upgrade, `/proc` checks confirmed the same `dotnet run`
+PID/process group **43130**, start ticks **1378797**, and apphost PID **43843**,
+start ticks **1390583**. The apphost still owned exactly **127.0.0.1:8203 and
+[::1]:8203** listeners, not wildcard listeners. No application log, effective
+configuration or process environment was read for this follow-up.
+
+The production sandbox relay is PID **46234**, start ticks **1509747**, forwarding
+**60719 -> application 8203**. A separate helper process after setup exited
+confirmed the same relay PID/start ticks through its control socket. Production
+state at `/home/agent/.abox-ports-v1` was owned by the application user with mode
+**0700**; `lock`, `8203.port` and `8203.sock` were owned, non-link entries with mode
+**0600**, and the saved port agreed with control status. The API, relay and exact
+host mapping are intentionally **left running**. Do not remove relay state while
+the retained host mapping targets 60719; do not stop the runtime-owned host listener
+as application cleanup. Existing task-owned application cleanup records below
+remain valid, but no cleanup or stop is authorized/performed by this verification.
+
+### Strict HTTPS retest after setup exited
+
+The separate `--check` helper process ran at **2026-11-16T11:01:38Z**. Requests
+remained bounded `HEAD /`, without credentials, redirects, response bodies,
+alternate trust bundles or certificate-validation bypasses, using the curl form
+already recorded below.
+
+| Client / URL | Fresh result |
+|---|---|
+| Sandbox `https://localhost:8203/` | curl **60**, HTTP **000**: certificate validation failed |
+| Windows host `https://localhost:18203/` | curl **60**, HTTP **000**: certificate validation failed, replacing the historical native-mapping TLS transport failure |
+
+An independent host `TcpClient` connected to `localhost:18203`. Its `SslStream`
+used `TargetHost = "localhost"` and the platform's normal validation, with a
+diagnostic callback that observed public leaf metadata but returned **only
+`errors == SslPolicyErrors.None`**. It did not accept the invalid certificate or
+send an HTTP request over rejected TLS. Observed result:
+
+- TCP connected; certificate-validation callback reached.
+- Actual served leaf **CN=localhost**, SHA-1 thumbprint
+  **`CA669D34D0FA19407DFD5788F3A639AA759A6953`**, exactly the previously observed
+  sandbox identity, **not** host certificate `8E84EA4F2F4EC8548DAF359CCB1179008251C714`.
+- Validation **`RemoteCertificateChainErrors`**, chain status **`UntrustedRoot`**;
+  `AuthenticateAsClientAsync` failed with **`AuthenticationException`** and
+  `tls_authenticated = false`.
+
+This establishes post-helper-exit relay reachability and public server identity,
+not a completed trusted TLS handshake, successful HTTPS, browser trust or
+dependency health. The certificate bytes were observed only in memory; no
+certificate/key was exported, copied or written to disk.
+
+### Scope, remaining blocker and verification commands
+
+This evidence commit contains this note and the helper's `Program.cs` and
+`RelayProbe.csproj`; generated build outputs remain ignored. During the recorded
+live verification, the helper Debug build passed with **zero warnings/errors**;
+`--apply` and the separate post-exit `--check` both exited **0**. Recorded commands
+(not rerun for documentation housekeeping):
+
+```text
+dotnet build docs/agents/story-3-deals-relay-probe/RelayProbe.csproj -c Debug
+dotnet run --project docs/agents/story-3-deals-relay-probe/RelayProbe.csproj -c Debug --no-restore -- --apply
+dotnet run --project docs/agents/story-3-deals-relay-probe/RelayProbe.csproj -c Debug --no-build -- --check
+```
+
+`--apply` is a one-shot native-upgrade verifier that requires the original native
+mapping; do not rerun it now merely to inspect state. Repeat safety was exercised
+by its two calls to the production adapter. `--check` is read-only apart from
+normal TLS connection attempts. No full solution tests/builds were requested for
+this live verification. `dotnet csharpier check
+docs/agents/story-3-deals-relay-probe` and `git diff --check` both passed.
+
+The remaining host-certificate transport/use gate is **still BLOCKED by
+`external_directory`** pending the user's explicit access grant for the protected
+staging directory in [the host-copy note](story-3-host-certificate-verification.md).
+That denial was not bypassed. No certificate-store/trust change, private export,
+app-source/config/environment change, application/core/agent restart, sandbox
+recreation, runtime/global-settings change, dependency-service change, or business
+endpoint request was performed. No push or issue mutation was performed; Git
+publication and issue coordination remain with the coordinator.
+
+## Historical authorized startup — 2026-11-16 11:42 CET
+
+**The following startup evidence predates the relay upgrade above.** Its native
+mapping, host TLS transport failure and remaining #43 gate describe that earlier
+state, not the current mapping or a continuing relay blocker.
 
 **The real Deals External API is running in the existing sandbox. Neither
 sandbox-local nor host HTTPS passed certificate-validated HTTP verification.**
