@@ -139,29 +139,64 @@ public sealed partial class PublishServiceTests
         pushes.Should().OnlyContain(call => !call.Arguments.Contains("--build-arg"));
         var set = YamlReader.Parse(_descriptors.Last(), "set");
         var kits = set.GetEntries("kits");
-        kits.Should().HaveCount(5);
+        kits.Select(kit => kit.GetString("ref")!.Split('@')[0])
+            .Should()
+            .Equal(
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/workload",
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/kit-0",
+                "ghcr.io/example/tool:1",
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/state",
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/config"
+            );
         kits[1].GetEntry("args")!.GetString("url").Should().Be(build.Kits[0].Arguments["url"]);
-        kits[2].GetString("ref").Should().Be("ghcr.io/example/tool:1");
         kits[2]
             .GetEntry("args")!
             .GetString("message")
             .Should()
             .Be(build.Kits[1].Arguments["message"]);
+        kits[3].GetEntry("args").Should().BeNull();
         using var config = JsonDocument.Parse(_configurations.Single());
         config.RootElement.GetProperty("SchemaVersion").GetInt32().Should().Be(1);
-        config
-            .RootElement.GetProperty("Mcp")[0]
-            .GetProperty("Name")
-            .GetString()
-            .Should()
-            .Be("elastic");
-        config
-            .RootElement.GetProperty("State")[0]
-            .GetProperty("SandboxPath")
-            .GetString()
-            .Should()
-            .Be("/home/agent/.state");
+        AssertBundledRuntimeMetadata(config.RootElement);
         _configurations.Single().Should().NotContain(_root.Path);
+    }
+
+    private static void AssertBundledRuntimeMetadata(JsonElement metadata)
+    {
+        AssertPublicJson(
+            metadata.GetProperty("Mcp"),
+            """
+            [{"Name": "elastic", "Url": "https://example.com/mcp"}]
+            """
+        );
+        AssertPublicJson(
+            metadata.GetProperty("State"),
+            """
+            [{"SandboxPath": "/home/agent/.state", "RelativePath": ".state"}]
+            """
+        );
+        AssertPublicJson(
+            metadata.GetProperty("Kits"),
+            """
+            [
+              {"Name": "local", "Arguments": {"url": "https://example.com/a?x=hello world&y=1"}},
+              {"Name": "remote", "Arguments": {"message": "quoted: \"hello\"\nnext line"}}
+            ]
+            """
+        );
+    }
+
+    private static void AssertPublicJson(JsonElement actual, string expectedJson)
+    {
+        using var expected = JsonDocument.Parse(expectedJson);
+        JsonElement
+            .DeepEquals(actual, expected.RootElement)
+            .Should()
+            .BeTrue(
+                "expected public metadata {0}, but found {1}",
+                expectedJson,
+                actual.GetRawText()
+            );
     }
 
     [Fact]
@@ -476,6 +511,95 @@ public sealed partial class PublishServiceTests
 
     private PublishRequest Request(params string[] squads) =>
         new([new SquadResolver.ResolvedTeam("sample", _root.Path, squads)], "latest");
+
+    [Fact]
+    public async Task PublishedSetOmitsOnlyAbsentComponentArguments()
+    {
+        // Arrange
+        SaveRegistryKitBuild();
+
+        // Act
+        await _service.PublishAsync(Request("ac"), CancellationToken.None);
+
+        // Assert
+        using var set = JsonDocument.Parse(_descriptors.Last().Split('\n', 2)[1]);
+        var descriptor = set.RootElement;
+        descriptor
+            .EnumerateObject()
+            .Select(field => field.Name)
+            .Should()
+            .Equal("schemaVersion", "kind", "displayName", "kits");
+        descriptor.GetProperty("schemaVersion").GetString().Should().Be("3");
+        descriptor.GetProperty("kind").GetString().Should().Be("set");
+        descriptor.GetProperty("displayName").GetString().Should().Be("sample / ac");
+        var components = descriptor.GetProperty("kits").EnumerateArray().ToArray();
+        components[0].EnumerateObject().Select(field => field.Name).Should().Equal("ref");
+        components[1].EnumerateObject().Select(field => field.Name).Should().Equal("ref", "args");
+        components[1].GetProperty("args").EnumerateObject().Should().BeEmpty();
+        components[2].EnumerateObject().Select(field => field.Name).Should().Equal("ref");
+    }
+
+    [Fact]
+    public async Task PublishedConfigurationIsAV3MixinWithOnlyThePublicMetadataPayload()
+    {
+        // Arrange
+        SaveBuild("ac");
+
+        // Act
+        await _service.PublishAsync(Request("ac"), CancellationToken.None);
+
+        // Assert
+        _descriptors[^2]
+            .Should()
+            .Be(
+                "# syntax=docker/sandbox-kit:3\n"
+                    + """
+                    {
+                      "schemaVersion": "3",
+                      "kind": "mixin",
+                      "build": "FROM scratch\nCOPY squad.json /usr/share/abox/squad.json\n"
+                    }
+                    """
+            );
+    }
+
+    [Fact]
+    public async Task PublishedSquadMetadataExcludesLocalProvenanceAndKeepsNullAndEmptyPublicFields()
+    {
+        // Arrange
+        SaveRegistryKitBuild();
+        var build = _store.Load("sample", "ac", "latest")!;
+        build.CreatedAt = DateTimeOffset.Parse("2026-01-02T03:04:05+00:00");
+        build.Mcp.Add(new ManifestMcp { Name = "host-server" });
+        build.ConfigFiles.Add(_root.File("private.abox", "secret: synthetic-private-value\n"));
+        SaveVerifiedBuild(build);
+
+        // Act
+        await _service.PublishAsync(Request("ac"), CancellationToken.None);
+
+        // Assert
+        using var actual = JsonDocument.Parse(_configurations.Single());
+        AssertPublicJson(
+            actual.RootElement,
+            """
+            {
+              "SchemaVersion": 1,
+              "Team": "sample",
+              "Squad": "ac",
+              "Tag": "latest",
+              "CreatedAt": "2026-01-02T03:04:05+00:00",
+              "Mcp": [{"Name": "host-server", "Url": null}],
+              "State": [],
+              "Kits": [{"Name": "tool", "Arguments": {}}]
+            }
+            """
+        );
+        _configurations
+            .Single()
+            .Should()
+            .NotContain(_root.Path)
+            .And.NotContain("synthetic-private-value");
+    }
 
     [Fact]
     public async Task LegacyBuildsWithoutProvenanceAreRejected()
