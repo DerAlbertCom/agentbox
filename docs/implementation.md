@@ -749,10 +749,13 @@ validates the complete plan, prints source occurrences and duplicate warnings, t
 asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset mappings.
 Discovery/reporting/application orchestration stays outside the command slice so
 the HTTPS and lifecycle slices can reuse it without importing a command.
-`AppPortDiscovery` owns one bounded filesystem walk/read policy for both formats and
-static explicit Web SDK / ASP.NET framework-reference project detection;
-`DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
-parsing. No extension framework or project-tool execution is involved. Angular #44
+`AppPortDiscovery` composes one ordered `BoundedDiscoveryFiles` walk, bounded ordinary-file
+snapshots in `DiscoveryFileContent`, and `StaticAspNetProject` classification. The latter
+keeps explicit Web SDK / ASP.NET framework-reference detection separate from the
+conservative malformed/unreadable-project error policy. `AppPortFormats` dispatches
+JSON to `DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript`;
+`DiscoveryDiagnostics` owns contextual safe errors. No extension framework or
+project-tool execution is involved. Angular #44
 includes options and all named serve configurations, and a conservative literal
 direct-CLI start-script grammar. See [scope/tests/live evidence](verification/angular-application-ports.md).
 
