@@ -196,7 +196,7 @@ public sealed class PublishService(
             builder: request.Builder,
             cancellationToken: cancellationToken
         );
-        kits.Add(new { @ref = config });
+        kits.Add(new PublicationComponent(config));
         var candidate = await PublishCandidateAsync(
             publication,
             team.Name,
@@ -224,14 +224,14 @@ public sealed class PublishService(
         string? Builder
     );
 
-    private async Task<List<object>> PublishComponentsAsync(
+    private async Task<List<PublicationComponent>> PublishComponentsAsync(
         Publication publication,
         BuildManifest build,
         IReadOnlyDictionary<string, string> snapshots,
         CancellationToken cancellationToken
     )
     {
-        var kits = new List<object>();
+        var kits = new List<PublicationComponent>();
         var workload = await PushAsync(
             new PushRequest(
                 Directory: snapshots[build.WorkloadKitDirectory],
@@ -242,7 +242,7 @@ public sealed class PublishService(
             builder: publication.Builder,
             cancellationToken: cancellationToken
         );
-        kits.Add(new { @ref = workload });
+        kits.Add(new PublicationComponent(workload));
 
         for (var index = 0; index < build.Kits.Count; index++)
         {
@@ -259,7 +259,7 @@ public sealed class PublishService(
                     cancellationToken: cancellationToken
                 )
                 : kit.Reference;
-            kits.Add(new { @ref = source, args = kit.Arguments });
+            kits.Add(new PublicationComponent(source, kit.Arguments));
         }
 
         if (build.StateMixinDirectory is { } state)
@@ -274,7 +274,7 @@ public sealed class PublishService(
                 builder: publication.Builder,
                 cancellationToken: cancellationToken
             );
-            kits.Add(new { @ref = source });
+            kits.Add(new PublicationComponent(source));
         }
 
         return kits;
@@ -287,28 +287,29 @@ public sealed class PublishService(
         File.WriteAllText(
             Path.Combine(configDirectory, "squad.json"),
             JsonSerializer.Serialize(
-                new
+                new PublicationSquadMetadata
                 {
-                    SchemaVersion = 1,
                     Team = team,
-                    build.Squad,
-                    build.Tag,
-                    build.CreatedAt,
-                    build.Mcp,
-                    build.State,
-                    Kits = build.Kits.Select(kit => new { kit.Name, kit.Arguments }),
+                    Squad = build.Squad,
+                    Tag = build.Tag,
+                    CreatedAt = build.CreatedAt,
+                    Mcp = build.Mcp.Select(mcp => new PublicationMcp(mcp.Name, mcp.Url)).ToList(),
+                    State = build
+                        .State.Select(state => new PublicationState(
+                            state.SandboxPath,
+                            state.RelativePath
+                        ))
+                        .ToList(),
+                    Kits = build
+                        .Kits.Select(kit => new PublicationKitMetadata(kit.Name, kit.Arguments))
+                        .ToList(),
                 },
                 JsonOptions
             )
         );
         WriteDescriptor(
             Path.Combine(configDirectory, "config.yaml"),
-            new
-            {
-                schemaVersion = "3",
-                kind = "mixin",
-                build = "FROM scratch\nCOPY squad.json /usr/share/abox/squad.json\n",
-            }
+            new PublicationConfigurationDescriptor()
         );
         return configDirectory;
     }
@@ -317,7 +318,7 @@ public sealed class PublishService(
         Publication publication,
         string team,
         string squad,
-        IReadOnlyList<object> kits,
+        IReadOnlyList<PublicationComponent> kits,
         CancellationToken cancellationToken
     )
     {
@@ -325,13 +326,7 @@ public sealed class PublishService(
         Directory.CreateDirectory(setDirectory);
         WriteDescriptor(
             Path.Combine(setDirectory, "set.yaml"),
-            new
-            {
-                schemaVersion = "3",
-                kind = "set",
-                displayName = $"{team} / {squad}",
-                kits,
-            }
+            new PublicationSetDescriptor { DisplayName = $"{team} / {squad}", Kits = kits }
         );
         return await PushAsync(
             new PushRequest(
@@ -612,7 +607,7 @@ public sealed class PublishService(
         IReadOnlyList<string> arguments
     ) => OciRegistry.ImageToolsArguments(builder, arguments);
 
-    private static void WriteDescriptor(string path, object descriptor) =>
+    private static void WriteDescriptor<TDescriptor>(string path, TDescriptor descriptor) =>
         File.WriteAllText(
             path,
             "# syntax=docker/sandbox-kit:3\n" + JsonSerializer.Serialize(descriptor, JsonOptions)
