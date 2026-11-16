@@ -1,6 +1,8 @@
+using Abox.ApplicationPorts;
 using Abox.Configuration;
 using Abox.Features.Build;
 using Abox.Features.Create;
+using Abox.Features.Ports;
 using Abox.Features.Prune;
 using Abox.Features.Publish;
 using Abox.Features.Run;
@@ -39,6 +41,7 @@ public static class AboxServiceCollection
             .AddRunFeature()
             .AddSecretsFeature()
             .AddUserSecretsFeature()
+            .AddPortsFeature()
             .AddPruneFeature()
             .AddSandboxFeature();
 
@@ -69,6 +72,7 @@ public static class AboxServiceCollection
         services.AddSingleton<ISbxClient, SbxClient>();
         services.AddSingleton(UserSecretsHost.Create());
         services.AddSingleton<UserSecretsCopy>();
+        services.AddSingleton<AppPorts>();
         services.AddSingleton<Preflight>();
         services.AddSingleton<SquadResolver>();
         services.AddSingleton<BuildStore>();

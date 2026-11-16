@@ -21,15 +21,45 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
 | `abox user-secrets [--location <path>] [--force]` | Copies explicitly selected local .NET user-secret stores into the folder's existing sandbox. |
+| `abox ports [--location <path>]` | Discovers .NET launch-profile ports and publishes them on host loopback at port + 10000. |
 
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
 
-`create`, `run` and `user-secrets` use `--location`, then the user setting `defaultLocation`,
+`create`, `run`, `user-secrets` and `ports` use `--location`, then the user setting `defaultLocation`,
 then the current folder. For `create --local`, team discovery starts at that location
 and searches its parents, unless `--root <dir>` selects a separate source project.
 For `create`, `--root` requires `--local`; remote create rejects it because no local
 team sources are used.
+
+### Reaching sandbox apps over HTTP
+
+Start your app inside the existing sandbox, listening on IPv4 (for example
+`http://0.0.0.0:8203`), then run:
+
+```sh
+abox ports --location /path/to/project
+# app/Properties/launchSettings.json declares http://localhost:8203
+# Open http://localhost:18203 on the host after abox exits.
+```
+
+The command reads explicit ports from every profile's semicolon-separated
+`applicationUrl` values in `Properties/launchSettings.json` beneath the folder.
+It prints each source occurrence, warns about duplicates and publishes each distinct
+mapping once. No `abox.json`, team sources or build is needed. It never creates or
+replaces a sandbox; a missing sandbox gives a create hint.
+
+Publishing is managed by sbx, not a background abox process. It binds **127.0.0.1
+only**, reuses exact existing mappings on subsequent runs and preserves unrelated
+mappings. A stopped sandbox is started first, but **apps are not started** by this
+command. Ports still occupied by another host service fail with a diagnostic;
+fix the conflict and retry. Failure/cancellation can leave some mappings published
+and does not roll back. The table is a plan, not proof the app is running.
+
+This first slice supports .NET discovery and HTTP reachability with fixed offset
+10000. HTTPS ports are discovered too, but certificates/trust are **not** configured.
+Angular discovery, configurable offsets and automatic create/recreate publishing
+are not included yet. See [discovery/runtime rules and verification](docs/verification/application-ports.md).
 
 ### Seeing tool output
 
@@ -152,7 +182,7 @@ userSecretsDenyList:
   - production.example.internal
 ```
 
-- `defaultLocation` is unset by default: `create`, `run` and `user-secrets` use the current folder unless `--location` is given.
+- `defaultLocation` is unset by default: `create`, `run`, `user-secrets` and `ports` use the current folder unless `--location` is given.
 - `teamsDirectory` names the project's teams directory; the default is `teams`.
 - `kitsDirectory` names the kits directory relative to the project root; the default is `kits`.
 - `userSecretsDenyList` is a list of nonempty **literal substrings**, matched
@@ -169,7 +199,7 @@ values use the default. It is independent of each workload's `publishRepository`
 
 ### Reusing cape-agent-sandbox environments
 
-`run`, `user-secrets` and create/replacement checks find the sandbox for the
+`run`, `user-secrets`, `ports` and create/replacement checks find the sandbox for the
 effective folder (`--location`, then `defaultLocation`, then the current folder).
 They first check the current `<folder>-abox-<hash>` name. Only when it is absent
 do they check the exact historical `<folder>-ai-sbx-<hash>` generated name.

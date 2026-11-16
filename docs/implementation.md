@@ -260,9 +260,9 @@ sensitive transport checks are unchanged. This supersedes the earlier on-demand
 record prerequisite in #2/#10, per the user's subsequent policy correction.
 
 Explicit-name `exec`/`pipe`, inventory-wide prune and host proxy-secret commands do
-not use location fallback. Future location-based commands, including ports (#3),
-must use this resolver and retain the actual selected identity; this change adds
-neither ports nor public stop/delete commands. See [verification and red evidence](verification/legacy-sandbox-compatibility.md).
+not use location fallback. Location-based ports (#43) also uses this resolver and
+retains the actual selected identity. Public stop/delete commands are not included.
+See [verification and red evidence](verification/legacy-sandbox-compatibility.md).
 
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag>]
 [--local] [--yes]`
@@ -718,6 +718,32 @@ documents explicitly authorized local declarations on the existing `D:\dev\rwe`
 sandbox and read-only production port discovery; no real secret copy, connectivity
 or authentication check was performed for that change.
 
+### `abox ports [--location <path>]` (#43)
+
+Resolves the existing sandbox with the shared current-first/legacy resolver and
+passes its actual identity to `ApplicationPorts/AppPorts`. Location precedence is
+explicit, `defaultLocation`, current folder. No team sources, build metadata or
+folder configuration is required, and no create/replacement occurs.
+
+The shared module statically discovers all explicit .NET launch-profile URL ports,
+validates the complete plan, prints source occurrences and duplicate warnings, then
+asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset-10000 mappings.
+Discovery/reporting/application orchestration stays outside the command slice so
+the later Angular, offset, HTTPS and lifecycle slices can reuse it without importing
+a command. This slice adds none of those later features.
+
+The sbx adapter completes a fixed noninteractive `exec <sandbox> true` before reading
+`ports <sandbox> --json`: this waits for startup and restores existing bindings,
+avoiding a verified sbx 0.51.0 stopped-publishing race. It reuses exact
+`127.0.0.1:<host>:<sandbox>/tcp4` mappings, refuses conflicting or malformed inventory,
+only appends missing bindings and verifies them after publication. It never removes
+or overwrites unrelated mappings. Application publishing is deliberately separate
+from user-secrets' opposite-direction authorized host-access policy inventory.
+
+Failures and cancellation explain possible partial state and retry, without claiming
+success or rollback. Publishing does not run apps, make IPv6-only apps reachable or
+configure HTTPS certificates. See [discovery bounds, runtime evidence and limitations](verification/application-ports.md).
+
 ### `abox prune [--full] [--sbx]`
 
 Sbx stores every kit it builds as a template image: one image per build plus one per kit
@@ -883,6 +909,7 @@ cli/src/Abox/
     Run/            abox run: the command and the service that does its work
     Secrets/        abox secrets: the command and the service that does its work
     UserSecrets/    abox user-secrets: on-demand command only
+    Ports/          abox ports: on-demand command only
     Prune/          abox prune: the command and the service that does its work
     Sandbox/        the commands other programs call: abox exec and abox pipe
     CommandHandling.cs  turns an abox error into a message and an exit code
@@ -890,6 +917,7 @@ cli/src/Abox/
     FolderConfig.cs runtime-only abox.json (not squad/build configuration)
   UserSecrets/      shared selection/policy, bounded project/appsettings discovery,
                     endpoint override generation and runtime copy flow
+  ApplicationPorts/ shared static discovery, occurrence reporting and publishing flow
   Kits/             the .abox and .workload files, the chain, the kit generators
   LocalState/       local on-disk state shared by the command slices
     BuildManifest.cs

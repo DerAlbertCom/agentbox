@@ -17,6 +17,13 @@ public interface ISbxClient
 
     Task<SandboxInfo?> FindSandboxAsync(string name, CancellationToken cancellationToken);
 
+    /// <summary>Starts the sandbox if needed and ensures loopback TCP app mappings without removing others.</summary>
+    Task EnsureApplicationPortsAsync(
+        string sandbox,
+        IReadOnlyList<ApplicationPortMapping> mappings,
+        CancellationToken cancellationToken
+    );
+
     /// <summary>The template images the local runtime holds.</summary>
     Task<IReadOnlyList<TemplateImage>> ListTemplatesAsync(CancellationToken cancellationToken);
 
