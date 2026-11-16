@@ -97,6 +97,9 @@ public sealed class AppPortsLifecycleTests
     [InlineData("published", "overflow")]
     [InlineData("local", "overflow")]
     [InlineData("run", "overflow")]
+    [InlineData("published", "aspnet")]
+    [InlineData("local", "aspnet")]
+    [InlineData("run", "aspnet")]
     public async Task InvalidDiscoveryCannotMutateOrReplaceTheExistingSandbox(
         string entry,
         string problem
@@ -105,11 +108,7 @@ public sealed class AppPortsLifecycleTests
         // Arrange
         using var fixture = new AppPortsLifecycleFixture();
         fixture.Existing();
-        fixture.Angular();
-        if (problem == "overflow")
-            fixture.Configure("""{"portOffset":65534}""");
-        else
-            fixture.Root.File("folder/api/Properties/launchSettings.json", "{broken");
+        InvalidDiscovery(fixture, problem);
 
         // Act
         var exit = await fixture.Replace(entry);
@@ -129,6 +128,23 @@ public sealed class AppPortsLifecycleTests
             .Records.Load(fixture.Name)!
             .BuildCreatedAt.Should()
             .Be(AppPortsLifecycleFixture.OldBuild);
+    }
+
+    private static void InvalidDiscovery(AppPortsLifecycleFixture fixture, string problem)
+    {
+        fixture.Angular();
+        if (problem == "overflow")
+            fixture.Configure("""{"portOffset":65534}""");
+        else if (problem == "aspnet")
+        {
+            fixture.Root.File("folder/A.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />");
+            fixture.Root.File(
+                "folder/Web.csproj",
+                "<Project Sdk=\"Microsoft.NET.Sdk.Web\"><broken>"
+            );
+        }
+        else
+            fixture.Root.File("folder/api/Properties/launchSettings.json", "{broken");
     }
 
     [Theory]
