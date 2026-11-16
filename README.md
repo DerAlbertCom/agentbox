@@ -100,9 +100,13 @@ save/recovery access or trigger automatic restarts. See
 Invalid/missing Node extra-CA inputs likewise warn without blocking ordinary/recovery
 commands: their original Node setting and protected Kestrel defaults are retained,
 but setup/readiness and new agent launches fail until corrected. Caller CA symlinks
-are supported. After upgrading the CLI, rerun folder-qualified `abox ports` before
-launching if the installed bootstrap hash differs; unverified installed code is
-never executed as an upgrade fallback.
+and non-ASCII comments/Bag Attributes outside certificate PEM blocks are supported;
+original extra-CA bytes are preserved. Damaged protected abox files instead fail
+closed. After upgrading the CLI, a bootstrap hash mismatch can be recovered with
+`abox ports --location "<folder>" --refresh-https-bootstrap`. This explicit reader-only
+refresh preserves private activation, needs no host export, project discovery,
+port changes or root trust, and does **not** claim full HTTPS readiness. Unverified
+installed code is never executed as an upgrade fallback.
 Automatic create/recreate publishing is not included yet.
 See [shared discovery/runtime rules](docs/verification/application-ports.md) and
 [Angular scope, supported forms and verification](docs/verification/angular-application-ports.md).

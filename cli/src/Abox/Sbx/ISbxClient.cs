@@ -21,6 +21,12 @@ public interface ISbxClient
         CancellationToken cancellationToken
     );
 
+    /// <summary>Refreshes only the verified reader of an existing protected HTTPS runtime.</summary>
+    Task RefreshDevelopmentCertificateBootstrapAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+
     /// <summary>The first sbx version abox works with.</summary>
     const string MinimumVersion = "0.51.0";
 

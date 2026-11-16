@@ -132,9 +132,9 @@ Separate bounded cleanup attempts remove the exact transfer's private temporary
 file after failure/cancellation. A successful serialized retry removes validated
 abandoned transfer files. Launch, prepare, status, activation, staging and cleanup
 all use the **same exclusive lock**, including process scans and atomic Node-bundle
-writes; this is not a shared-reader/writer scheme. Brief contention retries inside
-the operation for at most three seconds, including cleanup (inside its separate
-five-second host budget). Signal cancellation interrupts the wait. Persistent
+writes; this is not a shared-reader/writer scheme. Launches retry contention for up
+to **five seconds**; other operations, including cleanup, wait up to three seconds
+(cleanup remains inside its separate five-second host budget). Signal cancellation interrupts the wait. Persistent
 contention returns a distinct busy/retry result (75), not invalid configuration
 (78); readiness is not claimed and unconfirmed cleanup is still reported honestly.
 After a lost acknowledgement the new PFX may already be committed; no rollback,
@@ -162,9 +162,30 @@ bundle preparation fails, as described below. Invalid protected runtime state
 still fails closed. **After a CLI upgrade**, an old installed bootstrap has a
 different exact hash: all configured launches, including ordinary/recovery
 commands, return 78 rather than executing unverified installed code or launching
-without the protected environment. Run `abox ports --location "<folder>"` with the
-new CLI to refresh its verified bootstrap, then retry. Setup uses the CLI's embedded
-receiver directly and does not depend on executing that old installed bootstrap.
+without the protected environment. Use the explicit reader-only recovery command:
+
+```sh
+abox ports --location "<folder>" --refresh-https-bootstrap
+```
+
+This mode uses the new CLI's embedded receiver directly through `SbxClient`, never
+the unverified installed reader. Under the runtime lock it checks existing protected
+paths, ownership/modes, configuration and the public PEM, then atomically replaces
+only `bootstrap.py`. Private PFX/configuration, password/path and existing Node roots
+are retained. It needs sbx preflight/discovery, the application user, Python and valid
+existing protected activation; it does **not** read project/folder configuration,
+publish ports, export host identity or require root trust work. It cannot be combined
+with `--offset`. Caller `NODE_EXTRA_CA_CERTS` is not read. Successful refresh is not
+HTTPS/Node/agent readiness: retry the original launch, or ordinary `abox ports` for
+full setup/status. Missing/unsafe activation fails without creating or replacing it.
+Cancellation may occur after the atomic reader replacement; explicitly retry.
+
+If protected state is damaged, correct its ownership/integrity or run full
+folder-qualified `abox ports` (which requires readable discovery inputs, an exportable
+trusted host certificate and sandbox root trust prerequisites). Explicitly recreating
+the sandbox is a last resort, **destructive to nonpersisted sandbox files/worktrees
+and running sessions**; save work first and review the create confirmation. abox never
+deletes/recreates a sandbox automatically to recover a bootstrap mismatch.
 
 and the shell replaces itself with the original argv. Python is never the app's
 exec parent: CPython's ignored SIGPIPE/SIGXFSZ and locale initialization cannot
@@ -225,16 +246,28 @@ must resolve to an accessible regular PEM file of at most 1 MiB (an empty file
 adds no original roots). Caller-selected symlinks, including system/corporate CA
 links, are followed **only as the unprivileged application user**. Reads are bounded
 and nonblocking; directories/devices/FIFOs, unreadable/oversize inputs and invalid
-PEM fail Node readiness. Abox-owned runtime paths/sources retain strict no-follow,
+PEM fail Node readiness. For a nonempty input, at least one complete `CERTIFICATE`
+PEM block is required and each block is validated as ASCII using SSL in memory.
+Non-ASCII comments, Bag Attributes and other bytes **outside** these blocks are
+allowed, matching Node/OpenSSL; original bytes still determine the digest and are
+stored/merged unchanged, not decoded or reserialized. Malformed/incomplete certificate
+blocks are not silently accepted. Abox-owned runtime paths/sources retain strict no-follow,
 ownership, mode and single-link checks. Up to 16 distinct source-content variants are retained per
 sandbox, without evicting trust files potentially needed by running Node clients;
-a 17th fails Node readiness with recovery guidance. Any Node-bundle failure blocks
+a 17th fails Node readiness with recovery guidance. Caller-input/capacity failure blocks
 setup/status success (44) and recognized new agent launches (78), but **not ordinary
 commands or the explicit recovery argv above**. Those commands receive the verified
 Kestrel settings, retain the caller's original `NODE_EXTRA_CA_CERTS` unchanged and
 print a warning on stderr that Node trust is **NOT configured**. A missing input is
 not treated as empty or silently replaced, matching Node's warning semantics;
 ordinary child exit status is preserved. Recovery access is not Node-trust success.
+Protected-state failures are different: missing/invalid `public.pem`, unsafe owned
+files, or missing/corrupt inherited `.source` data fail closed for **all** configured
+launches, including recovery (78), and status fails as protected configuration, not
+caller-input status 44. An existing source for the selected digest must still match
+the original bytes. These failures never fall back to a potentially incomplete
+owned trust configuration or blame the caller's independent CA file. Correct the
+protected state before retrying; no raw exception, password or file contents are logged.
 Prefer stable extra-CA inputs; recreate the
 disposable or deliberately inspect/remove unused owned node pairs when changing
 many configurations. Existing Node processes can cache roots and must be explicitly

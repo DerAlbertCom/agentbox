@@ -4,6 +4,7 @@ using Abox.Configuration;
 using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Sandboxes;
+using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Abox.Features.Ports;
@@ -15,6 +16,7 @@ public sealed class PortsCommand : Command
         Preflight preflight,
         SandboxResolver sandboxes,
         AppPorts ports,
+        ISbxClient sbx,
         IConsole console
     )
         : base("ports", "Publish discovered application ports on host loopback with an offset.")
@@ -30,13 +32,26 @@ public sealed class PortsCommand : Command
         };
         Options.Add(location);
         Options.Add(offset);
+        var refreshBootstrap = new Option<bool>("--refresh-https-bootstrap")
+        {
+            Description =
+                "Refresh only the verified HTTPS reader after a CLI upgrade; no discovery, host export, root trust or port changes.",
+        };
+        Options.Add(refreshBootstrap);
         SetAction(
             async (parseResult, cancellationToken) =>
                 await CommandHandling.RunAsync(
                     async () =>
                     {
                         var folder = config.Value.ResolveLocation(parseResult.GetValue(location));
-                        var folderConfig = await FolderConfig.LoadAsync(folder, cancellationToken);
+                        var refresh = parseResult.GetValue(refreshBootstrap);
+                        if (refresh && parseResult.GetValue(offset) is not null)
+                            throw new AboxException(
+                                "--refresh-https-bootstrap cannot be combined with --offset; it changes no ports."
+                            );
+                        var folderConfig = refresh
+                            ? null
+                            : await FolderConfig.LoadAsync(folder, cancellationToken);
                         var selectedOffset = FolderConfig.SelectPortOffset(
                             folderConfig,
                             parseResult.GetValue(offset)
@@ -48,6 +63,17 @@ public sealed class PortsCommand : Command
                             ?? throw new AboxException(
                                 $"There is no sandbox for '{folder}'. Run 'abox create --location \"{folder}\" --team <name> --squad <name>' first; ports never creates or replaces one."
                             );
+                        if (refresh)
+                        {
+                            await sbx.RefreshDevelopmentCertificateBootstrapAsync(
+                                sandbox.Name,
+                                cancellationToken
+                            );
+                            console.WriteLine(
+                                "HTTPS bootstrap refreshed from this CLI. Private activation retained; HTTPS/Node/agent readiness was not verified. Retry the original launch; use abox ports for full setup."
+                            );
+                            return 0;
+                        }
                         await ports.PublishAsync(
                             folder,
                             sandbox.Name,
