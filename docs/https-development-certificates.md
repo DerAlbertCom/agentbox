@@ -3,10 +3,13 @@
 `abox ports` now configures a protected, explicit Kestrel default certificate for
 statically detected ASP.NET Core Web SDK / `Microsoft.AspNetCore.App` projects, in addition to publishing ports.
 It does not start/restart applications or implement automatic create/replace setup
-(#47). **#46 acceptance remains incomplete.** Synthetic production-path evidence
-and separate manual real-host evidence are distinguished below; neither establishes
-the complete production flow with the real host identity, browser reload,
-independent Linux-host verification or a Copilot shell-tool run.
+(#47). **#46 acceptance remains incomplete.**
+[Windows real-host production evidence](verification/https/real-host-production-verification.md)
+establishes strict host/system/Node TLS and repeat safety on candidate
+`4f5719e09e8946a311c93e0cc77a20bbd20052bc`, not on the later PEM/bootstrap-only
+recovery changes. Current synthetic regression checks and historical manual evidence
+remain distinct. Browser reload, independent Linux-host verification, actual Copilot
+shell-tool/Herdr desktop, real-host renewal and exact 18203 production proof remain open.
 
 ## Prerequisites and host export
 
@@ -294,5 +297,9 @@ Production now installs public sandbox trust itself; earlier manual trust remain
 historical evidence, not proof of this implementation. The review-fixes tests use
 only disposable synthetic certificates. A fresh verifier must follow
 [the clean production-verification gate](verification/https/production-verification.md).
-That proof is not a production `abox ports` real-host run, browser reload, Copilot
-shell-tool check, host Herdr desktop connection or independent Linux-host evidence.
+That earlier manual proof is not a production `abox ports` real-host run. The later
+[separate real-host production record](verification/https/real-host-production-verification.md)
+does demonstrate the production flow on its exact recorded candidate SHA only;
+it must not be relabelled as real-host verification of subsequent code changes.
+It also retains the remaining browser, Copilot shell-tool, Herdr desktop,
+independent Linux-host, real-host renewal and exact-port acceptance boundaries.

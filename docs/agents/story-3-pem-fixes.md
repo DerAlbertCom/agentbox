@@ -69,19 +69,28 @@ of the suite; the success assertions were retained, not weakened.
 
 ## Verification
 
-Completed before the final test-only additions:
+Final verification of the fix tree:
 
 - Guarded `RunReceiverChecks.ps1`: **38 passed**, no skips/failures, followed by
   actual mounted-runtime and mounted-public-trust rejection. All operations run
   in new network-disabled `--rm` containers, without host mounts.
 - Debug and Release solution builds: **zero warnings/errors** each.
-- Debug and Release full direct xUnit suites: **1993 total, 1972 passed,
+- Debug and Release full direct xUnit suites: **1994 total, 1973 passed,
   21 explicit skips, zero failures/errors** each. The new guarded Linux-only
   upgrade test is one of the Windows skips, not a claimed Windows pass.
-- Executable composed CLI upgrade check in a fresh non-root Linux container:
-  **1 passed**, no skips/failures (Debug); no host/sandbox trust/export used.
+- Fresh non-root Linux-container Debug **and Release** regression sets (`PortsCommandTests`,
+  `DevelopmentHttpsTests`, `DevelopmentCertificateActivationTests`): **183 passed**,
+  no skips/failures each, including the executable composed CLI upgrade check. Public
+  source and matching test binaries are copied through stdin, not host-mounted.
+- Activation-probe builds in Debug and Release: **zero warnings/errors** each.
+- CSharpier checked **244 CLI files**; `git diff --check` passed.
 
-Final reruns and evidence-integration SHAs are recorded below after completion.
+Implementation commit: `fdd1916`. Normal evidence merge: `70ce048`, incorporating
+exact verifier evidence commit `8fa8e035570e3b88f2b54d3ccb66ceaab81ec519` after the
+code commit. It made no CLI/source changes. Integration `feature/app-ports` at
+`13a5f40` is an ancestor; a final normal merge reported already up to date.
+Both verifier evidence/procedure files are byte-identical to `8fa8e0`.
+No integration worktree/branch was modified.
 
 Reproduce the receiver checks:
 
