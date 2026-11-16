@@ -107,6 +107,59 @@ public sealed class ProcessOutputTests
     }
 
     [Fact]
+    public void OverlappingCredentialsAreFullyRedactedLongestFirst()
+    {
+        // Arrange
+        var console = new TestConsole();
+        var request = new ProcessRequest(
+            "tool",
+            ["--token", "overlap-secret-extended"],
+            StandardInput: "overlap-secret"
+        );
+        const string text = "before overlap-secret-extended overlap-secret after";
+        var result = new ProcessResult(0, text, text);
+
+        // Act
+        new ProcessOutput(console) { Verbose = true }.Write(request, result);
+
+        // Assert
+        console.Errors.Should().Contain("before [REDACTED] [REDACTED] after");
+        console.AllText.Should().NotContain("overlap-secret").And.NotContain("-extended");
+        console.Output.Should().BeEmpty();
+        result.Should().Be(new ProcessResult(0, text, text));
+    }
+
+    [Theory]
+    [InlineData("\n")]
+    [InlineData("\r\n")]
+    public void MultilineCredentialsAndBareBearerTokensAreRedacted(string newline)
+    {
+        // Arrange
+        var console = new TestConsole();
+        var credential =
+            $"first-private-line{newline}bEaReR private-bearer-token{newline}last-private-line";
+        var request = new ProcessRequest(
+            "tool",
+            [],
+            Environment: new Dictionary<string, string> { ["AUTHORIZATION"] = credential }
+        );
+        var text =
+            $"complete: {credential}; fragments: first-private-line last-private-line private-bearer-token; done";
+        var result = new ProcessResult(0, text, text);
+
+        // Act
+        new ProcessOutput(console) { Verbose = true }.Write(request, result);
+
+        // Assert
+        console
+            .Errors.Should()
+            .Contain("complete: [REDACTED]; fragments: [REDACTED] [REDACTED] [REDACTED]; done");
+        console.AllText.Should().NotContain("private-");
+        console.Output.Should().BeEmpty();
+        result.Should().Be(new ProcessResult(0, text, text));
+    }
+
+    [Fact]
     public void EmptyBearerTokensDoNotBreakDiagnostics()
     {
         // Arrange
