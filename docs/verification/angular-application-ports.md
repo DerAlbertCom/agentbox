@@ -226,12 +226,45 @@ minimum sbx **0.51.0**, the same cached local template above, actual Debug abox:
   or IPv6 host publication. Protected/competing ports were not used.
 - `finally` removed only the fresh task-owned sandbox (exit 0), ending its Node
   process/relays, then removed that **exact** synthetic workspace, dependencies
-  and npm cache. Reproducible source/lockfile stay in Git, not generated outputs.
+and npm cache. Reproducible source/lockfile stay in Git, not generated outputs.
+
+A second complete real-Angular run after merging offset integration `8cca672`
+at **`eaa74ec`** passed in **`abox-issue44-real-angular-e1c05-abox-04E2C`**:
+same actual CLI/framework/runtime, unchanged localhost-only app bind (`::1:8354`,
+Node PID 416), HTML and compiled-component HTTP after each abox exit, no script
+execution during discovery, all duplicates reported, and exact rerun reuse of
+**18354 -> 56302** / **18355 -> 62901**. Host listeners again were only IPv4
+loopback. Sandbox cleanup exited 0 and its exact workspace/cache was removed.
 
 The representative real-Angular HTTP/compiled-app check is now verified.
 **Browser DOM rendering, WebSocket/HMR/live reload, HTTPS and an independent Unix
 host run are not verified here.** Raw TCP forwarding does not itself prove those
 browser behaviors. This is not a claim about running the existing Deals frontend.
+
+### Review-fix and merged automated verification
+
+The composed-command regression for unrelated `vite`, `next`, custom `node` and
+wrapper scripts first failed **10 cases** (exit 1 instead of success/.NET-only
+publishing), then passed after recognizing Angular before parsing its flags.
+Two `ng dev` split/quoted-port cases first failed, then passed after adding the
+documented alias. Quoted literal `ng` commands remain supported; recognized
+Angular compound/dynamic commands still fail before any mixed-plan publishing.
+
+Before offset integration, the full Debug suite passed **1853**, with **17 skips**,
+zero failures. After merging #45 at `eaa74ec`, full Debug verification passed
+**1901**, with the same **17 platform skips** (1918 total), zero failures. Focused
+ports/Angular transport/adapter/folder-offset tests passed **196**, with **3 file
+symlink privilege skips** (199 total). New merge regressions exercise .NET, Angular
+options, named configuration and `ng dev` start occurrences under folder and CLI
+offset selection, retaining duplicate rows and rejecting a whole mixed plan for
+an invalid custom-offset Angular mapping. The Angular transport test's expected
+argv was updated for the #45 offset/binding-snapshot protocol; it still asserts
+only sbx calls, distinct relays and no duplicate publish/unpublish operation.
+Debug solution build had **zero warnings/errors**; CSharpier passed for `cli`
+and all checked-in application-port verification programs, and `git diff --check`
+passed. Probe host ports 18354/18355 had no remaining listener after cleanup.
+The exact task-owned red-test and lock-generation temporary directories were
+also removed. No Release verification is claimed.
 
 ### Reproduce
 
