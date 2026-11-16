@@ -53,6 +53,8 @@ try
     }
     if (args is ["host", var template])
         return await Host(template);
+    if (args is ["prepare-production", var productionTemplate])
+        return await PrepareProduction(productionTemplate);
     if (args is ["tool-help", var toolTemplate])
         return await Host(toolTemplate, true);
     if (args is ["setup", var sandbox, var publicPath])
@@ -171,11 +173,9 @@ try
         await using var tls = new SslStream(socket.GetStream());
         var policy = new X509ChainPolicy
         {
-            TrustMode = X509ChainTrustMode.CustomRootTrust,
             RevocationMode = X509RevocationMode.NoCheck,
             DisableCertificateDownloads = true,
         };
-        policy.CustomTrustStore.Add(cert);
         await tls.AuthenticateAsClientAsync(
             new SslClientAuthenticationOptions
             {
@@ -414,11 +414,11 @@ static async Task<int> Host(string template, bool toolHelp = false)
                     (
                         await client.CertificateProbeExecAsync(name, [executable, "client"], token)
                     ).Succeeded,
-                    "strict custom-anchor localhost TLS exact leaf"
+                    "strict sandbox system-store localhost TLS exact leaf"
                 );
                 Require(await server == 0, "server exited");
                 Console.WriteLine(
-                    $"PASS generation {generation}: post-helper-exit {shell} new Kestrel exact public DER, hostname and chain validated (synthetic anchor, not host trust)."
+                    $"PASS generation {generation}: post-helper-exit {shell} new Kestrel exact public DER, hostname and sandbox system-store chain validated (synthetic identity, not host trust)."
                 );
             }
             if (generation == 0)
@@ -427,20 +427,8 @@ static async Task<int> Host(string template, bool toolHelp = false)
                 foreach (var fault in new[] { "mode", "link", "hardlink" })
                 {
                     await MutateFile(file, fault, false);
-                    var unsafeRejected = false;
-                    try
-                    {
-                        await client.ActivateDevelopmentCertificateAsync(
-                            name,
-                            new byte[] { 1, 2, 3 },
-                            password,
-                            token
-                        );
-                    }
-                    catch (Abox.AboxException)
-                    {
-                        unsafeRejected = true;
-                    }
+                    var unsafeRejected =
+                        await client.ExecAsync(new SbxExecRequest(name, ["true"]), token) == 78;
                     Require(unsafeRejected, "reject unsafe activation file " + file + " " + fault);
                     await MutateFile(file, fault, true);
                     await client.VerifyDevelopmentCertificateActivationAsync(name, token);
@@ -475,8 +463,13 @@ static async Task<int> Host(string template, bool toolHelp = false)
                 }
                 Require(rejected, "stale parent prevents full activation success");
                 Require(
-                    await client.ExecAsync(new SbxExecRequest(name, ["true"]), token) == 42,
-                    "stale parent blocks shared launch"
+                    await client.ExecAsync(new SbxExecRequest(name, ["true"]), token) == 0,
+                    "stale parent retains ordinary save/exit transport"
+                );
+                Require(
+                    await client.ExecAsync(new SbxExecRequest(name, ["hc", "--version"]), token)
+                        == 42,
+                    "stale parent refuses a new agent launch rather than transport"
                 );
                 await StopFixture();
                 await client.VerifyDevelopmentCertificateActivationAsync(name, token);
@@ -716,7 +709,7 @@ static async Task<int> Host(string template, bool toolHelp = false)
                         "python3",
                         "-I",
                         "-c",
-                        "import os,stat; p='/tmp/abox-https-'+str(os.geteuid()); assert set(os.listdir(p))=={'config.json','active.pfx','.lock'}; assert stat.S_IMODE(os.stat(p).st_mode)==0o700; assert all(stat.S_IMODE(os.stat(p+'/'+n).st_mode)==0o600 for n in os.listdir(p))",
+                        "import os,re,stat; p='/tmp/abox-https-'+str(os.geteuid()); names=set(os.listdir(p)); required={'config.json','active.pfx','.lock','bootstrap.py','public.pem'}; assert required<=names; assert all(n in required or re.fullmatch(r'node-[0-9a-f]{64}\\.(pem|source)',n) for n in names); assert stat.S_IMODE(os.stat(p).st_mode)==0o700; assert all(stat.S_IMODE(os.stat(p+'/'+n).st_mode)==0o600 for n in names)",
                     ],
                     token
                 )
@@ -775,6 +768,92 @@ static async Task<int> Host(string template, bool toolHelp = false)
         );
         Directory.Delete(workspace, true);
         Console.WriteLine("Task-owned sandbox/workspace cleanup confirmed.");
+    }
+}
+
+static async Task<int> PrepareProduction(string template)
+{
+    // This mode creates only a clean disposable and a trivial app. Certificate
+    // authorization/export is a subsequent explicit production CLI invocation.
+    var checkout = new DirectoryInfo(Environment.CurrentDirectory);
+    while (
+        checkout is not null && !File.Exists(Path.Combine(checkout.FullName, "CODING_STANDARDS.md"))
+    )
+        checkout = checkout.Parent;
+    if (checkout is null)
+        throw new InvalidOperationException();
+    var workspace = Path.Combine(
+        checkout.FullName,
+        ".abox",
+        "abox-issue46-activation-production-" + Guid.NewGuid().ToString("N")[..8]
+    );
+    var client = new SbxClient(new ProcessRunner(), AboxPaths.For(workspace, workspace));
+    var name = SandboxName.For(workspace);
+    using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+    var token = timeout.Token;
+    if (Directory.Exists(workspace) || await client.FindSandboxAsync(name, token) is not null)
+        throw new InvalidOperationException();
+    Directory.CreateDirectory(Path.Combine(workspace, "Properties"));
+    try
+    {
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace, "Verifier.csproj"),
+            """
+            <Project Sdk="Microsoft.NET.Sdk.Web"><PropertyGroup><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings></PropertyGroup></Project>
+            """,
+            token
+        );
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace, "Program.cs"),
+            """
+            var builder = WebApplication.CreateBuilder(args);
+            var app = builder.Build();
+            app.MapGet("/", () => "abox-production-verifier");
+            app.Run();
+            """,
+            token
+        );
+        await File.WriteAllTextAsync(
+            Path.Combine(workspace, "Properties", "launchSettings.json"),
+            """
+            {"profiles":{"verifier":{"commandName":"Project","applicationUrl":"https://localhost:8443"}}}
+            """,
+            token
+        );
+        Require(
+            (await client.CertificateProbeCreateAsync(workspace, name, template, token)).Succeeded,
+            "create clean production-verification disposable"
+        );
+        var clean = await client.CertificateProbeExecAsync(
+            name,
+            [
+                "sh",
+                "-c",
+                "uid=$(id -u) && test ! -e /tmp/abox-https-$uid && test ! -L /tmp/abox-https-$uid && test ! -e /usr/local/share/ca-certificates/abox-development-https-$uid",
+            ],
+            token
+        );
+        Require(clean.Succeeded, "fresh runtime has no prior abox HTTPS activation/trust");
+        Console.WriteLine(
+            "Prepared only; NO certificate export/setup has run. Review the clean-template trust inventory before the separately authorized production command."
+        );
+        Console.WriteLine("Workspace: " + workspace);
+        Console.WriteLine("Sandbox: " + name);
+        Console.WriteLine(
+            "Follow docs/verification/https/production-verification.md; cleanup this exact workspace even if a later check fails."
+        );
+        return 0;
+    }
+    catch
+    {
+        using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        if (await client.FindSandboxAsync(name, cleanup.Token) is not null)
+            Require(
+                (await client.RemoveSandboxAsync(name, cleanup.Token)).Succeeded,
+                "cleanup failed production-verification preparation"
+            );
+        Directory.Delete(workspace, true);
+        throw;
     }
 }
 

@@ -24,6 +24,14 @@
       Include="Sbx/development_certificate.py"
       LogicalName="Abox.DevelopmentCertificateReceiver"
     />
+    <EmbeddedResource
+      Include="Sbx/development_certificate_exec.sh"
+      LogicalName="Abox.DevelopmentCertificateExec"
+    />
+    <EmbeddedResource
+      Include="Sbx/development_certificate_trust.py"
+      LogicalName="Abox.DevelopmentCertificateTrust"
+    />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Sbx;
@@ -48,9 +50,77 @@ public sealed class DevelopmentCertificateActivationTests
         observed.Arguments.Contains("-i").Should().Be(input);
         observed.Arguments.Contains("-t").Should().Be(tty);
         observed.Arguments.Should().Contain("/workspace/a b");
-        observed.Arguments.Should().Contain("python3");
+        observed.Arguments.Sum(argument => argument.Length).Should().BeLessThan(4000);
         observed.Arguments.TakeLast(command.Length).Should().Equal(command);
         observed.Environment.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ActivationTrustsOnlyTheExactPublicLeafAsRootBeforeNonrootPrivateActivation(
+        bool trusted
+    )
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=localhost",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1
+        );
+        using var certificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            DateTimeOffset.UtcNow.AddDays(1)
+        );
+        var password = new string('a', 64);
+        var pfx = certificate.Export(X509ContentType.Pfx, password);
+        var calls = new List<ProcessRequest>();
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var process = call.Arg<ProcessRequest>();
+                calls.Add(process);
+                return new ProcessResult(
+                    process.Arguments.Contains("root") && !trusted ? 1 : 0,
+                    process.Arguments.Contains("id") ? "1000\n" : "",
+                    "synthetic private child output"
+                );
+            });
+        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+
+        // Act
+        var action = () =>
+            client.ActivateDevelopmentCertificateAsync(
+                "actual",
+                pfx,
+                password,
+                CancellationToken.None
+            );
+
+        // Assert
+        if (trusted)
+            await action();
+        else
+            (await action.Should().ThrowAsync<AboxException>())
+                .Which.Message.Should()
+                .Contain("sandbox trust")
+                .And.NotContain("synthetic private");
+        var rootCall = calls.Single(process => process.Arguments.Contains("root"));
+        rootCall.StandardInput.Should().Be(certificate.ExportCertificatePem());
+        rootCall.StandardInput.Should().NotContain(password).And.NotContain("PRIVATE KEY");
+        rootCall.Arguments.Should().Contain("1000");
+        rootCall.OutputPolicy.Should().Be(ProcessOutputPolicy.Sensitive);
+        calls.Any(process => process.Arguments.Contains("activate")).Should().Be(trusted);
+        if (trusted)
+            calls
+                .IndexOf(rootCall)
+                .Should()
+                .BeLessThan(calls.FindIndex(process => process.Arguments.Contains("activate")));
     }
 
     [Fact]
@@ -84,5 +154,31 @@ public sealed class DevelopmentCertificateActivationTests
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Theory]
+    [InlineData(43, "/proc")]
+    [InlineData(44, "NODE_EXTRA_CA_CERTS")]
+    public async Task ReadinessExplainsProcessVisibilityAndExtraCaFailuresWithoutClaimingCompletion(
+        int code,
+        string guidance
+    )
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(code, "private child stdout", "private child stderr"));
+        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+
+        // Act
+        var action = () =>
+            client.VerifyDevelopmentCertificateActivationAsync("actual", CancellationToken.None);
+
+        // Assert
+        var failure = (await action.Should().ThrowAsync<AboxException>()).Which;
+        failure.Message.Should().Contain(guidance).And.NotContain("private child");
+        await runner.Received(1).RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
     }
 }
