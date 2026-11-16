@@ -70,6 +70,8 @@ relays in place; there is no rollback. The table is a plan, not proof the app is
 
 This supports .NET discovery and HTTP reachability. HTTPS ports are discovered too,
 but certificates/trust are **not** configured.
+The private certificate staging adapter is groundwork, not an enabled certificate
+copy/use feature: see [HTTPS status, trust boundaries and remaining gates](docs/https-development-certificates.md).
 Angular discovery and automatic create/recreate publishing
 are not included yet. See [discovery/runtime rules and verification](docs/verification/application-ports.md).
 

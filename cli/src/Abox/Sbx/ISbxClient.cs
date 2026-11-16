@@ -68,6 +68,14 @@ public interface ISbxClient
         CancellationToken cancellationToken
     );
 
+    /// <summary>Stages an already authorized export atomically with its password; does not configure Kestrel or establish host trust.</summary>
+    Task StageDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
+        CancellationToken cancellationToken
+    );
+
     Task<SbxOutcome> InspectKitAsync(
         string kitDirectory,
         CancellationToken cancellationToken,
