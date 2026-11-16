@@ -1,5 +1,6 @@
 """Private sbx receiver. One detached, sandbox-owned TCP relay per app port."""
 
+import argparse
 import errno
 import fcntl
 import json
@@ -201,7 +202,29 @@ def start(root, application_port, relay_port, excluded):
     return relay_port
 
 
-def ensure(ports, reserved):
+def known_relays(root):
+    ports = set()
+    for name in os.listdir(root):
+        if name.endswith((".port", ".sock")):
+            stem = name.rsplit(".", 1)[0]
+            if not stem.isascii() or not stem.isdecimal() or not 1 <= int(stem) <= 65535:
+                fail("Unrecognized relay state filename; inspect ~/.abox-ports-v1 before retrying.")
+            ports.add(int(stem))
+    result = {}
+    for port in sorted(ports):
+        saved = read_port(os.path.join(root, str(port) + ".port"))
+        running = status(os.path.join(root, str(port) + ".sock"), port)
+        if saved is not None and running is not None and saved != running:
+            fail("Relay state disagrees with its running listener; nothing was replaced.")
+        relay = saved if saved is not None else running
+        if relay is not None:
+            if relay in result.values():
+                fail("Saved relay ports are not unique; inspect ~/.abox-ports-v1 before retrying.")
+            result[port] = relay
+    return result
+
+
+def ensure(ports, reserved, offset, bindings):
     if sys.version_info < (3, 8) or os.getuid() == 0:
         fail("Application ports require Python 3.8+ and a non-root sandbox application user; nothing is installed automatically.")
     home = os.environ.get("HOME", "")
@@ -228,13 +251,25 @@ def ensure(ports, reserved):
                 if time.monotonic() >= deadline:
                     fail("Another application-port operation holds the sandbox lock; retry shortly.")
                 time.sleep(0.1)
+        saved = known_relays(root)
+        if set(ports) & set(saved.values()):
+            fail("A saved relay port conflicts with a requested application port; nothing was replaced.")
+        # A binding to any known relay protects even apps no longer discovered, and
+        # running control sockets cover cancellation before the .port file was saved.
+        if offset is not None:
+            targets = {port: port for port in ports}
+            targets.update({relay: application for application, relay in saved.items()})
+            for target, host in bindings:
+                if target in targets and host != targets[target] + offset:
+                    fail("Requested offset change conflicts with existing host port %s -> sandbox target %s. Explicitly remove the exact old binding before changing offsets, or retry with the previous offset; no bindings were changed." % (host, target))
         result = []
         for port in ports:
             path = os.path.join(root, str(port) + ".port")
-            relay_port = start(root, port, read_port(path), set(ports) | reserved)
+            relay_port = start(root, port, saved.get(port), set(ports) | reserved | set(saved.values()))
             if relay_port in ports:
                 fail("A saved relay port conflicts with a requested application port; nothing was replaced.")
             save_port(path, relay_port)
+            saved[port] = relay_port
             result.append({"application_port": port, "relay_port": relay_port})
         print(json.dumps(result))
 
@@ -243,13 +278,24 @@ try:
     if sys.argv[1:2] == ["serve"]:
         serve(*map(int, sys.argv[2:]))
     else:
-        arguments = sys.argv[1:]
-        separator = arguments.index("--reserved") if "--reserved" in arguments else len(arguments)
-        ports = sorted(set(map(int, arguments[:separator])))
-        reserved = set(map(int, arguments[separator + 1:]))
+        parser = argparse.ArgumentParser()
+        parser.add_argument("ports", nargs="+", type=int)
+        parser.add_argument("--reserved", nargs="*", type=int, default=[])
+        parser.add_argument("--offset", type=int)
+        parser.add_argument("--bindings", type=json.loads, default=[])
+        arguments = parser.parse_args()
+        ports = sorted(set(arguments.ports))
+        reserved = set(arguments.reserved)
         if not ports or any(not 1 <= port <= 65535 for port in set(ports) | reserved):
             fail("Invalid application ports.")
-        ensure(ports, reserved)
+        if arguments.offset is not None and (not -65534 <= arguments.offset <= 65534 or any(not 1 <= port + arguments.offset <= 65535 for port in ports)):
+            fail("Invalid offset or resulting host port; no relay changes were attempted.")
+        if (not isinstance(arguments.bindings, list)
+                or any(not isinstance(binding, list) or len(binding) != 2
+                       or any(type(port) is not int or not 1 <= port <= 65535 for port in binding)
+                       for binding in arguments.bindings)):
+            fail("Invalid binding inventory; no relay changes were attempted.")
+        ensure(ports, reserved, arguments.offset, arguments.bindings)
 except Exception as error:
     print("Application-port relay: " + str(error), file=sys.stderr)
     sys.exit(1)

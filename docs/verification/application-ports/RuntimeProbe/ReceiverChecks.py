@@ -106,6 +106,61 @@ class ReceiverChecks(unittest.TestCase):
         self.assertEqual([relay] * 4, repeated)
         self.assertEqual(1, len(json.loads(self.invoke(8203, 8203).stdout)))
 
+    def test_offset_change_refuses_old_bindings_including_no_longer_discovered_apps(self):
+        # Arrange: one old app is no longer discovered, but its binding remains.
+        relay = self.ensure(8203)
+        bindings = json.dumps([[relay, 18203], [9000, 19000]])
+        # Act: changing offset cannot silently leave the old mapping and append another.
+        result = self.invoke(8204, "--offset", 20000, "--bindings", bindings)
+        # Assert
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("offset change", result.stderr)
+        self.assertIn("18203", result.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "8204.port")))
+        self.assertEqual(relay, self.ensure(8203))
+
+    def test_offset_change_after_explicit_binding_removal_reuses_the_owned_relay(self):
+        # Arrange
+        relay = self.ensure(8203)
+        # Act: an unrelated native mapping remains, but no binding targets our relay.
+        result = self.invoke(8203, "--offset", 20000, "--bindings", "[[9000,19000]]")
+        # Assert
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual(relay, json.loads(result.stdout)[0]["relay_port"])
+
+    def test_native_mapping_with_another_offset_is_not_assumed_owned_or_upgraded(self):
+        # Arrange: no relay state exists; a direct native binding may belong to another tool.
+        bindings = json.dumps([[8203, 18203]])
+        # Act
+        result = self.invoke(8203, "--offset", 20000, "--bindings", bindings)
+        # Assert
+        self.assertIn("offset change", result.stderr)
+        self.assertNotEqual(0, result.returncode)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "8203.port")))
+
+    def test_offset_retry_after_partial_publication_or_lost_acknowledgement_is_safe(self):
+        # Arrange: cancellation can occur after listener readiness but before saving its port.
+        relay = self.ensure(8203)
+        os.unlink(os.path.join(self.root, "8203.port"))
+        bindings = json.dumps([[relay, 18203]])
+        # Act
+        rejected = self.invoke(8204, "--offset", 20000, "--bindings", bindings)
+        retry = self.invoke(8203, 8204, "--offset", 10000, "--bindings", bindings)
+        # Assert
+        self.assertIn("offset change", rejected.stderr)
+        self.assertEqual(0, retry.returncode, retry.stderr)
+        self.assertEqual(relay, json.loads(retry.stdout)[0]["relay_port"])
+
+    def test_dead_saved_relays_also_protect_existing_bindings_on_offset_changes(self):
+        # Arrange
+        relay = self.ensure(8203)
+        self.stop(os.path.join(self.root, "8203.sock"))
+        # Act
+        result = self.invoke(8204, "--offset", 0, "--bindings", json.dumps([[relay, 18203]]))
+        # Assert
+        self.assertIn("offset change", result.stderr)
+        self.assertFalse(os.path.exists(os.path.join(self.root, "8204.port")))
+
     def test_application_wildcard_port_remains_free_before_and_after_setup(self):
         # Arrange
         with socket.create_server(("0.0.0.0", 0)) as application:

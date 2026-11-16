@@ -47,6 +47,9 @@ No command, launcher, create/replace flow, build or publication path invokes the
 helpers yet. A successful staging call must not be reported as “HTTPS configured.”
 Future shared HTTPS orchestration must stay outside command slices, and only be
 connected after the gates below are resolved; #47 lifecycle work is not included.
+That future flow must retain the immutable entry-time `FolderConfig` snapshot and
+pass the selected offset explicitly to `AppPorts.PublishAsync`; certificate staging
+does not select offsets or reinterpret forwarding ownership/conflicts.
 
 ## Prerequisites and unresolved decisions
 
