@@ -6,12 +6,28 @@ using Abox.Sbx;
 
 namespace Abox.ApplicationPorts;
 
+internal sealed record PreparedAppPorts(
+    string Location,
+    int Offset,
+    AppPortDiscoveryPlan Discovery
+);
+
 /// <summary>Shared discovery, reporting and runtime publishing for an already selected sandbox.</summary>
 public sealed class AppPorts(ISbxClient sbx, IConsole console, DevelopmentHttps https)
 {
     public async Task PublishAsync(
         string location,
         string sandbox,
+        int offset,
+        CancellationToken cancellationToken
+    )
+    {
+        var prepared = await PrepareAsync(location, offset, cancellationToken);
+        await PublishAsync(prepared, sandbox, cancellationToken);
+    }
+
+    internal static async Task<PreparedAppPorts> PrepareAsync(
+        string location,
         int offset,
         CancellationToken cancellationToken
     )
@@ -24,6 +40,18 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console, DevelopmentHttps 
                 throw new AboxException(
                     $"Invalid host port for {JsonSerializer.Serialize(occurrence.SourceFile)}: sandbox port {occurrence.Port} plus offset {offset} must be in 1..65535. Fix the port or offset before publishing; no ports were published."
                 );
+        return new PreparedAppPorts(location, offset, plan);
+    }
+
+    internal async Task PublishAsync(
+        PreparedAppPorts prepared,
+        string sandbox,
+        CancellationToken cancellationToken
+    )
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var (location, offset, plan) = prepared;
+        var occurrences = plan.Occurrences;
         if (occurrences.Count == 0)
         {
             console.WriteLine("No explicit application ports found; nothing published.");
@@ -58,6 +86,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console, DevelopmentHttps 
                     .ToArray(),
                 cancellationToken
             );
+            cancellationToken.ThrowIfCancellationRequested();
         }
         catch (Exception exception) when (exception is AboxException or OperationCanceledException)
         {

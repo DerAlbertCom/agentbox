@@ -32,16 +32,7 @@ public sealed class CreateTagCommandTests
             Path.Combine(root.Path, "config"),
             Path.Combine(root.Path, "state")
         );
-        var tag = input switch
-        {
-            "traversal" => Path.GetRelativePath(
-                Path.Combine(paths.BuildsDirectory, "ac"),
-                outside.Path
-            ),
-            "absolute" => outside.Path,
-            "overlong" => new string('a', 129),
-            _ => input,
-        };
+        var tag = UnsafeTag(input, paths, outside.Path);
         root.File(
             "config/config.yaml",
             "defaultTeam: sample\n"
@@ -70,7 +61,8 @@ public sealed class CreateTagCommandTests
                         console
                     ),
                     new RemoteSquadSource(config.Value, sbx, published),
-                    new UserSecretsCopy(config.Value, new UserSecretsHost(null, null), sbx)
+                    new UserSecretsCopy(config.Value, new UserSecretsHost(null, null), sbx),
+                    SandboxTest.Ports(sbx, console)
                 )
             ),
             console
@@ -95,6 +87,15 @@ public sealed class CreateTagCommandTests
         Directory.GetFiles(outside.Path, "*", SearchOption.AllDirectories).Should().Equal(sentinel);
         Directory.Exists(paths.StateDirectory).Should().BeFalse();
     }
+
+    private static string UnsafeTag(string input, AboxPaths paths, string outside) =>
+        input switch
+        {
+            "traversal" => Path.GetRelativePath(Path.Combine(paths.BuildsDirectory, "ac"), outside),
+            "absolute" => outside,
+            "overlong" => new string('a', 129),
+            _ => input,
+        };
 
     public static IEnumerable<object[]> InvalidTags()
     {

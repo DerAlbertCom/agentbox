@@ -15,6 +15,9 @@ namespace Abox.Tests;
 
 public sealed partial class PublishedSquadSourceTests
 {
+    private RemoteSquadSource Remote(AboxConfig config, ISbxClient sbx) =>
+        new(config, sbx, new PublishedSquadSource(new OciRegistry(_runner), _programs, _console));
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -92,12 +95,9 @@ public sealed partial class PublishedSquadSourceTests
             sbx,
             _console,
             new LocalSquadSource(store, images, _console),
-            new RemoteSquadSource(
-                config,
-                sbx,
-                new PublishedSquadSource(new OciRegistry(_runner), _programs, _console)
-            ),
-            new UserSecretsCopy(config, new UserSecretsHost(null, null), sbx)
+            Remote(config, sbx),
+            new UserSecretsCopy(config, new UserSecretsHost(null, null), sbx),
+            SandboxTest.Ports(sbx, _console)
         );
 
         // Act

@@ -2,15 +2,20 @@
 
 `abox ports` now configures a protected, explicit Kestrel default certificate for
 statically detected ASP.NET Core Web SDK / `Microsoft.AspNetCore.App` projects, in addition to publishing ports.
-It does not start/restart applications or implement automatic create/replace setup
-(#47). **#46 acceptance remains incomplete.**
+It does not start/restart applications. Successful creation/replacement also uses
+this same shared setup; see [lifecycle ordering and recovery](application-ports-lifecycle.md).
+**#46 was accepted for the current Windows-host scope**, per the
+[tracker clarification](https://github.com/DerAlbertCom/agentbox/issues/46#issuecomment-6918879462),
+which supersedes the older outstanding-gates status, not its evidence boundaries.
 [Windows real-host production evidence](verification/https/real-host-production-verification.md)
 establishes strict host/system/Node TLS, repeat safety and bootstrap-only refresh on
 exact candidate `5b40b570aff9fb76b9c6379e55569eef83dc2df9` (implementation `fdd1916`).
 Its supplemental UTF-8 caller-CA check and synthetic regression checks remain
 distinct from the full production CLI run and historical manual evidence.
-Browser reload, independent Linux-host verification, actual Copilot
-shell-tool/Herdr desktop, real-host renewal and exact 18203 production proof remain open.
+The user confirmed the existing Deals browser lock at 18203 and working Herdr SSH;
+that manual runtime is not relabelled as the disposable production fixture. Copilot
+is excluded, independent Linux-host verification is deferred, and no real-host
+renewal was authorized or performed. These are not reinstated lifecycle gates.
 
 ## Prerequisites and host export
 
@@ -77,9 +82,8 @@ are ignored; an ASP.NET marker in the bounded prefix retains the 1 MiB error.
 Non-Web/non-.NET folders perform **no host dotnet certificate operation**. An
 explicit Web SDK project requires certificate setup even without discovered launch
 ports. Shared `DevelopmentHttps` orchestration lives outside command slices, so
-#47 can reuse it through `AppPorts.PublishAsync` with the immutable entry-time folder
-snapshot's **explicitly selected offset**, without a second command implementation.
-No lifecycle integration is included here.
+creation/replacement reuses its prepared `AppPorts` flow with the immutable entry-time
+folder snapshot's **explicitly selected offset**, without a second command implementation.
 
 Port conflicts/offset validation retain #44/#45 behavior: unproven native direct
 bindings are conflicts at every offset, never automatically unpublished. HTTPS
@@ -314,5 +318,6 @@ That earlier manual proof is not a production `abox ports` real-host run. The la
 [separate real-host production record](verification/https/real-host-production-verification.md)
 does demonstrate the production flow on its exact recorded candidate SHA only;
 it must not be relabelled as real-host verification of subsequent code changes.
-It also retains the remaining browser, Copilot shell-tool, Herdr desktop,
-independent Linux-host, real-host renewal and exact-port acceptance boundaries.
+Its historical outstanding-gates text is superseded by the scoped #46 closure
+clarification above; the recorded candidate, manual/production distinction and
+unauthorized-renewal boundary remain unchanged.
