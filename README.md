@@ -21,7 +21,7 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
 | `abox user-secrets [--location <path>] [--force]` | Copies explicitly selected local .NET user-secret stores into the folder's existing sandbox. |
-| `abox ports [--location <path>] [--offset <n>]` | Discovers .NET launch-profile ports and publishes them on host loopback at port + offset (default 10000). |
+| `abox ports [--location <path>] [--offset <n>]` | Discovers .NET and Angular app ports and publishes them on host loopback at port + offset (default 10000). |
 
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
@@ -43,8 +43,26 @@ abox ports --location /path/to/project
 # Open http://localhost:18203 on the host after abox exits.
 ```
 
-The command reads explicit ports from every profile's semicolon-separated
-`applicationUrl` values in `Properties/launchSettings.json` beneath the folder.
+The command reads explicit ports beneath the folder from:
+
+- Every profile's semicolon-separated `applicationUrl` values in
+  `Properties/launchSettings.json`.
+- `angular.json`: every project's `architect.serve` (or `targets.serve`) `options.port`
+  and every named `configurations.<name>.port`, whether currently selected or not.
+- `package.json`: the exact `scripts.start` entry, for direct `ng serve` / `ng s` / `ng dev`
+  commands with one `--port 4200` or `--port=4200`. Literal single/double quoting of
+  the value or argument is supported. No scripts or tooling are executed to scan.
+
+Angular ports must be literal integers; no implicit default 4200, environment-variable
+expansion, wrapper commands (`npx`, `cross-env`, npm scripts), shell operators or
+duplicate `--port` flags are interpreted. A recognized `ng` start script with an
+explicit `--port` in an unsupported/dynamic form fails with a fix hint; put a literal
+serve port in `angular.json` and remove that dynamic flag instead. Non-`ng` start
+commands (including wrappers, Vite, Next and custom Node servers) are ignored even
+when they contain `--port`; configure their Angular port in `angular.json` if needed.
+Runtime environment overrides such as Angular's `PORT` are not evaluated and can
+make the actual listener differ from the static plan. Other scripts/targets are ignored.
+All inputs and mapped ranges are validated **before publishing anything**.
 It prints each source occurrence, warns about duplicates and publishes each distinct
 mapping once. No `abox.json`, team sources or build is needed. It never creates or
 replaces a sandbox; a missing sandbox gives a create hint.
@@ -68,12 +86,12 @@ started** by this command. Ports occupied by another service fail with a diagnos
 fix the conflict and retry. Failure/cancellation can leave mappings and sandbox
 relays in place; there is no rollback. The table is a plan, not proof the app is running.
 
-This supports .NET discovery and HTTP reachability. HTTPS ports are discovered too,
-but certificates/trust are **not** configured.
-The private certificate staging adapter is groundwork, not an enabled certificate
-copy/use feature: see [HTTPS status, trust boundaries and remaining gates](docs/https-development-certificates.md).
-Angular discovery and automatic create/recreate publishing
-are not included yet. See [discovery/runtime rules and verification](docs/verification/application-ports.md).
+This supports .NET/Angular discovery and HTTP reachability with configurable offsets.
+HTTPS ports are discovered too, but certificates/trust are **not** configured.
+See [HTTPS status, trust boundaries and remaining gates](docs/https-development-certificates.md).
+Automatic create/recreate publishing is not included yet.
+See [shared discovery/runtime rules](docs/verification/application-ports.md) and
+[Angular scope, supported forms and verification](docs/verification/angular-application-ports.md).
 
 #### Folder and one-run port offsets
 

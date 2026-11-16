@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../RuntimeProbe/RuntimeProbe.csproj" />
+    <Content
+      Include="../SyntheticAngular/**/*"
+      Exclude="../SyntheticAngular/node_modules/**;../SyntheticAngular/dist/**;../SyntheticAngular/.angular/**;../SyntheticAngular/.abox/**"
+      Link="fixture/%(RecursiveDir)%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+</Project>
