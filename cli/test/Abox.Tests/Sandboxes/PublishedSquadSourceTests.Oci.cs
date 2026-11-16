@@ -153,4 +153,87 @@ public sealed partial class PublishedSquadSourceTests
                 },
             }
         );
+
+    [Theory]
+    [InlineData("wrong-registry")]
+    [InlineData("wrong-team")]
+    [InlineData("wrong-squad")]
+    [InlineData("tag-not-digest")]
+    [InlineData("extra-path")]
+    [InlineData("nested-repository")]
+    [InlineData("duplicate")]
+    public async Task OnlyOneExactDigestPinnedConfigurationIdentityCanBeDownloaded(string error)
+    {
+        // Arrange
+        var config = error switch
+        {
+            "wrong-registry" => Config.Replace("rwest.jfrog.io", "unrelated.example"),
+            "wrong-team" => Config.Replace("agentbox-rwest-mti-ca", "agentbox-rwest-other"),
+            "wrong-squad" => Config.Replace("/ac/", "/other/"),
+            "tag-not-digest" => Config.Replace("@" + PublishedSquadTest.Digest, ":latest"),
+            "extra-path" => Config + "/extra",
+            "nested-repository" => Config.Replace("/published/", "/published/nested/"),
+            _ => Config,
+        };
+        var refs = error == "duplicate" ? new[] { Config, Config } : new[] { config };
+        _rawManifests[PinnedSet] = WorkloadWithConfigurations(refs);
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        await RejectAsync(action);
+        _calls
+            .Should()
+            .NotContain(call => call.Arguments[0] == "pull" || call.Arguments[0] == "image");
+    }
+
+    private static string WorkloadWithConfigurations(IEnumerable<string> refs) =>
+        JsonSerializer.Serialize(
+            new
+            {
+                schemaVersion = 2,
+                annotations = new Dictionary<string, string>
+                {
+                    [OciRegistry.DescriptorAnnotation] = JsonSerializer.Serialize(
+                        new
+                        {
+                            schemaVersion = "3",
+                            kind = "workload",
+                            kits = refs.Select(value => new { @ref = value }),
+                        }
+                    ),
+                },
+            }
+        );
+
+    [Theory]
+    [InlineData(4)]
+    [InlineData(5)]
+    public async Task HostPlatformResolutionIsBoundedAtFourNestedIndexes(int depth)
+    {
+        // Arrange
+        var repository = "rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac@";
+        var digest = PublishedSquadTest.Digest;
+        for (var index = 0; index < depth; index++)
+        {
+            var next = "sha256:" + new string((char)('2' + index), 64);
+            _rawManifests[repository + digest] = PlatformIndex(next);
+            digest = next;
+        }
+
+        // Act
+        var action = LoadAsync;
+
+        // Assert
+        if (depth == 4)
+            (await action()).Reference.Should().Be(repository + digest);
+        else
+        {
+            await RejectAsync(action);
+            _calls
+                .Should()
+                .NotContain(call => call.Arguments[0] == "pull" || call.Arguments[0] == "image");
+        }
+    }
 }
