@@ -92,8 +92,22 @@ public sealed class PortsAngularTransportTests
                 .Equal("ports", name, "--publish", "127.0.0.1:14200:60044/tcp4", "--json");
             var relays = calls.Where(call => call.Arguments.Contains("python3")).ToArray();
             relays.Should().HaveCount(2);
-            relays[0].Arguments.Skip(7).Should().Equal("4200", "--reserved");
-            relays[1].Arguments.Skip(7).Should().Equal("4200", "--reserved", "60044");
+            relays[0]
+                .Arguments.Skip(7)
+                .Should()
+                .Equal("4200", "--reserved", "--offset", "10000", "--bindings", "[]");
+            relays[1]
+                .Arguments.Skip(7)
+                .Should()
+                .Equal(
+                    "4200",
+                    "--reserved",
+                    "60044",
+                    "--offset",
+                    "10000",
+                    "--bindings",
+                    "[[60044,14200]]"
+                );
             calls.Should().NotContain(call => call.Arguments.Contains("--unpublish"));
             console
                 .AllText.Should()

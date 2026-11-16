@@ -7,12 +7,18 @@ namespace Abox.Tests;
 
 public sealed class UserSecretsCopyTests
 {
-    [Fact]
-    public async Task PreparationIsSideEffectFreeAndCopyUsesTheOriginalInMemorySnapshot()
+    [Theory]
+    [InlineData("{\"userSecrets\":[\"sample\"]}")]
+    [InlineData(
+        "{\"squad\":\"AC\",\"portOffset\":20000,\"userSecrets\":[{\"id\":\"sample\",\"keys\":[\"Nested:*\"]}]}"
+    )]
+    public async Task PreparationIsSideEffectFreeAndCopyUsesTheOriginalInMemorySnapshot(
+        string configuration
+    )
     {
         // Arrange
         using var root = new TempDirectory();
-        root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
+        root.File("folder/abox.json", configuration);
         var source = root.File(
             "home/.microsoft/usersecrets/sample/secrets.json",
             """{"Nested":{"Password":"synthetic-original"}}"""

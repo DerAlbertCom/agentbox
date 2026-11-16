@@ -6,6 +6,80 @@ namespace Abox.Tests;
 public sealed partial class PortsCommandTests
 {
     [Theory]
+    [InlineData(false, 25000, 25001)]
+    [InlineData(true, 35000, 35001)]
+    public async Task SelectedOffsetAppliesOnceToAllMixedSourcesAndDuplicates(
+        bool overrideFolder,
+        int firstHostPort,
+        int secondHostPort
+    )
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File("folder/abox.json", """{"portOffset":20000}""");
+        fixture.Root.File(
+            "folder/api/Properties/launchSettings.json",
+            """{"profiles":{"http":{"applicationUrl":"http://localhost:5000"}}}"""
+        );
+        fixture.Root.File(
+            "folder/web/angular.json",
+            """{"projects":{"web":{"architect":{"serve":{"options":{"port":5000},"configurations":{"dev":{"port":5001}}}}}}}"""
+        );
+        fixture.Root.File(
+            "folder/web/package.json",
+            """{"scripts":{"start":"ng dev --port=5000"}}"""
+        );
+
+        // Act
+        var exit = await fixture.Run(overrideFolder ? ["--offset", "30000"] : []);
+
+        // Assert
+        exit.Should().Be(0);
+        fixture
+            .Console.Output.Count(line => line.Contains($"| 5000 | {firstHostPort}"))
+            .Should()
+            .Be(3);
+        fixture
+            .Console.AllText.Should()
+            .Contain($"| 5001 | {secondHostPort}")
+            .And.Contain("3 occurrences");
+        await fixture
+            .Sbx.Received(1)
+            .EnsureApplicationPortsAsync(
+                fixture.Name,
+                Arg.Is<IReadOnlyList<ApplicationPortMapping>>(mappings =>
+                    mappings.Count == 2
+                    && mappings.Contains(new ApplicationPortMapping(5000, firstHostPort))
+                    && mappings.Contains(new ApplicationPortMapping(5001, secondHostPort))
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task InvalidCustomOffsetAngularMappingRejectsTheEntireMixedPlan()
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File(
+            "folder/api/Properties/launchSettings.json",
+            """{"profiles":{"http":{"applicationUrl":"http://localhost:5000"}}}"""
+        );
+        fixture.Root.File(
+            "folder/web/package.json",
+            """{"scripts":{"start":"ng serve --port=1"}}"""
+        );
+
+        // Act
+        var exit = await fixture.Run("--offset", "-1");
+
+        // Assert
+        exit.Should().Be(1);
+        fixture.Console.AllText.Should().Contain("package.json").And.Contain("offset -1");
+        await fixture.NoPublishing();
+    }
+
+    [Theory]
     [InlineData(
         "angular.json",
         "{\"projects\":{\"web\":{\"architect\":{\"serve\":{\"options\":{\"port\":4200}}}}}}"

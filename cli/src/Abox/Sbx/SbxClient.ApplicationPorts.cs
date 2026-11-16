@@ -27,6 +27,13 @@ public sealed partial class SbxClient
             );
         if (mappings.Count == 0)
             return;
+        if (
+            mappings.Select(mapping => mapping.HostPort - mapping.SandboxPort).Distinct().Count()
+            != 1
+        )
+            throw new AboxException(
+                "Application port mappings must use the same offset. No runtime changes were attempted."
+            );
         // sbx 0.51.0 can race its own startup when publishing to a stopped sandbox.
         // A completed exec waits for startup and restores previously saved bindings first.
         await RunOrThrowAsync(
@@ -158,6 +165,18 @@ public sealed partial class SbxClient
                 .Order()
                 .Select(port => port.ToString(System.Globalization.CultureInfo.InvariantCulture))
         );
+        arguments.AddRange([
+            "--offset",
+            (mappings[0].HostPort - mappings[0].SandboxPort).ToString(
+                System.Globalization.CultureInfo.InvariantCulture
+            ),
+            "--bindings",
+            JsonSerializer.Serialize(
+                existing
+                    .Where(binding => binding.Protocol is "tcp" or "tcp4" or "tcp6")
+                    .Select(binding => new[] { binding.SandboxPort, binding.HostPort })
+            ),
+        ]);
         var result = await RunOrThrowAsync(
             new ProcessRequest(
                 ExecutableName,

@@ -11,6 +11,173 @@ namespace Abox.Tests;
 public sealed partial class PortsCommandTests
 {
     [Fact]
+    public async Task OneRunOverrideCannotBypassInvalidSharedFolderConfiguration()
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File("folder/abox.json", """{"portOffset":1e4,"userSecrets":["sample"]}""");
+
+        // Act
+        var exit = await fixture.Run("--offset", "20000");
+
+        // Assert
+        exit.Should().Be(1);
+        fixture.Console.AllText.Should().Contain("portOffset").And.Contain("integer");
+        fixture.Sbx.ReceivedCalls().Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("0", 8203, 8203)]
+    [InlineData("-8202", 8203, 1)]
+    [InlineData("57332", 8203, 65535)]
+    [InlineData("-65534", 65535, 1)]
+    [InlineData("65534", 1, 65535)]
+    public async Task ZeroNegativeAndBoundaryOffsetsPublishTheValidatedHostPort(
+        string offset,
+        int sandboxPort,
+        int hostPort
+    )
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File(
+            "folder/Properties/launchSettings.json",
+            $$$$"""{"profiles":{"app":{"applicationUrl":"http://localhost:{{{{sandboxPort}}}}"}}}"""
+        );
+
+        // Act
+        var exit = await fixture.Run("--offset", offset);
+
+        // Assert
+        exit.Should().Be(0);
+        fixture.Console.AllText.Should().Contain($"| {sandboxPort} | {hostPort}");
+        await fixture
+            .Sbx.Received(1)
+            .EnsureApplicationPortsAsync(
+                fixture.Name,
+                Arg.Is<IReadOnlyList<ApplicationPortMapping>>(mappings =>
+                    mappings[0].HostPort == hostPort
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Theory]
+    [InlineData("1.5")]
+    [InlineData("1e4")]
+    [InlineData("0x2710")]
+    [InlineData("1,000")]
+    [InlineData("NaN")]
+    [InlineData("2147483648")]
+    [InlineData("2147483647")]
+    [InlineData("-2147483648")]
+    [InlineData("65535")]
+    [InlineData("-65535")]
+    [InlineData("57333")]
+    [InlineData("-8203")]
+    public async Task InvalidOffsetsCannotStartASandboxOrPublishAPartialPlan(string offset)
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File(
+            "folder/Properties/launchSettings.json",
+            """{"profiles":{"app":{"applicationUrl":"http://localhost:1;http://localhost:8203"}}}"""
+        );
+
+        // Act
+        var exit = await fixture.Run("--offset", offset);
+
+        // Assert
+        exit.Should().Be(1);
+        await fixture.NoPublishing();
+        await fixture
+            .Sbx.DidNotReceive()
+            .ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FolderOffsetIsSnapshottedBeforeRuntimeAccessAndOverrideDoesNotLeakToTheNextRun(
+        bool initiallyAbsent
+    )
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File(
+            "folder/Properties/launchSettings.json",
+            """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
+        );
+        var file = Path.Combine(fixture.Location, "abox.json");
+        if (!initiallyAbsent)
+            fixture.Root.File("folder/abox.json", """{"portOffset":20000}""");
+        fixture
+            .Sbx.GetVersionAsync(Arg.Any<CancellationToken>())
+            .Returns(_ =>
+            {
+                File.WriteAllText(file, """{"portOffset":30000}""");
+                return new Version(0, 51, 0);
+            });
+
+        // Act
+        var first = await fixture.Run();
+        var second = await fixture.Run("--offset", "40000");
+        var third = await fixture.Run();
+
+        // Assert
+        new[] { first, second, third }
+            .Should()
+            .OnlyContain(exit => exit == 0);
+        fixture
+            .Console.AllText.Should()
+            .Contain(initiallyAbsent ? "| 8203 | 18203" : "| 8203 | 28203")
+            .And.Contain("| 8203 | 48203")
+            .And.Contain("| 8203 | 38203");
+    }
+
+    [Theory]
+    [InlineData(null, null, 18203)]
+    [InlineData("{}", null, 18203)]
+    [InlineData("{\"portOffset\":20000}", null, 28203)]
+    [InlineData("{\"portOffset\":20000}", "30000", 38203)]
+    public async Task OffsetUsesCommandThenFolderThenDefaultWithoutWritingConfiguration(
+        string? configuration,
+        string? offset,
+        int hostPort
+    )
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        fixture.Root.File(
+            "folder/Properties/launchSettings.json",
+            """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
+        );
+        var path = Path.Combine(fixture.Location, "abox.json");
+        if (configuration is not null)
+            fixture.Root.File("folder/abox.json", configuration);
+
+        // Act
+        var exit = await fixture.Run(offset is null ? [] : ["--offset", offset]);
+
+        // Assert
+        exit.Should().Be(0);
+        fixture.Console.AllText.Should().Contain($"| 8203 | {hostPort}");
+        await fixture
+            .Sbx.Received(1)
+            .EnsureApplicationPortsAsync(
+                fixture.Name,
+                Arg.Is<IReadOnlyList<ApplicationPortMapping>>(mappings =>
+                    mappings.Count == 1 && mappings[0] == new ApplicationPortMapping(8203, hostPort)
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        if (configuration is null)
+            File.Exists(path).Should().BeFalse();
+        else
+            (await File.ReadAllTextAsync(path)).Should().Be(configuration);
+    }
+
+    [Fact]
     public async Task SelectedRootMayBeLinkedButKeepsItsLexicalSandboxIdentity()
     {
         // Arrange
@@ -301,12 +468,12 @@ public sealed partial class PortsCommandTests
                 Task.FromException(
                     cancel
                         ? new OperationCanceledException()
-                        : new AboxException("host port 18203 is already in use")
+                        : new AboxException("host port 28203 is already in use")
                 )
             );
 
         // Act
-        var exit = await fixture.Run();
+        var exit = await fixture.Run("--offset", "20000");
 
         // Assert
         exit.Should().Be(expectedExit);
@@ -314,9 +481,10 @@ public sealed partial class PortsCommandTests
             .Console.AllText.Should()
             .Contain("retry")
             .And.Contain("may remain")
+            .And.Contain("--offset 20000")
             .And.NotContain("Application ports published");
         if (!cancel)
-            fixture.Console.AllText.Should().Contain("18203").And.Contain("already in use");
+            fixture.Console.AllText.Should().Contain("28203").And.Contain("already in use");
     }
 
     [Fact]
@@ -468,8 +636,13 @@ public sealed partial class PortsCommandTests
             .And.Contain("18204");
     }
 
-    [Fact]
-    public async Task RepeatedSourceOccurrencesStayVisibleAndWarnButPublishEachMappingOnlyOnce()
+    [Theory]
+    [InlineData("10000", 18203)]
+    [InlineData("20000", 28203)]
+    public async Task RepeatedSourceOccurrencesStayVisibleAndWarnButPublishEachMappingOnlyOnce(
+        string offset,
+        int hostPort
+    )
     {
         // Arrange
         using var fixture = new Fixture();
@@ -483,18 +656,18 @@ public sealed partial class PortsCommandTests
         );
 
         // Act
-        var exit = await fixture.Run();
+        var exit = await fixture.Run("--offset", offset);
 
         // Assert
         exit.Should().Be(0);
-        fixture.Console.Output.Count(line => line.Contains("| 8203 | 18203")).Should().Be(3);
+        fixture.Console.Output.Count(line => line.Contains($"| 8203 | {hostPort}")).Should().Be(3);
         fixture.Console.AllText.Should().Contain("Warning").And.Contain("3 occurrences");
         await fixture
             .Sbx.Received(1)
             .EnsureApplicationPortsAsync(
                 fixture.Name,
                 Arg.Is<IReadOnlyList<ApplicationPortMapping>>(mappings =>
-                    mappings.Count == 1 && mappings[0] == new ApplicationPortMapping(8203, 18203)
+                    mappings.Count == 1 && mappings[0] == new ApplicationPortMapping(8203, hostPort)
                 ),
                 Arg.Any<CancellationToken>()
             );

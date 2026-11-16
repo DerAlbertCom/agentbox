@@ -718,7 +718,7 @@ documents explicitly authorized local declarations on the existing `D:\dev\rwe`
 sandbox and read-only production port discovery; no real secret copy, connectivity
 or authentication check was performed for that change.
 
-### `abox ports [--location <path>]` (#43)
+### `abox ports [--location <path>] [--offset <n>]` (#43, #44, #45)
 
 Resolves the existing sandbox with the shared current-first/legacy resolver and
 passes its actual identity to `ApplicationPorts/AppPorts`. Location precedence is
@@ -728,14 +728,29 @@ folder configuration is required, and no create/replacement occurs.
 The shared module statically discovers all explicit .NET launch-profile URL ports
 and Angular serve/start-script ports,
 validates the complete plan, prints source occurrences and duplicate warnings, then
-asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset-10000 mappings.
+asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset mappings.
 Discovery/reporting/application orchestration stays outside the command slice so
-the offset, HTTPS and lifecycle slices can reuse it without importing a command.
+the HTTPS and lifecycle slices can reuse it without importing a command.
 `AppPortDiscovery` owns one bounded filesystem walk/read/JSON policy for both formats;
 `DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
 parsing. No extension framework or project-tool execution is involved. Angular #44
 includes options and all named serve configurations, and a conservative literal
 direct-CLI start-script grammar. See [scope/tests/live evidence](verification/angular-application-ports.md).
+
+The command loads `FolderConfig` once before runtime access. Configuration owns
+`portOffset` parsing/validation and `FolderConfig.SelectPortOffset(snapshot, option)`:
+option, snapshot setting, then 10000. The same immutable snapshot still contains
+squad and user-secret selections for creation/replacement callers; absence stays null.
+Future lifecycle setup can select from that entry-time snapshot without rereading
+the workspace. `AppPorts.PublishAsync(location, sandbox, offset, token)` applies the
+selected offset to every discovered occurrence before calling the adapter. The
+original three-argument overload remains compatible and uses default 10000. This
+does not add automatic create/recreate setup (#47).
+
+Offsets are integers -65534..65534, including zero and negatives, with complete-plan
+widened arithmetic and resulting-port validation in 1..65535 before runtime mutation.
+All adapter mappings must have one common offset. Neither global settings nor
+configuration writes are introduced. See [offset semantics and evidence](application-port-offsets.md).
 
 The sbx adapter completes a fixed noninteractive `exec <sandbox> true` before reading
 `ports <sandbox> --json`: this waits for startup and restores existing bindings,
@@ -748,6 +763,14 @@ or the ingress sandbox IPv4 address. They never reserve the app port or mutate a
 startup settings. Private owned state/control sockets under sandbox `~/.abox-ports-v1`
 provide bounded readiness, serialized setup, repeat reuse and same-port restoration.
 No host worker, shell-lifetime assumption or PID-based adoption/killing is needed.
+
+The receiver gets the selected offset and validated TCP-binding snapshot. Under its
+setup lock it reads all saved relay ports/control sockets, including no-longer-discovered
+apps and running relays whose save acknowledgement was lost. Any existing binding
+to a known relay (or requested direct application target) with a different offset
+refuses the whole change before starting new relays or changing bindings. Operators
+must remove exact old bindings explicitly to change offsets; no ownership guessing,
+automatic stale-binding removal or concurrent runtime-writer transaction is claimed.
 
 The adapter reuses exact `127.0.0.1:<host>:<relay>/tcp4` mappings, refuses conflicting
 or malformed inventory, only appends missing bindings and verifies them after

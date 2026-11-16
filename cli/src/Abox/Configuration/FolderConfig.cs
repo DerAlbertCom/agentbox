@@ -9,17 +9,31 @@ public sealed class FolderConfig
     private FolderConfig(
         string location,
         string? squad,
-        IReadOnlyList<UserSecretSelection> userSecrets
+        IReadOnlyList<UserSecretSelection> userSecrets,
+        int? portOffset
     )
     {
         Location = Path.GetFullPath(location);
         Squad = squad;
         UserSecrets = userSecrets;
+        PortOffset = portOffset;
     }
 
     public string? Squad { get; }
     public IReadOnlyList<UserSecretSelection> UserSecrets { get; }
+    public int? PortOffset { get; }
     internal string Location { get; }
+
+    /// <summary>Select from the entry-time snapshot; never reread or write folder configuration.</summary>
+    public static int SelectPortOffset(FolderConfig? folderConfig, int? explicitOffset = null)
+    {
+        var offset = explicitOffset ?? folderConfig?.PortOffset ?? 10000;
+        if (offset is < -65534 or > 65534)
+            throw new AboxException(
+                "Port offset must be an integer in -65534..65534; every resulting host port must also be in 1..65535."
+            );
+        return offset;
+    }
 
     /// <summary>The folder selects the squad; an explicit matching selection is allowed.</summary>
     public string? SelectSquad(string? explicitSquad)
@@ -65,9 +79,12 @@ public sealed class FolderConfig
                 throw new AboxException("abox.json must contain an object.");
             var seen = new HashSet<string>(StringComparer.Ordinal);
             foreach (var property in root.EnumerateObject())
-                if (!seen.Add(property.Name) || property.Name is not ("squad" or "userSecrets"))
+                if (
+                    !seen.Add(property.Name)
+                    || property.Name is not ("squad" or "userSecrets" or "portOffset")
+                )
                     throw new AboxException(
-                        "abox.json has duplicate or unknown properties. Use only 'squad' and 'userSecrets'."
+                        "abox.json has duplicate or unknown properties. Use only 'squad', 'userSecrets' and 'portOffset'."
                     );
 
             string? squad = null;
@@ -83,7 +100,19 @@ public sealed class FolderConfig
             var selections = root.TryGetProperty("userSecrets", out var entries)
                 ? UserSecretSelection.Parse(entries)
                 : [];
-            return new FolderConfig(location, squad, selections);
+            int? portOffset = null;
+            if (root.TryGetProperty("portOffset", out var offsetElement))
+            {
+                if (
+                    offsetElement.ValueKind != JsonValueKind.Number
+                    || !offsetElement.TryGetInt32(out var offset)
+                )
+                    throw new AboxException(
+                        "abox.json: 'portOffset' must be an integer in -65534..65534."
+                    );
+                portOffset = SelectPortOffset(null, offset);
+            }
+            return new FolderConfig(location, squad, selections, portOffset);
         }
         catch (FileNotFoundException)
         {

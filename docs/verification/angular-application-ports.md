@@ -96,7 +96,11 @@ sbx relay adapter, with host IPv4-loopback-only publication and repeat reuse.
 All files, literal ports and resulting host ranges are validated before any
 relay setup/publishing. With default offset 10000, port 55535 maps to 65535;
 55536 fails. The table is a plan, not an app health check; abox does not start apps.
-HTTPS certificate setup, custom offsets and lifecycle integration are separate
+The shared [offset selection](../application-port-offsets.md) applies identically
+to .NET, Angular options/configurations and start-script occurrences: command
+override, folder `portOffset`, then 10000. Mixed-source regression tests cover
+folder/CLI selection, duplicate reuse and invalid custom-offset rejection before
+any publishing. HTTPS certificate setup and lifecycle integration remain separate
 stories, not implied by Angular discovery.
 
 ## Automated evidence

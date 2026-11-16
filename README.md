@@ -21,7 +21,7 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
 | `abox user-secrets [--location <path>] [--force]` | Copies explicitly selected local .NET user-secret stores into the folder's existing sandbox. |
-| `abox ports [--location <path>]` | Discovers .NET and Angular app ports and publishes them on host loopback at port + 10000. |
+| `abox ports [--location <path>] [--offset <n>]` | Discovers .NET and Angular app ports and publishes them on host loopback at port + offset (default 10000). |
 
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
@@ -82,11 +82,34 @@ started** by this command. Ports occupied by another service fail with a diagnos
 fix the conflict and retry. Failure/cancellation can leave mappings and sandbox
 relays in place; there is no rollback. The table is a plan, not proof the app is running.
 
-This supports .NET/Angular discovery and HTTP reachability with fixed offset
-10000. HTTPS ports are discovered too, but certificates/trust are **not** configured.
-Configurable offsets and automatic create/recreate publishing are not included yet.
+This supports .NET/Angular discovery and HTTP reachability with configurable offsets.
+HTTPS ports are discovered too, but certificates/trust are **not** configured.
+Automatic create/recreate publishing is not included yet.
 See [shared discovery/runtime rules](docs/verification/application-ports.md) and
 [Angular scope, supported forms and verification](docs/verification/angular-application-ports.md).
+
+#### Folder and one-run port offsets
+
+An optional `abox.json` in the sandbox folder can select a default without changing
+`squad` or `userSecrets` behavior:
+
+```json
+{ "portOffset": 20000 }
+```
+
+For sandbox port 8203, `abox ports` now requests host 28203. `abox ports --offset 30000`
+requests 38203 instead. Precedence is **`--offset`, folder `portOffset`, 10000**;
+there is no global setting, no file is required, and abox never writes configuration.
+Offsets are decimal integers **-65534..65534**; zero keeps the same port number and
+negative offsets subtract. Every resulting host port must still be **1..65535**.
+Fractions, exponent notation, overflow and out-of-range mappings fail before publishing.
+
+**An override does not undo persistent forwarding on exit.** Repeating the same
+offset is safe. Changing it while old abox relay bindings exist fails without
+removing them or adding new bindings. First explicitly remove only the exact old
+bindings, then rerun with the new offset; never clear relay state or unrelated ports.
+After a failure or cancellation, retry with the **same offset** to complete missing
+bindings. See [offset-change and recovery examples](docs/application-port-offsets.md).
 
 ### Seeing tool output
 

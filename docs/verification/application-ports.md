@@ -30,8 +30,9 @@
   start-script grammar are [documented separately](angular-application-ports.md).
 - Preserve every occurrence across URLs, profiles and files; report source/profile,
   sandbox port and host port. Warn for repeated ports and publish each distinct
-  mapping once. The complete plan is validated before publishing: with offset 10000,
-  the largest usable sandbox port is 55535. No ports is a successful no-op.
+  mapping once. The complete plan is validated before publishing: with default offset
+  10000, the largest usable sandbox port is 55535. No ports is a successful no-op.
+  #45 adds [folder/one-run offsets and safe offset-change handling](../application-port-offsets.md).
 - The table is the requested plan, not confirmation of app availability. Host
   publishing uses explicit IPv4 loopback TCP bindings only. Sandbox localhost-only
   apps are supported without source/profile changes or per-app bind overrides.
@@ -70,8 +71,9 @@ Python environment/user customizations. A missing/incompatible prerequisite fail
 actionably before any new host publication; abox never installs dependencies.
 
 - One detached relay per distinct app port listens on an available sandbox port in
-  55536..65535. This is above every usable discovered app port with offset 10000.
-  Allocation also excludes all discovered ports and existing runtime mapping targets,
+  55536..65535. This is above every usable discovered app port with default offset 10000;
+  custom offsets can use higher app ports, which are excluded from relay allocation.
+  Allocation also excludes all discovered ports, saved relay ports and existing runtime mapping targets,
   even when no app currently listens there. It never binds wildcard on the **app's**
   port, so already-running and subsequently-started wildcard apps do not collide.
 - The relay connects to explicit `127.0.0.1`, `::1`, then the accepted connection's
@@ -305,5 +307,6 @@ for localhost apps. No runtime upgrades/restarts,
 global settings/trust changes, registry publication, real secrets or existing user
 sandbox mutations were performed. These #43 runs predate Angular;
 [the #44 verification record](angular-application-ports.md) adds Angular discovery
-evidence. Offsets #45, HTTPS #46 and automatic create/recreate lifecycle #47 were
-not part of those runs.
+and actual dev-server evidence. Offsets #45 are now covered by the linked offset
+contract/evidence. HTTPS #46 and automatic create/recreate lifecycle #47 remain
+intentionally unimplemented.

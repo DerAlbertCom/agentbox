@@ -50,6 +50,145 @@ public sealed class ApplicationPortsTests : IDisposable
     }
 
     [Fact]
+    public async Task DifferentOffsetsInOnePlanAreRejectedBeforeRuntimeMutation()
+    {
+        // Arrange
+        var mappings = new ApplicationPortMapping[] { new(8203, 18203), new(8204, 28204) };
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync("actual", mappings, CancellationToken.None);
+
+        // Assert
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*same offset*");
+        calls.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task RelayReceivesTheOffsetAndCompleteTcpInventoryBeforeAnyBindingChange()
+    {
+        // Arrange
+        inventory = """
+            [{"host_ip":"127.0.0.1","host_port":28203,"sandbox_port":58203,"protocol":"tcp4"},
+             {"host_ip":"0.0.0.0","host_port":19000,"sandbox_port":59000,"protocol":"tcp"},
+             {"host_ip":"::1","host_port":19001,"sandbox_port":59001,"protocol":"tcp6"}]
+            """;
+
+        // Act
+        await client.EnsureApplicationPortsAsync(
+            "actual",
+            [new(8203, 28203)],
+            CancellationToken.None
+        );
+
+        // Assert
+        var relay = calls.Single(call => call.Arguments.Contains("python3"));
+        relay
+            .Arguments.Should()
+            .ContainInOrder(
+                "--offset",
+                "20000",
+                "--bindings",
+                "[[58203,28203],[59000,19000],[59001,19001]]"
+            );
+        calls
+            .Should()
+            .NotContain(call =>
+                call.Arguments.Contains("--publish") || call.Arguments.Contains("--unpublish")
+            );
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task RetryAfterPartialPublicationOrCancellationOnlyPublishesTheMissingBinding(
+        bool cancel
+    )
+    {
+        // Arrange
+        relayInventory =
+            """[{"application_port":8203,"relay_port":58203},{"application_port":8204,"relay_port":58204}]""";
+        var attempts = 0;
+        runner
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request => request.Arguments.Contains("--publish")),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(call =>
+            {
+                calls.Add(call.Arg<ProcessRequest>());
+                attempts++;
+                inventory =
+                    attempts == 1
+                        ? """[{"host_ip":"127.0.0.1","host_port":28203,"sandbox_port":58203,"protocol":"tcp4"}]"""
+                        : """[{"host_ip":"127.0.0.1","host_port":28203,"sandbox_port":58203,"protocol":"tcp4"},{"host_ip":"127.0.0.1","host_port":28204,"sandbox_port":58204,"protocol":"tcp4"}]""";
+                return attempts == 1 && cancel
+                    ? Task.FromException<ProcessResult>(new OperationCanceledException())
+                    : Task.FromResult(
+                        new ProcessResult(
+                            attempts == 1 ? 1 : 0,
+                            inventory,
+                            attempts == 1 ? "partial runtime failure" : ""
+                        )
+                    );
+            });
+        var mappings = new ApplicationPortMapping[] { new(8203, 28203), new(8204, 28204) };
+
+        // Act
+        var first = () =>
+            client.EnsureApplicationPortsAsync("actual", mappings, CancellationToken.None);
+        if (cancel)
+            await first.Should().ThrowAsync<OperationCanceledException>();
+        else
+            await first
+                .Should()
+                .ThrowAsync<AboxException>()
+                .WithMessage("*partial runtime failure*");
+        await client.EnsureApplicationPortsAsync("actual", mappings, CancellationToken.None);
+
+        // Assert
+        calls.Where(call => call.Arguments.Contains("--publish")).Should().HaveCount(2);
+        calls
+            .Last(call => call.Arguments.Contains("--publish"))
+            .Arguments.Should()
+            .Equal("ports", "actual", "--publish", "127.0.0.1:28204:58204/tcp4", "--json");
+        calls.Should().NotContain(call => call.Arguments.Contains("--unpublish"));
+    }
+
+    [Fact]
+    public async Task OffsetConflictFromRelayCannotUpgradeAnOtherwiseMatchingDirectNativeMapping()
+    {
+        // Arrange
+        inventory =
+            """[{"host_ip":"127.0.0.1","host_port":28203,"sandbox_port":8203,"protocol":"tcp4"},{"host_ip":"127.0.0.1","host_port":18204,"sandbox_port":58204,"protocol":"tcp4"}]""";
+        relayFailure = new ProcessResult(
+            1,
+            "",
+            "Requested offset change conflicts with existing host port 18204 -> sandbox target 58204. Explicitly remove the exact old binding."
+        );
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync(
+                "actual",
+                [new(8203, 28203)],
+                CancellationToken.None
+            );
+
+        // Assert
+        await action
+            .Should()
+            .ThrowAsync<AboxException>()
+            .WithMessage("*offset change*18204*exact old binding*");
+        calls
+            .Should()
+            .NotContain(call =>
+                call.Arguments.Contains("--publish") || call.Arguments.Contains("--unpublish")
+            );
+        inventory.Should().Contain("18204").And.Contain("8203");
+    }
+
+    [Fact]
     public async Task UpgradesOnlyTheRequestedExactDirectNativeMappingToALocalhostRelay()
     {
         // Arrange
@@ -158,7 +297,18 @@ public sealed class ApplicationPortsTests : IDisposable
         calls.Should().NotContain(call => call.Arguments.Contains("--publish"));
         var relay = calls.Single(call => call.Arguments.Contains("python3"));
         relay.Arguments.Take(6).Should().Equal("exec", "-i", "actual", "python3", "-I", "-c");
-        relay.Arguments.Skip(7).Should().Equal("8203", "--reserved", "58203");
+        relay
+            .Arguments.Skip(7)
+            .Should()
+            .Equal(
+                "8203",
+                "--reserved",
+                "58203",
+                "--offset",
+                "10000",
+                "--bindings",
+                "[[58203,18203]]"
+            );
         relay.AttachConsole.Should().BeFalse();
         relay.UseUtf8StandardInput.Should().BeTrue();
         relay.StandardInput.Should().NotBeNullOrEmpty();
