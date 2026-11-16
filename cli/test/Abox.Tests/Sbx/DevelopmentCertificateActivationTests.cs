@@ -160,6 +160,7 @@ public sealed class DevelopmentCertificateActivationTests
     [InlineData(43, "/proc")]
     [InlineData(44, "NODE_EXTRA_CA_CERTS")]
     [InlineData(75, "busy")]
+    [InlineData(17, "Cannot verify protected HTTPS launch configuration")]
     public async Task ReadinessExplainsProcessVisibilityAndExtraCaFailuresWithoutClaimingCompletion(
         int code,
         string guidance
@@ -180,7 +181,65 @@ public sealed class DevelopmentCertificateActivationTests
         // Assert
         var failure = (await action.Should().ThrowAsync<AboxException>()).Which;
         failure.Message.Should().Contain(guidance).And.NotContain("private child");
-        await runner.Received(1).RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
+        var observed = (ProcessRequest)
+            runner.ReceivedCalls().Should().ContainSingle().Which.GetArguments()[0]!;
+        observed.Arguments.Should().Contain("status").And.NotContain("root").And.NotContain("-i");
+        observed.StandardInput.Should().BeEmpty();
+        observed.OutputPolicy.Should().Be(ProcessOutputPolicy.Sensitive);
+        observed.Environment.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("1000\n2000")]
+    [InlineData("1e3")]
+    public async Task InvalidApplicationIdentityStopsBeforeRootTrustOrPrivateActivation(string uid)
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        var pfx = SyntheticCertificatePayload();
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, uid, "synthetic private identity"));
+        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+
+        // Act
+        var action = () =>
+            client.ActivateDevelopmentCertificateAsync(
+                "actual",
+                pfx,
+                "password",
+                CancellationToken.None
+            );
+
+        // Assert
+        (await action.Should().ThrowAsync<AboxException>())
+            .Which.ToString()
+            .Should()
+            .Contain("sandbox trust")
+            .And.NotContain("synthetic private");
+        var observed = (ProcessRequest)
+            runner.ReceivedCalls().Should().ContainSingle().Which.GetArguments()[0]!;
+        observed.Arguments.Should().Equal("exec", "actual", "id", "-u");
+        observed.OutputPolicy.Should().Be(ProcessOutputPolicy.CapturedSensitive);
+    }
+
+    private static byte[] SyntheticCertificatePayload()
+    {
+        using var key = RSA.Create(2048);
+        var request = new CertificateRequest(
+            "CN=localhost",
+            key,
+            HashAlgorithmName.SHA256,
+            RSASignaturePadding.Pkcs1
+        );
+        using var certificate = request.CreateSelfSigned(
+            DateTimeOffset.UtcNow.AddMinutes(-1),
+            DateTimeOffset.UtcNow.AddDays(1)
+        );
+        return certificate.Export(X509ContentType.Pfx, "password");
     }
 
     [Theory]
