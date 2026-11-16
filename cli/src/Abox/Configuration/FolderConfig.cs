@@ -73,46 +73,7 @@ public sealed class FolderConfig
                 new UTF8Encoding(false, true),
                 cancellationToken
             );
-            using var document = JsonDocument.Parse(json);
-            var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object)
-                throw new AboxException("abox.json must contain an object.");
-            var seen = new HashSet<string>(StringComparer.Ordinal);
-            foreach (var property in root.EnumerateObject())
-                if (
-                    !seen.Add(property.Name)
-                    || property.Name is not ("squad" or "userSecrets" or "portOffset")
-                )
-                    throw new AboxException(
-                        "abox.json has duplicate or unknown properties. Use only 'squad', 'userSecrets' and 'portOffset'."
-                    );
-
-            string? squad = null;
-            if (root.TryGetProperty("squad", out var squadElement))
-            {
-                if (
-                    squadElement.ValueKind != JsonValueKind.String
-                    || string.IsNullOrWhiteSpace(squadElement.GetString())
-                )
-                    throw new AboxException("abox.json: 'squad' must be a nonempty string.");
-                squad = squadElement.GetString();
-            }
-            var selections = root.TryGetProperty("userSecrets", out var entries)
-                ? UserSecretSelection.Parse(entries)
-                : [];
-            int? portOffset = null;
-            if (root.TryGetProperty("portOffset", out var offsetElement))
-            {
-                if (
-                    offsetElement.ValueKind != JsonValueKind.Number
-                    || !offsetElement.TryGetInt32(out var offset)
-                )
-                    throw new AboxException(
-                        "abox.json: 'portOffset' must be an integer in -65534..65534."
-                    );
-                portOffset = SelectPortOffset(null, offset);
-            }
-            return new FolderConfig(location, squad, selections, portOffset);
+            return Decode(location, json);
         }
         catch (FileNotFoundException)
         {
@@ -140,5 +101,51 @@ public sealed class FolderConfig
                 "Cannot read abox.json. Check the folder and file permissions."
             );
         }
+    }
+
+    private static FolderConfig Decode(string location, string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        ValidateRoot(root);
+        var squad = ReadSquad(root);
+        var selections = root.TryGetProperty("userSecrets", out var entries)
+            ? UserSecretSelection.Parse(entries)
+            : [];
+        var portOffset = ReadPortOffset(root);
+        return new FolderConfig(location, squad, selections, portOffset);
+    }
+
+    private static void ValidateRoot(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object)
+            throw new AboxException("abox.json must contain an object.");
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in root.EnumerateObject())
+            if (
+                !seen.Add(property.Name)
+                || property.Name is not ("squad" or "userSecrets" or "portOffset")
+            )
+                throw new AboxException(
+                    "abox.json has duplicate or unknown properties. Use only 'squad', 'userSecrets' and 'portOffset'."
+                );
+    }
+
+    private static string? ReadSquad(JsonElement root)
+    {
+        if (!root.TryGetProperty("squad", out var squad))
+            return null;
+        if (squad.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(squad.GetString()))
+            throw new AboxException("abox.json: 'squad' must be a nonempty string.");
+        return squad.GetString();
+    }
+
+    private static int? ReadPortOffset(JsonElement root)
+    {
+        if (!root.TryGetProperty("portOffset", out var portOffset))
+            return null;
+        if (portOffset.ValueKind != JsonValueKind.Number || !portOffset.TryGetInt32(out var offset))
+            throw new AboxException("abox.json: 'portOffset' must be an integer in -65534..65534.");
+        return SelectPortOffset(null, offset);
     }
 }

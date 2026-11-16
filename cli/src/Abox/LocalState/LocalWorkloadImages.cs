@@ -17,6 +17,26 @@ public sealed class LocalWorkloadImages(
         CancellationToken cancellationToken
     )
     {
+        var context = await HostContextAsync(cancellationToken);
+        var (reference, imageId) = await BuildImageAsync(
+            workloadDirectory,
+            context,
+            cancellationToken
+        );
+        WriteRuntimeKit(workloadDirectory, runtimeDirectory, reference);
+        console.WriteLine($"Prebuilt workload: {reference} ({imageId}).");
+        return new LocalWorkloadImage
+        {
+            Reference = reference,
+            ImageId = imageId,
+            DockerContext = context,
+            RuntimeKitDirectory = runtimeDirectory,
+            RuntimeKitHash = BuildSources.DirectoryHash(runtimeDirectory),
+        };
+    }
+
+    private async Task<string> HostContextAsync(CancellationToken cancellationToken)
+    {
         RequireDocker();
         await RunAsync(["buildx", "version"], cancellationToken);
         var context = (
@@ -30,6 +50,15 @@ public sealed class LocalWorkloadImages(
         // A context's docker-driver builder shares the image store used by the thin FROM.
         // A selected docker-container/remote builder cannot resolve host-only images.
         await EnsureHostBuilderAsync(context, cancellationToken);
+        return context;
+    }
+
+    private async Task<(string Reference, string ImageId)> BuildImageAsync(
+        string workloadDirectory,
+        string context,
+        CancellationToken cancellationToken
+    )
+    {
         var sourceHash = BuildSources.DirectoryHash(workloadDirectory);
         var reference = "docker.io/library/abox-workload:" + Guid.NewGuid().ToString("N");
         var arguments = new List<string>
@@ -59,6 +88,15 @@ public sealed class LocalWorkloadImages(
             );
         }
 
+        return (reference, imageId);
+    }
+
+    private static void WriteRuntimeKit(
+        string workloadDirectory,
+        string runtimeDirectory,
+        string reference
+    )
+    {
         Directory.CreateDirectory(runtimeDirectory);
         File.Copy(
             Path.Combine(workloadDirectory, "workload.yaml"),
@@ -68,15 +106,6 @@ public sealed class LocalWorkloadImages(
             Path.Combine(runtimeDirectory, "workload.dockerfile"),
             $"FROM {reference}\n"
         );
-        console.WriteLine($"Prebuilt workload: {reference} ({imageId}).");
-        return new LocalWorkloadImage
-        {
-            Reference = reference,
-            ImageId = imageId,
-            DockerContext = context,
-            RuntimeKitDirectory = runtimeDirectory,
-            RuntimeKitHash = BuildSources.DirectoryHash(runtimeDirectory),
-        };
     }
 
     /// <summary>Fails before sandbox replacement; never rebuilds or pulls a missing local image.</summary>

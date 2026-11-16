@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -16,88 +15,62 @@ internal static partial class AngularStartScript
             return;
         if (start.ValueKind != JsonValueKind.String)
             throw new FormatException();
-        var script = start.GetString()!;
-        if (!AngularCommand().IsMatch(script) || !PortArgument().IsMatch(script))
+        var args = AcceptedCommandArguments(start.GetString()!);
+        if (args is null)
             return;
-        var args = LiteralArguments(script);
-        if (
-            args.Count < 3
-            || args[0] != "ng"
-            || args[1] is not ("serve" or "s" or "dev")
-            || args.Contains("--")
-        )
+        result.Add(new AppPortOccurrence(source, "scripts.start", ReadSinglePort(args)));
+    }
+
+    private static IReadOnlyList<string>? AcceptedCommandArguments(string script)
+    {
+        // Check applicability before tokenizing: unrelated scripts and scripts without
+        // an explicit port are not interpreted, even when they contain shell syntax.
+        if (!AngularCommand().IsMatch(script) || !PortArgument().IsMatch(script))
+            return null;
+        var args = LiteralScriptArguments.Tokenize(script);
+        if (args.Count < 3 || args.Contains("--"))
             throw new FormatException();
+        if (args[0] != "ng" || args[1] is not ("serve" or "s" or "dev"))
+            throw new FormatException();
+        return args;
+    }
+
+    private static int ReadSinglePort(IReadOnlyList<string> args)
+    {
         int? port = null;
         for (var index = 2; index < args.Count; index++)
         {
-            var arg = args[index];
-            if (arg != "--port" && !arg.StartsWith("--port=", StringComparison.Ordinal))
-            {
-                if (PortArgument().IsMatch(arg))
-                    throw new FormatException();
+            if (!IsPortFlag(args[index]))
                 continue;
-            }
             if (port.HasValue)
                 throw new FormatException();
-            var value =
-                arg == "--port" && ++index < args.Count ? args[index]
-                : arg.StartsWith("--port=", StringComparison.Ordinal) ? arg[7..]
-                : "";
-            if (
-                !int.TryParse(
-                    value,
-                    NumberStyles.None,
-                    CultureInfo.InvariantCulture,
-                    out var number
-                ) || number is < 1 or > 65535
-            )
-                throw new FormatException();
-            port = number;
+            port = DecodePortValue(args, ref index);
         }
-        if (!port.HasValue)
-            throw new FormatException();
-        result.Add(new AppPortOccurrence(source, "scripts.start", port.Value));
+        return port ?? throw new FormatException();
     }
 
-    private static List<string> LiteralArguments(string script)
+    private static bool IsPortFlag(string argument)
     {
-        var args = new List<string>();
-        var value = new StringBuilder();
-        var quote = '\0';
-        var started = false;
-        foreach (var character in script)
-        {
-            // This is a deliberately literal subset, not a platform shell interpreter.
-            if (
-                char.IsControl(character) && character != '\t'
-                || "\\$%!`;|&<>()#*?[]{}~".Contains(character)
-            )
-                throw new FormatException();
-            if (character == quote)
-                quote = '\0';
-            else if (quote == '\0' && character is '\'' or '"')
-            {
-                quote = character;
-                started = true;
-            }
-            else if (quote == '\0' && char.IsWhiteSpace(character))
-            {
-                if (started)
-                    args.Add(value.ToString());
-                value.Clear();
-                started = false;
-            }
-            else
-            {
-                value.Append(character);
-                started = true;
-            }
-        }
-        if (quote != '\0')
+        if (argument == "--port" || argument.StartsWith("--port=", StringComparison.Ordinal))
+            return true;
+        if (PortArgument().IsMatch(argument))
             throw new FormatException();
-        if (started)
-            args.Add(value.ToString());
-        return args;
+        return false;
+    }
+
+    private static int DecodePortValue(IReadOnlyList<string> args, ref int index)
+    {
+        string value;
+        if (args[index] == "--port")
+            value = ++index < args.Count ? args[index] : "";
+        else
+            value = args[index]["--port=".Length..];
+        if (
+            !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
+            || port is < 1 or > 65535
+        )
+            throw new FormatException();
+        return port;
     }
 
     [GeneratedRegex(@"(?<![\w-])--port(?![\w-])", RegexOptions.CultureInvariant)]

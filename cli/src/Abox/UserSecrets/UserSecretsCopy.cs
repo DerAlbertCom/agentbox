@@ -6,7 +6,7 @@ using Abox.Sbx;
 namespace Abox.UserSecrets;
 
 /// <summary>Shared on-demand/lifecycle flow. Preparation never contacts or writes a sandbox.</summary>
-public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost host, ISbxClient sbx)
+public sealed class UserSecretsCopy(AboxConfig config, UserSecretsHost host, ISbxClient sbx)
 {
     public async Task<PreparedUserSecrets> PrepareAsync(
         FolderConfig? folderConfig,
@@ -77,36 +77,70 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
             stores.Add(UserSecretSnapshot.Parse(selection, json));
         }
         var safetyOverride = false;
+        var policy = new UserSecretOriginalPolicy(config.UserSecretsDenyList, force);
         foreach (var store in stores)
         foreach (var (key, value) in store.Values)
-            safetyOverride |= CheckOriginal(store.Id, key, value, force);
+            safetyOverride |= policy.EnsureAllowedAndReportForceOverrideUsed(store.Id, key, value);
         return new PreparedUserSecrets(stores, safetyOverride, force, projects);
     }
 
-    private bool CheckOriginal(
-        string id,
-        string key,
-        string? value,
-        bool force,
-        string? project = null
+    private async Task<IReadOnlyList<UserSecretStoreTarget>> PrepareTargetsAsync(
+        PreparedUserSecrets prepared,
+        string sandbox,
+        CancellationToken cancellationToken
     )
     {
-        if (
-            value is null
-            || !config.UserSecretsDenyList.Any(denied =>
-                value.Contains(denied, StringComparison.OrdinalIgnoreCase)
-            )
-        )
-            return false;
-        if (!force)
-            throw new AboxException(
-                $"{DescribeSetting(id, key, project)}, is blocked by the global deny list. No stores were copied. Use --force only if this is intentional."
+        // Discover ports, construct ALL stores, validate ALL destinations, then allow writes.
+        HashSet<int> ports;
+        try
+        {
+            ports = (
+                await sbx.GetUserSecretsHostPortsAsync(sandbox, cancellationToken)
+            ).ToHashSet();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            throw TargetPreparationFailure();
+        }
+        var policy = new UserSecretOriginalPolicy(config.UserSecretsDenyList, prepared.Force);
+        var targets = new List<UserSecretStoreTarget>();
+        foreach (var store in prepared.Stores)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var projects = prepared
+                .Projects.Where(project =>
+                    project.SelectedSettings.Id.Equals(store.Id, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToArray();
+            targets.Add(UserSecretStoreTarget.Construct(store, projects, ports, policy));
+        }
+        try
+        {
+            await sbx.ValidateUserSecretsDestinationAsync(
+                sandbox,
+                targets.Select(target => target.Summary.Id).ToArray(),
+                cancellationToken
             );
-        return true;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            throw TargetPreparationFailure();
+        }
+        return targets;
     }
 
-    private static string DescribeSetting(string id, string key, string? project) =>
-        $"User-secret store '{id}', key {JsonSerializer.Serialize(key)}{(project is null ? "" : $", project {JsonSerializer.Serialize(project)}")}";
+    private static AboxException TargetPreparationFailure() =>
+        new(
+            "Cannot prepare user-secret destinations or rewrite policy. No stores were copied. Check 'sbx policy ls <sandbox> --type network --json' and 'sbx policy check network --sandbox <sandbox> --protocol tcp --json localhost:<port>' for complete, valid metadata, and the application user's absolute HOME/APPDATA, ownership, ordinary paths and shell/coreutils; fix the runtime and retry 'abox user-secrets'. No policy was changed; child diagnostics were suppressed."
+        );
 
     public async Task<UserSecretsReport> CopyAsync(
         PreparedUserSecrets prepared,
@@ -117,11 +151,7 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
         cancellationToken.ThrowIfCancellationRequested();
         if (prepared.Stores.Count == 0)
             return new UserSecretsReport([], prepared.SafetyOverride);
-        var (targetStores, safetyOverride) = await PrepareTargetAsync(
-            prepared,
-            sandbox,
-            cancellationToken
-        );
+        var targetStores = await PrepareTargetsAsync(prepared, sandbox, cancellationToken);
         var copied = new List<UserSecretsStoreReport>();
         foreach (var target in targetStores)
         {
@@ -147,14 +177,12 @@ public sealed partial class UserSecretsCopy(AboxConfig config, UserSecretsHost h
                     $"User-secret transfer failed for store '{store.Id}' after {copied.Count} completed stores. Earlier files may have been replaced; the current result may be unconfirmed. Fix the destination/runtime and retry 'abox user-secrets' for this folder; no cross-store rollback is attempted."
                 );
             }
-            copied.Add(
-                new UserSecretsStoreReport(store.Id, store.KeyCount)
-                {
-                    RewrittenKeys = target.RewrittenKeys,
-                }
-            );
+            copied.Add(target.Summary);
         }
-        return new UserSecretsReport(copied.AsReadOnly(), safetyOverride);
+        return new UserSecretsReport(
+            copied.AsReadOnly(),
+            prepared.SafetyOverride || targetStores.Any(target => target.SafetyOverride)
+        );
     }
 }
 

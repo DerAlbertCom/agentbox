@@ -1,12 +1,13 @@
 using System.Text.Json;
+using static Abox.UserSecrets.UserSecretOriginalPolicy;
 
 namespace Abox.UserSecrets;
 
-public sealed partial class UserSecretsCopy
+internal static class SharedStoreOverrides
 {
     // Format adapters resolve precedence/filtering first. EffectiveValues includes unchanged
     // consumer values and adapted targets; GeneratedValues contains only keys needing writes.
-    private sealed class ProjectOverrides(
+    internal sealed class ProjectOverrides(
         string project,
         IReadOnlyDictionary<string, string?> effectiveValues,
         IReadOnlyDictionary<string, string> generatedValues
@@ -17,7 +18,7 @@ public sealed partial class UserSecretsCopy
         internal IReadOnlyDictionary<string, string> GeneratedValues { get; } = generatedValues;
     }
 
-    private static IReadOnlyDictionary<string, string> MergeGeneratedOverrides(
+    internal static IReadOnlyDictionary<string, string> MergeGeneratedOverrides(
         string id,
         IReadOnlyList<ProjectOverrides> projects
     )
@@ -53,5 +54,39 @@ public sealed partial class UserSecretsCopy
             merged.Add(key, target);
         }
         return merged;
+    }
+
+    internal static ProjectOverrides BuildProjectOverrides(
+        ProjectSettings project,
+        UserSecretSnapshot store,
+        HashSet<int> ports,
+        IEnumerable<KeyValuePair<string, string?>> candidates
+    )
+    {
+        // Resolve split ports before deriving desired hosts for shared-store checks.
+        var effective = new Dictionary<string, string?>(
+            project.AllSettings,
+            StringComparer.OrdinalIgnoreCase
+        );
+        foreach (var (key, value) in store.Values)
+            effective[key] = value;
+        var generated = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (key, original) in candidates)
+        {
+            if (original is null)
+                continue;
+            var target = EndpointAdaptation.Rewrite(
+                original,
+                ports,
+                key,
+                effective,
+                DescribeSetting(store.Id, key, project.Project)
+            );
+            if (target == original)
+                continue;
+            effective[key] = target;
+            generated.Add(key, target);
+        }
+        return new ProjectOverrides(project.Project, effective, generated);
     }
 }

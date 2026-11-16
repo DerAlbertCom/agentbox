@@ -78,8 +78,9 @@ public sealed class LegacySandboxCompatibilityTests
             .Returns(call => new ProcessResult(
                 0,
                 call.Arg<ProcessRequest>().FileName == "bash" ? cli.Location
-                    : call.Arg<ProcessRequest>().FileName == "hc" ? legacy
-                    : "{}",
+                    : call.Arg<ProcessRequest>().FileName == "hc"
+                        ? $"{{\"machines\":[{{\"name\":\"{legacy}\"}}]}}"
+                    : "{\"errors\":[]}",
                 ""
             ));
         cli.Services.AddSingleton(runner);

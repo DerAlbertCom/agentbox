@@ -419,10 +419,7 @@ public sealed class UserSecretsOracleCommandTests
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();
-        cli.Configure("""{"userSecrets":["sample"]}""");
-        Project(cli, new { Generated = original });
-        cli.Store("sample", JsonSerializer.Serialize(new { Copied = original }));
-        MappedPorts(cli);
+        OracleSources(cli, original);
         var originals = Originals(cli);
 
         // Act
@@ -461,7 +458,12 @@ public sealed class UserSecretsOracleCommandTests
         "Data Source=localhost:1521/synthetic-service;Data Source=remote.test:1521/synthetic-service"
     )]
     [InlineData("Data Source=localhost:1521/synthetic-service;Host=remote.test;Port=1521")]
+    [InlineData("Data Source=localhost:1521/synthetic-service;pOrT=1521")]
+    [InlineData("Data Source=localhost:1521/synthetic-service;Address=remote.test")]
     [InlineData("Data Source=localhost:1521/synthetic-service;Password='synthetic;password")]
+    [InlineData("Password='synthetic;password';Data Source='//localhost:1521/synthetic-service")]
+    [InlineData("Data Source='//localhost:1521/synthetic-service' unexpected")]
+    [InlineData("Data Source=//localhost:1521/synthetic-service;Pooling=true;POOLING=false")]
     [InlineData("Data Source='localhost:1521/synthetic-service;User Id=synthetic-user")]
     [InlineData(
         "User Id=synthetic-user;Data Source=\"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))(CONNECT_DATA=(SID=synthetic-service)))"
@@ -528,9 +530,7 @@ public sealed class UserSecretsOracleCommandTests
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();
-        cli.Configure("""{"userSecrets":["sample"]}""");
-        Project(cli, new { Generated = original });
-        cli.Store("sample", JsonSerializer.Serialize(new { Copied = original }));
+        OracleSources(cli, original);
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
         var originals = Originals(cli);
@@ -548,6 +548,10 @@ public sealed class UserSecretsOracleCommandTests
     }
 
     [Theory]
+    [InlineData(
+        "Password='synthetic''password';Data Source='(DESCRIPTION=(NOTE=''synthetic-wallet'')(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=''localhost'')(PORT=01521))(ADDRESS=(PROTOCOL=TCPS)(HOST=''[::1]'')(PORT=8004))))';Pooling=false",
+        "Password='synthetic''password';Data Source='(DESCRIPTION=(NOTE=''synthetic-wallet'')(ADDRESS_LIST=(ADDRESS=(PROTOCOL=TCP)(HOST=''host.docker.internal'')(PORT=01521))(ADDRESS=(PROTOCOL=TCPS)(HOST=''host.docker.internal'')(PORT=8004))))';Pooling=false"
+    )]
     [InlineData(
         "Data Source=\"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=\"\"localhost\"\")(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=synthetic-service)))\";Password=\"synthetic\"\"password\"",
         "Data Source=\"(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=\"\"host.docker.internal\"\")(PORT=1521))(CONNECT_DATA=(SERVICE_NAME=synthetic-service)))\";Password=\"synthetic\"\"password\""
@@ -575,10 +579,7 @@ public sealed class UserSecretsOracleCommandTests
     {
         // Arrange
         using var cli = new UserSecretsCliHarness();
-        cli.Configure("""{"userSecrets":["sample"]}""");
-        Project(cli, new { Generated = original });
-        cli.Store("sample", JsonSerializer.Serialize(new { Copied = original }));
-        MappedPorts(cli);
+        OracleSources(cli, original);
         var originals = Originals(cli);
 
         // Act
@@ -594,6 +595,10 @@ public sealed class UserSecretsOracleCommandTests
     }
 
     [Theory]
+    [InlineData(
+        "Password=\"synthetic\"\"password\";Data Source=\" //localhost,remote.test:5000;[::1],localhost:01521/synthetic-service?ssl_server_cert_dn=\"\"CN=synthetic-wallet\"\"&retry_count=3 \";Pooling=false",
+        "Password=\"synthetic\"\"password\";Data Source=\" //localhost,remote.test:5000;host.docker.internal,host.docker.internal:01521/synthetic-service?ssl_server_cert_dn=\"\"CN=synthetic-wallet\"\"&retry_count=3 \";Pooling=false"
+    )]
     [InlineData("localhost:1521", "host.docker.internal:1521")]
     [InlineData(
         "Data Source=localhost:8004/database",
@@ -648,6 +653,68 @@ public sealed class UserSecretsOracleCommandTests
         written.RootElement.GetProperty("Nested")[0].GetString().Should().Be(expected);
         SafeDiagnostics(cli);
         Unchanged(originals);
+    }
+
+    [Fact]
+    public async Task OracleDescriptorNestingAtTheLimitPreservesUnknownMetadata()
+    {
+        // Arrange
+        using var cli = new UserSecretsCliHarness();
+        const string address = "(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))";
+        var metadata = DescriptorMetadata(64);
+        var original = "(DESCRIPTION=" + address + metadata + ")";
+        OracleSources(cli, original);
+        var originals = Originals(cli);
+
+        // Act
+        var exit = await cli.Run("--verbose");
+
+        // Assert
+        exit.Should().Be(0, cli.Console.AllText);
+        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        var expected =
+            "(DESCRIPTION=(ADDRESS=(PROTOCOL=TCP)(HOST=host.docker.internal)(PORT=1521))"
+            + metadata
+            + ")";
+        written.RootElement.GetProperty("Generated").GetString().Should().Be(expected);
+        written.RootElement.GetProperty("Copied").GetString().Should().Be(expected);
+        SafeDiagnostics(cli);
+        Unchanged(originals);
+    }
+
+    [Fact]
+    public async Task OvernestedOracleDescriptorRetainsKnownMappedAddressForAllStoreRejection()
+    {
+        // Arrange
+        using var cli = new UserSecretsCliHarness();
+        const string address = "(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=1521))";
+        var original = "(DESCRIPTION=" + address + DescriptorMetadata(65) + ")";
+        OracleSources(cli, original);
+        cli.Configure("""{"userSecrets":["first","sample"]}""");
+        cli.Store("first", """{"Valid":"//localhost:1521/synthetic-service"}""");
+        var originals = Originals(cli);
+
+        // Act
+        var exit = await cli.Run("--verbose");
+
+        // Assert
+        exit.Should().Be(1, cli.Console.AllText);
+        await cli.NoWrites();
+        cli.Console.AllText.Should().Contain("unsupported").And.Contain("no stores were copied");
+        cli.Console.AllText.Should().NotContain(original);
+        SafeDiagnostics(cli);
+        Unchanged(originals);
+    }
+
+    private static string DescriptorMetadata(int depth) =>
+        string.Concat(Enumerable.Repeat("(EXTRA=", depth)) + "leaf" + new string(')', depth);
+
+    private static void OracleSources(UserSecretsCliHarness cli, string original)
+    {
+        cli.Configure("""{"userSecrets":["sample"]}""");
+        Project(cli, new { Generated = original });
+        cli.Store("sample", JsonSerializer.Serialize(new { Copied = original }));
+        MappedPorts(cli);
     }
 
     private static void Project(UserSecretsCliHarness cli, object settings)

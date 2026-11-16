@@ -15,6 +15,9 @@ import threading
 import time
 
 
+SAVED_RELAY_CONFLICT = "A saved relay port conflicts with a requested application port; nothing was replaced."
+
+
 def fail(message):
     raise RuntimeError(message)
 
@@ -142,6 +145,56 @@ def serve(application_port, relay_port, control_fd, listener_fd, ready_fd):
                 pass
 
 
+def allocate_listener(listener, saved_port, excluded):
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    if saved_port is not None:
+        restore_listener(listener, saved_port)
+        return saved_port
+    for _ in range(128):
+        candidate = 55536 + secrets.randbelow(10000)
+        if candidate in excluded:
+            continue
+        try:
+            listener.bind(("0.0.0.0", candidate))
+            return candidate
+        except OSError as error:
+            if error.errno != errno.EADDRINUSE:
+                raise
+    fail("No free sandbox relay port in 55536..65535; free a port and retry.")
+
+
+def restore_listener(listener, saved_port):
+    try:
+        listener.bind(("0.0.0.0", saved_port))
+    except OSError:
+        fail("Saved sandbox relay port %s is occupied; free that listener and retry. No process was killed." % saved_port)
+
+
+def start_detached_relay(application_port, relay_port, control, listener):
+    parent, child = socket.socketpair()
+    with parent, child:
+        process = subprocess.Popen(
+            [sys.executable, "-I", "-c", SOURCE, "serve", str(application_port), str(relay_port),
+             str(control.fileno()), str(listener.fileno()), str(child.fileno())],
+            pass_fds=(control.fileno(), listener.fileno(), child.fileno()),
+            start_new_session=True, close_fds=True,
+            stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # This scope alone owns failure cleanup, and only for the child it spawned.
+        try:
+            child.close()
+            parent.settimeout(10)
+            if parent.makefile("rb").read(5) != b"ready":
+                fail("Detached relay failed readiness; retry after checking sandbox Python.")
+        except BaseException:
+            process.terminate()
+            try:
+                process.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
+            raise
+
+
 def start(root, application_port, relay_port, excluded):
     path = os.path.join(root, str(application_port) + ".sock")
     running_port = status(path, application_port)
@@ -153,52 +206,13 @@ def start(root, application_port, relay_port, excluded):
         owned(os.lstat(path), stat.S_ISSOCK)
         os.unlink(path)  # Only an owned, confirmed-dead control socket, under the lock.
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-        listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        if relay_port is not None:
-            try:
-                listener.bind(("0.0.0.0", relay_port))
-            except OSError:
-                fail("Saved sandbox relay port %s is occupied; free that listener and retry. No process was killed." % relay_port)
-        else:
-            for _ in range(128):
-                candidate = 55536 + secrets.randbelow(10000)
-                if candidate in excluded:
-                    continue
-                try:
-                    listener.bind(("0.0.0.0", candidate))
-                    relay_port = candidate
-                    break
-                except OSError as error:
-                    if error.errno != errno.EADDRINUSE:
-                        raise
-            if relay_port is None:
-                fail("No free sandbox relay port in 55536..65535; free a port and retry.")
+        relay_port = allocate_listener(listener, relay_port, excluded)
         listener.listen(128)
         with socket.socket(socket.AF_UNIX) as control:
             control.bind(path)
             os.chmod(path, 0o600)
             control.listen(8)
-            parent, child = socket.socketpair()
-            with parent, child:
-                process = subprocess.Popen(
-                    [sys.executable, "-I", "-c", SOURCE, "serve", str(application_port), str(relay_port),
-                     str(control.fileno()), str(listener.fileno()), str(child.fileno())],
-                    pass_fds=(control.fileno(), listener.fileno(), child.fileno()),
-                    start_new_session=True, close_fds=True,
-                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                child.close()
-                parent.settimeout(10)
-                try:
-                    if parent.makefile("rb").read(5) != b"ready":
-                        fail("Detached relay failed readiness; retry after checking sandbox Python.")
-                except BaseException:
-                    process.terminate()
-                    try:
-                        process.wait(timeout=3)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        process.wait()
-                    raise
+            start_detached_relay(application_port, relay_port, control, listener)
     return relay_port
 
 
@@ -221,6 +235,34 @@ def known_relays(root):
             if relay in result.values():
                 fail("Saved relay ports are not unique; inspect ~/.abox-ports-v1 before retrying.")
             result[port] = relay
+    return result
+
+
+def reject_binding_conflicts(ports, saved, offset, bindings):
+    if set(ports) & set(saved.values()):
+        fail(SAVED_RELAY_CONFLICT)
+    if offset is None:
+        return
+    # Protect even undiscovered apps and cancellation before the .port was saved.
+    targets = {relay: application for application, relay in saved.items()}
+    for target, host in bindings:
+        if target in targets and host != targets[target] + offset:
+            fail("Requested offset change conflicts with existing host port %s -> sandbox target %s. Explicitly remove the exact old binding before changing offsets, or retry with the previous offset; no bindings were changed." % (host, target))
+        if target in ports and host != target + offset:
+            fail("Direct native mapping conflict at host port %s -> sandbox target %s; ownership is unknown. Inspect sandbox ports and, only if you intend to replace it, explicitly remove only that exact binding before retrying; no bindings were changed." % (host, target))
+
+
+def ensure_owned_relays(root, ports, reserved, saved):
+    result = []
+    for port in ports:
+        relay_port = start(root, port, saved.get(port), set(ports) | reserved | set(saved.values()))
+        if relay_port in ports:
+            fail(SAVED_RELAY_CONFLICT)
+        # Persist only after readiness. A failed save intentionally leaves the live
+        # control socket discoverable, so retry can recover without killing a relay.
+        save_port(os.path.join(root, str(port) + ".port"), relay_port)
+        saved[port] = relay_port
+        result.append({"application_port": port, "relay_port": relay_port})
     return result
 
 
@@ -252,27 +294,8 @@ def ensure(ports, reserved, offset, bindings):
                     fail("Another application-port operation holds the sandbox lock; retry shortly.")
                 time.sleep(0.1)
         saved = known_relays(root)
-        if set(ports) & set(saved.values()):
-            fail("A saved relay port conflicts with a requested application port; nothing was replaced.")
-        # A binding to any known relay protects even apps no longer discovered, and
-        # running control sockets cover cancellation before the .port file was saved.
-        if offset is not None:
-            targets = {relay: application for application, relay in saved.items()}
-            for target, host in bindings:
-                if target in targets and host != targets[target] + offset:
-                    fail("Requested offset change conflicts with existing host port %s -> sandbox target %s. Explicitly remove the exact old binding before changing offsets, or retry with the previous offset; no bindings were changed." % (host, target))
-                if target in ports and host != target + offset:
-                    fail("Direct native mapping conflict at host port %s -> sandbox target %s; ownership is unknown. Inspect sandbox ports and, only if you intend to replace it, explicitly remove only that exact binding before retrying; no bindings were changed." % (host, target))
-        result = []
-        for port in ports:
-            path = os.path.join(root, str(port) + ".port")
-            relay_port = start(root, port, saved.get(port), set(ports) | reserved | set(saved.values()))
-            if relay_port in ports:
-                fail("A saved relay port conflicts with a requested application port; nothing was replaced.")
-            save_port(path, relay_port)
-            saved[port] = relay_port
-            result.append({"application_port": port, "relay_port": relay_port})
-        print(json.dumps(result))
+        reject_binding_conflicts(ports, saved, offset, bindings)
+        print(json.dumps(ensure_owned_relays(root, ports, reserved, saved)))
 
 
 try:

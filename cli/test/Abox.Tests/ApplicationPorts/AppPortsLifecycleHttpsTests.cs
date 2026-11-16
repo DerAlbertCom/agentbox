@@ -1,4 +1,5 @@
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -7,6 +8,59 @@ namespace Abox.Tests;
 
 public sealed class AppPortsLifecycleHttpsTests
 {
+    [Theory]
+    [InlineData("App.csproj", "utf-8", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />")]
+    [InlineData(
+        "App.fsproj",
+        "utf-16",
+        "<Project Sdk=\"Microsoft.NET.Sdk; Microsoft.NET.Sdk.Web/10.0.100\" />"
+    )]
+    [InlineData(
+        "App.vbproj",
+        "utf-16BE",
+        "<Project><Sdk Name=\"Microsoft.NET.Sdk.Web/10.0.100\" /></Project>"
+    )]
+    [InlineData(
+        "App.CSPROJ",
+        "utf-32",
+        "<Project xmlns=\"urn:synthetic\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup></Project>"
+    )]
+    [InlineData("App.FSPROJ", "utf-32BE", "<Project Sdk=\"microsoft.net.sdk.web\" />")]
+    public async Task StaticEncodedProjectDeclarationsConfigureHttpsWithoutInferringPorts(
+        string file,
+        string encoding,
+        string project
+    )
+    {
+        // Arrange
+        using var fixture = new AppPortsLifecycleFixture();
+        using var certificate = new LifecycleCertificateCli(fixture.Console);
+        fixture.Services.AddSingleton(certificate.Exporter);
+        var path = fixture.Root.File("folder/" + file, "");
+        await File.WriteAllTextAsync(path, project, Encoding.GetEncoding(encoding));
+        fixture
+            .Sbx.GetDevelopmentCertificatePasswordAsync(fixture.Name, Arg.Any<CancellationToken>())
+            .Returns(new string('a', 64));
+
+        // Act
+        var exit = await fixture.Create(false);
+
+        // Assert
+        exit.Should().Be(0, fixture.Console.AllText);
+        certificate.Exports.Should().Be(1);
+        fixture
+            .Console.AllText.Should()
+            .Contain("No explicit application ports")
+            .And.Contain("Created sandbox");
+        await fixture
+            .Sbx.DidNotReceive()
+            .EnsureApplicationPortsAsync(
+                Arg.Any<string>(),
+                Arg.Any<IReadOnlyList<ApplicationPortMapping>>(),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

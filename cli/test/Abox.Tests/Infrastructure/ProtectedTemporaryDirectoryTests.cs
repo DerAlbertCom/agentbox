@@ -9,6 +9,50 @@ namespace Abox.Tests;
 
 public sealed class ProtectedTemporaryDirectoryTests
 {
+    [Theory]
+    [InlineData("")]
+    [InlineData("nested")]
+    public void LinkedParentOrAncestorIsRejectedWithoutRemovingUnownedContents(string subdirectory)
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        var target = System.IO.Path.Combine(root.Path, "target");
+        Directory.CreateDirectory(System.IO.Path.Combine(target, "nested"));
+        var marker = System.IO.Path.Combine(target, "keep.txt");
+        File.WriteAllText(marker, "unowned contents");
+        var link = System.IO.Path.Combine(root.Path, "linked");
+        CreateDirectoryLink(link, target);
+        var parent = System.IO.Path.Combine(link, subdirectory);
+        var console = Substitute.For<IConsole>();
+
+        // Act
+        var create = () => new ProtectedTemporaryDirectory(parent, console);
+
+        // Assert
+        create.Should().Throw<AboxException>().WithMessage("*no export was started.*");
+        File.ReadAllText(marker).Should().Be("unowned contents");
+        Directory
+            .GetDirectories(target, "abox-certificate-*", SearchOption.AllDirectories)
+            .Should()
+            .BeEmpty();
+        console.DidNotReceive().WriteError(Arg.Any<string>());
+    }
+
+    private static void CreateDirectoryLink(string link, string target)
+    {
+        try
+        {
+            Directory.CreateSymbolicLink(link, target);
+        }
+        catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows())
+        {
+            throw new InvalidOperationException(
+                Xunit.v3.DynamicSkipToken.Value
+                    + "Windows directory-link creation needs permission."
+            );
+        }
+    }
+
     [Fact]
     public void ExportStartsInAnAlreadyPrivateDirectoryAndDisposalRemovesItsContents()
     {

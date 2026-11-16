@@ -264,10 +264,26 @@ with Python 3.8+ as a non-root user (no .NET project, sbx or npm needed):
 python3 -I docs/verification/application-ports/ReceiverChecks.py
 ```
 
-The 17 checks use temporary HOME directories and real local sockets/processes;
+The 19 checks use temporary HOME directories and real local sockets/processes;
 they do not read user settings, publish host ports or call sbx. They retain the
 binary/half-close, relay lifetime/reuse/restart, offset conflict/recovery and
-filesystem safety regressions formerly hosted by the removed projects.
+filesystem safety regressions formerly hosted by the removed projects. They also
+verify the 128-active-connection limit and failed detached-child readiness cleanup
+followed by a successful retry.
+
+`ApplicationPortsReceiverTests` runs these same checks against the actual embedded
+assembly resource, using the copied `Fixtures` directory rather than source-tree
+discovery. It requires Linux, a non-root user and `/usr/bin/python3`; other platforms
+explicitly skip it. After building, run the focused executable tests with:
+
+```sh
+dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noColor -class '*ApplicationPortsReceiverTests' -class '*ApplicationPortsTests' -class '*AppPortsLifecycle*'
+```
+
+The readiness failure fixture substitutes only the detached executable. Production
+receiver bytes still perform allocation, readiness validation and failure cleanup;
+no private helper is called directly. These synthetic checks do not validate live
+sbx host publication or Docker lifecycle behavior.
 
 ## Automated verification and limitations
 

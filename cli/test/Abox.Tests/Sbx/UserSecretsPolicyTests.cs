@@ -355,6 +355,36 @@ public sealed partial class UserSecretsPolicyTests
     }
 
     [Theory]
+    [InlineData("\"editable\":false", "\"editable\":true,\"editable\":false")]
+    [InlineData(
+        "\"created_via\":\"provisioned\"",
+        "\"created_via\":\"added\",\"created_via\":\"provisioned\""
+    )]
+    [InlineData("{\"rules\":", "{\"extra\":[{\"constraint\":1,\"constraint\":2}],\"rules\":")]
+    public async Task DuplicateObjectsCannotSupplyRewriteIntentEvenOutsideRecognizedFields(
+        string original,
+        string replacement
+    )
+    {
+        // Arrange
+        var inventory = GatedUserSecretsPolicyRunner.Inventory(
+            "synthetic-sandbox",
+            "localhost:8004"
+        );
+        using var fixture = new PolicyFixture
+        {
+            InventoryOverride = inventory.Replace(original, replacement, StringComparison.Ordinal),
+        };
+
+        // Act
+        var action = fixture.Read;
+
+        // Assert
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*No policy was changed*");
+        fixture.Requests.Should().ContainSingle();
+    }
+
+    [Theory]
     [InlineData("action", "net:connect:udp")]
     [InlineData("context", "global")]
     [InlineData("resource_type", "net:ip")]

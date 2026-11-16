@@ -467,6 +467,14 @@ published tag.
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.
 
+Herdr requires exact machine discovery and confirmed desktop readiness before
+opening a space. Failed/malformed discovery is not absence, and malformed or
+singular-error status is not readiness. Configuration diagnostics in a valid
+`errors` string array warn without blocking a responsive window. See the
+[pinned contracts and desktop startup ownership](verification/herdr-readiness.md)
+for the intentional hardening and
+bounded startup/cancellation behavior.
+
 ### `abox secrets list|set|remove [--team <name>] --squad <name> [--service <name>]`
 
 The kits of a squad ask for a service with the `credential@1` capability. The `secrets`
@@ -562,14 +570,17 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   any writes, even with empty filters, authoritative host values or force.
   See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
-  before writing. `UserSecretsCopy.Target.cs` discovers authorized host ports and
-  prepares targets, retaining originals for deny/force accounting. Pure internal
+  before writing. `UserSecretsCopy` discovers authorized host ports, constructs
+  every target through pure internal `UserSecretStoreTarget`, then validates every
+  destination before writing. Targets are opaque payload-bearing classes, exposing
+  value-free summaries; `UserSecretOriginalPolicy` retains original-value deny/force
+  accounting for both host selections and generated appsettings. Pure internal
   `EndpointAdaptation` handles URL, SQL Server, PostgreSQL, Oracle and recognized
   split-setting parsing/rewriting using only those ports, resolved effective settings
   and value-free diagnostic context; it performs no discovery, selection or copying.
   Selected host keys block generated replacements. Eligible appsettings-only
   values produce flat effective-key overrides subject to the same deny/filter
-  checks. `UserSecretsCopy.SharedStores.cs` merges generic generated-key candidates
+  checks. `SharedStoreOverrides` merges generic generated-key candidates
   against every consumer's desired effective values, including unchanged consumers.
   Only generated keys can conflict; host precedence and key filters are resolved
   first. Identical required values merge once with deterministic key spelling/order;
@@ -649,8 +660,10 @@ provenance below describes existing runtime metadata, not a kit lookup.
   authorities, SQL Server comma-port fields (optional `tcp:`), and separate
   Host/Server + Port database fields. Standard URL scheme defaults and the
   PostgreSQL Host default 5432 are eligible only when that same host port is mapped.
-  The internal `EndpointAdaptation.Oracle.cs` implementation handles Easy
-  Connect/Plus and structural descriptors, including quoted `Data Source` values.
+  The internal `OracleEndpointScanner` handles Oracle dispatch and outer fields;
+  `OracleSourceValue` maps quoted `Data Source` values back to original spans.
+  Specialized descriptor syntax/address and Easy Connect/options collaborators
+  interpret the supported forms without rebuilding them.
   It maps parsed host spans back to the original text, preserving credentials, service/SID names,
   options, formatting and compound remote/unmapped destinations. Easy Connect's
   default 1521 is eligible only if mapped; descriptors require explicit ports.
@@ -749,10 +762,13 @@ validates the complete plan, prints source occurrences and duplicate warnings, t
 asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset mappings.
 Discovery/reporting/application orchestration stays outside the command slice so
 the HTTPS and lifecycle slices can reuse it without importing a command.
-`AppPortDiscovery` owns one bounded filesystem walk/read policy for both formats and
-static explicit Web SDK / ASP.NET framework-reference project detection;
-`DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
-parsing. No extension framework or project-tool execution is involved. Angular #44
+`AppPortDiscovery` composes one ordered `BoundedDiscoveryFiles` walk, bounded ordinary-file
+snapshots in `DiscoveryFileContent`, and `StaticAspNetProject` classification. The latter
+keeps explicit Web SDK / ASP.NET framework-reference detection separate from the
+conservative malformed/unreadable-project error policy. `AppPortFormats` dispatches
+JSON to `DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript`;
+`DiscoveryDiagnostics` owns contextual safe errors. No extension framework or
+project-tool execution is involved. Angular #44
 includes options and all named serve configurations, and a conservative literal
 direct-CLI start-script grammar. See [scope/tests/live evidence](verification/angular-application-ports.md).
 

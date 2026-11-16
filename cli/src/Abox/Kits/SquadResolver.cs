@@ -8,6 +8,8 @@ namespace Abox.Kits;
 /// </summary>
 public sealed class SquadResolver(AboxConfig config)
 {
+    private readonly SquadSourceDiscovery _sources = new(config);
+
     /// <summary>
     /// Resolves a team: its folder in the teams folder of the project, and the squads
     /// of it that a team build makes, the ones no other squad names as its base.
@@ -16,76 +18,7 @@ public sealed class SquadResolver(AboxConfig config)
     /// <param name="teamName">The name of the team.</param>
     public ResolvedTeam ResolveTeam(string rootDirectory, string teamName)
     {
-        return Plan(TeamDirectory(rootDirectory, teamName));
-    }
-
-    /// <summary>The folder of a team, in the teams folders of the directory or a parent one.</summary>
-    private (string Folder, string RootDirectory) TeamDirectory(
-        string rootDirectory,
-        string teamName
-    )
-    {
-        foreach (var current in WalkUp(rootDirectory))
-        {
-            if (TeamFolder(current, teamName) is { } folder)
-            {
-                return (folder, current);
-            }
-        }
-
-        throw new AboxException(
-            $"There is no team '{teamName}' in the teams folders of '{rootDirectory}' or of one of its parent directories."
-        );
-    }
-
-    private string? TeamFolder(string directory, string teamName)
-    {
-        var teams = Path.Combine(directory, config.TeamsDirectory);
-        if (!Directory.Exists(teams))
-        {
-            return null;
-        }
-
-        return Directory
-            .EnumerateDirectories(teams)
-            .FirstOrDefault(candidate =>
-                Path.GetFileName(candidate).Equals(teamName, StringComparison.OrdinalIgnoreCase)
-            );
-    }
-
-    /// <summary>
-    /// The squads of a team are the ones no other squad of it names as its base.
-    /// </summary>
-    private ResolvedTeam Plan((string Folder, string RootDirectory) location)
-    {
-        var (folder, rootDirectory) = location;
-        var name = Path.GetFileName(folder);
-        var files = Directory.EnumerateFiles(folder, "*.abox").ToList();
-        if (files.Count == 0)
-        {
-            throw new AboxException($"There are no squads in the team folder '{folder}'.");
-        }
-
-        var bases = files
-            .Select(AboxFile.Load)
-            .Where(file => file.Base is not null)
-            .Select(file => file.Base!)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        var squads = files
-            .Select(file => Path.GetFileNameWithoutExtension(file))
-            .Where(squad => !bases.Contains(squad))
-            .Order(StringComparer.Ordinal)
-            .ToList();
-
-        if (squads.Count == 0)
-        {
-            throw new AboxException(
-                $"Every squad in the team folder '{folder}' is the base of another one."
-            );
-        }
-
-        return new ResolvedTeam(name, folder, squads) { RootDirectory = rootDirectory };
+        return _sources.ResolveTeam(rootDirectory, teamName);
     }
 
     public sealed record ResolvedTeam(string Name, string Folder, IReadOnlyList<string> Squads)
@@ -108,20 +41,10 @@ public sealed class SquadResolver(AboxConfig config)
         IReadOnlyList<string> personalConfigurations
     )
     {
-        var team = TeamDirectory(rootDirectory, teamName);
+        var team = _sources.TeamDirectory(rootDirectory, teamName);
 
-        var projectChain = LoadChain(new ConfigRoot(team.Folder, squadName), searchParents: true);
-        var personalChains = personalConfigurations
-            .Select(file =>
-                LoadChain(
-                    new ConfigRoot(
-                        Path.GetDirectoryName(file) ?? ".",
-                        Path.GetFileNameWithoutExtension(file)
-                    ),
-                    searchParents: false
-                )
-            )
-            .ToList();
+        var projectChain = _sources.LoadProjectChain(team.Folder, squadName);
+        var personalChains = personalConfigurations.Select(_sources.LoadPersonalChain).ToList();
 
         var files = projectChain.Concat(personalChains.SelectMany(chain => chain)).ToList();
 
@@ -148,164 +71,15 @@ public sealed class SquadResolver(AboxConfig config)
         );
     }
 
-    /// <summary>
-    /// Reads a configuration and the configurations it inherits from, the base first.
-    /// </summary>
-    private IReadOnlyList<AboxFile> LoadChain(ConfigRoot root, bool searchParents)
-    {
-        var chain = new List<AboxFile>();
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        var path =
-            FindConfigurationFileDirectly(root.Directory, root.Name)
-            ?? throw new AboxException(
-                $"There is no configuration '{root.Name}.abox' in '{root.Directory}'."
-            );
-
-        var directory = root.Directory;
-        while (true)
-        {
-            if (!visited.Add(path))
-            {
-                throw new AboxException(
-                    $"The configuration '{root.Name}' is part of a cycle: '{path}'."
-                );
-            }
-
-            var file = AboxFile.Load(path);
-            chain.Add(file);
-
-            if (file.Base is null)
-            {
-                break;
-            }
-
-            directory = Path.GetDirectoryName(path)!;
-            path = searchParents
-                ? FindBaseConfigurationFile(directory, file.Base)
-                : Path.Combine(directory, file.Base + ".abox");
-
-            if (!searchParents && !File.Exists(path))
-            {
-                throw new AboxException(
-                    $"There is no configuration '{file.Base}.abox' in '{directory}'."
-                );
-            }
-        }
-
-        chain.Reverse();
-        return chain;
-    }
-
-    /// <summary>
-    /// Finds the <c>.abox</c> file of a base. It is looked for in the team folders of
-    /// the given directory and of its parent ones, so the command works from anywhere
-    /// in a project. The name is matched without regard to case, so <c>AC</c> finds
-    /// <c>ac.abox</c>. A name that is in several team folders is an error: a base has
-    /// to name its file without a doubt.
-    /// </summary>
-    private string FindBaseConfigurationFile(string directory, string name)
-    {
-        // A base that the same team holds does not need to be searched for: the squad
-        // declares what its team brings.
-        if (FindConfigurationFileDirectly(directory, name) is { } own)
-        {
-            return own;
-        }
-
-        foreach (var current in WalkUp(directory))
-        {
-            if (FindBaseHere(current, name) is { } found)
-            {
-                return found;
-            }
-        }
-
-        throw new AboxException(
-            $"There is no configuration '{name}.abox' in the teams folders of '{directory}' or of one of its parent directories."
-        );
-    }
-
-    /// <summary>
-    /// Finds the <c>.abox</c> file of a name inside one directory, without regard to
-    /// case, so <c>AC</c> finds <c>ac.abox</c>.
-    /// </summary>
-    private static string? FindConfigurationFileDirectly(string directory, string name)
-    {
-        return FindNamedFiles(directory, name, "*.abox").FirstOrDefault();
-    }
-
-    private static IEnumerable<string> WalkUp(string directory)
-    {
-        var current = Path.GetFullPath(directory);
-        while (true)
-        {
-            yield return current;
-            var parent = Path.GetDirectoryName(current);
-            if (parent is null || parent == current)
-                yield break;
-            current = parent;
-        }
-    }
-
-    private static IEnumerable<string> FindNamedFiles(
-        string directory,
-        string name,
-        string pattern
-    ) =>
-        Directory
-            .EnumerateFiles(directory, pattern)
-            .Where(file =>
-                Path.GetFileNameWithoutExtension(file)
-                    .Equals(name, StringComparison.OrdinalIgnoreCase)
-            );
-
-    private string? FindBaseHere(string directory, string name)
-    {
-        var teams = Path.Combine(directory, config.TeamsDirectory);
-        if (!Directory.Exists(teams))
-        {
-            return null;
-        }
-
-        var matches = Directory
-            .EnumerateDirectories(teams)
-            .SelectMany(team => FindNamedFiles(team, name, "*.abox"))
-            .ToList();
-
-        if (matches.Count > 1)
-        {
-            throw new AboxException(
-                $"The base '{name}' is in several team folders: "
-                    + string.Join(", ", matches.Select(file => $"'{file}'"))
-                    + ". A base has to name its file without a doubt."
-            );
-        }
-
-        return matches.FirstOrDefault();
-    }
-
     private WorkloadFile ResolveWorkload(
         IReadOnlyList<AboxFile> projectChain,
         IReadOnlyList<IReadOnlyList<AboxFile>> personalChains,
         string rootDirectory
     )
     {
-        foreach (var chain in personalChains)
-        {
-            foreach (var file in chain)
-            {
-                if (file.Workload is not null)
-                {
-                    throw new AboxException(
-                        $"'{file.Path}' declares a workload. Only the root configuration of a squad declares one."
-                    );
-                }
-            }
-        }
-
-        var root = projectChain[0];
-        foreach (var file in projectChain.Skip(1))
+        // Personal chains are checked first, then project children, preserving error precedence.
+        var additions = personalChains.SelectMany(chain => chain).Concat(projectChain.Skip(1));
+        foreach (var file in additions)
         {
             if (file.Workload is not null)
             {
@@ -315,41 +89,13 @@ public sealed class SquadResolver(AboxConfig config)
             }
         }
 
+        var root = projectChain[0];
         if (root.Workload is null)
         {
             throw new AboxException($"'{root.Path}' declares no workload. A squad needs one.");
         }
 
-        var path = FindWorkloadFile(root.Directory, root.Workload, rootDirectory);
-        return WorkloadFile.Load(path);
-    }
-
-    /// <summary>
-    /// Finds the <c>.workload</c> file. The workloads of a team live next to its
-    /// squads; the shared workloads live in the kits folder of the project.
-    /// </summary>
-    private string FindWorkloadFile(string teamDirectory, string name, string rootDirectory)
-    {
-        var team = Path.Combine(teamDirectory, name + ".workload");
-        if (File.Exists(team))
-        {
-            return team;
-        }
-
-        var kitsDirectory = Path.Combine(rootDirectory, config.KitsDirectory);
-        if (!Directory.Exists(kitsDirectory))
-        {
-            throw new AboxException(
-                $"There is no workload '{name}.workload' in '{teamDirectory}' and no kits directory '{kitsDirectory}'."
-            );
-        }
-
-        var match = FindNamedFiles(kitsDirectory, name, "*.workload").FirstOrDefault();
-
-        return match
-            ?? throw new AboxException(
-                $"There is no workload '{name}.workload' in '{teamDirectory}' or in '{kitsDirectory}'."
-            );
+        return _sources.LoadWorkload(root, rootDirectory);
     }
 
     private static IReadOnlyDictionary<string, string> MergeParameters(
@@ -357,19 +103,13 @@ public sealed class SquadResolver(AboxConfig config)
     )
     {
         var parameters = new Dictionary<string, string>(StringComparer.Ordinal);
-        var origins = new Dictionary<string, string>(StringComparer.Ordinal);
+        var origins = new DeclarationOrigins("A parameter is declared once.");
 
         foreach (var file in files)
         {
             foreach (var (name, value) in file.Parameters)
             {
-                RejectDuplicate(
-                    origins,
-                    name,
-                    file.Path,
-                    $"parameter '{name}'",
-                    "A parameter is declared once."
-                );
+                origins.Add(name, file.Path, $"parameter '{name}'");
                 parameters[name] = value;
             }
         }
@@ -384,19 +124,13 @@ public sealed class SquadResolver(AboxConfig config)
     )
     {
         var kits = new List<KitSource>();
-        var origins = new Dictionary<string, string>(StringComparer.Ordinal);
+        var origins = new DeclarationOrigins("One repository is used once.");
 
         foreach (var file in files)
         {
             foreach (var kit in file.Kits)
             {
-                RejectDuplicate(
-                    origins,
-                    kit.Repository,
-                    file.Path,
-                    $"kit '{kit.Name}'",
-                    "One repository is used once."
-                );
+                origins.Add(kit.Repository, file.Path, $"kit '{kit.Name}'");
 
                 var arguments = kit.Arguments.ToDictionary(
                     argument => argument.Key,
@@ -404,34 +138,11 @@ public sealed class SquadResolver(AboxConfig config)
                     StringComparer.Ordinal
                 );
 
-                kits.Add(ResolveKit(kit, arguments, file, rootDirectory));
+                kits.Add(_sources.ResolveKit(kit, arguments, file, rootDirectory));
             }
         }
 
         return kits;
-    }
-
-    private KitSource ResolveKit(
-        KitDeclaration kit,
-        IReadOnlyDictionary<string, string> arguments,
-        AboxFile file,
-        string rootDirectory
-    )
-    {
-        if (KitReference.IsRegistryReference(kit.Name))
-        {
-            return new KitSource(kit.Name, null, kit.Name, arguments);
-        }
-
-        var directory = Path.Combine(rootDirectory, config.KitsDirectory, kit.Name);
-        if (!Directory.Exists(directory))
-        {
-            throw new AboxException(
-                $"The kit '{kit.Name}' of '{file.Path}' is not in '{directory}'."
-            );
-        }
-
-        return new KitSource(kit.Name, directory, null, arguments);
     }
 
     private static IReadOnlyList<McpDeclaration> MergeMcp(
@@ -440,19 +151,13 @@ public sealed class SquadResolver(AboxConfig config)
     )
     {
         var servers = new List<McpDeclaration>();
-        var origins = new Dictionary<string, string>(StringComparer.Ordinal);
+        var origins = new DeclarationOrigins("A server is declared once.");
 
         foreach (var file in files)
         {
             foreach (var server in file.Mcp)
             {
-                RejectDuplicate(
-                    origins,
-                    server.Name,
-                    file.Path,
-                    $"MCP server '{server.Name}'",
-                    "A server is declared once."
-                );
+                origins.Add(server.Name, file.Path, $"MCP server '{server.Name}'");
 
                 servers.Add(
                     new McpDeclaration(
@@ -471,19 +176,13 @@ public sealed class SquadResolver(AboxConfig config)
     private static IReadOnlyList<SecretDeclaration> MergeSecrets(IReadOnlyList<AboxFile> files)
     {
         var secrets = new List<SecretDeclaration>();
-        var origins = new Dictionary<string, string>(StringComparer.Ordinal);
+        var origins = new DeclarationOrigins("A secret is declared once.");
 
         foreach (var file in files)
         {
             foreach (var secret in file.Secrets)
             {
-                RejectDuplicate(
-                    origins,
-                    secret.Service,
-                    file.Path,
-                    $"secret '{secret.Service}'",
-                    "A secret is declared once."
-                );
+                origins.Add(secret.Service, file.Path, $"secret '{secret.Service}'");
                 secrets.Add(secret);
             }
         }
@@ -494,7 +193,7 @@ public sealed class SquadResolver(AboxConfig config)
     private static IReadOnlyList<StateEntry> MergeState(IReadOnlyList<AboxFile> files)
     {
         var entries = new List<StateEntry>();
-        var origins = new Dictionary<string, string>(StringComparer.Ordinal);
+        var origins = new DeclarationOrigins("A state directory is declared once.");
 
         foreach (var file in files)
         {
@@ -502,13 +201,7 @@ public sealed class SquadResolver(AboxConfig config)
             {
                 var entry = StateEntry.Parse(value);
 
-                RejectDuplicate(
-                    origins,
-                    entry.SandboxPath,
-                    file.Path,
-                    $"state directory '{value}'",
-                    "A state directory is declared once."
-                );
+                origins.Add(entry.SandboxPath, file.Path, $"state directory '{value}'");
 
                 entries.Add(entry);
             }
@@ -518,18 +211,21 @@ public sealed class SquadResolver(AboxConfig config)
         return entries;
     }
 
-    private static void RejectDuplicate(
-        Dictionary<string, string> origins,
-        string key,
-        string path,
-        string declaration,
-        string rule
-    )
+    /// <summary>Tracks the first source for a declaration-specific identity, not merged values.</summary>
+    private sealed class DeclarationOrigins(string rule)
     {
-        if (origins.TryGetValue(key, out var origin))
-            throw new AboxException(
-                $"The {declaration} is declared twice: in '{origin}' and in '{path}'. {rule}"
-            );
-        origins[key] = path;
+        private readonly Dictionary<string, string> _paths = new(StringComparer.Ordinal);
+
+        internal void Add(string key, string path, string declaration)
+        {
+            if (_paths.TryGetValue(key, out var origin))
+            {
+                throw new AboxException(
+                    $"The {declaration} is declared twice: in '{origin}' and in '{path}'. {rule}"
+                );
+            }
+
+            _paths.Add(key, path);
+        }
     }
 }

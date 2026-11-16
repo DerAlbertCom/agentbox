@@ -1,9 +1,36 @@
 using static Abox.UserSecrets.EndpointAdaptation;
+using static Abox.UserSecrets.SharedStoreOverrides;
+using static Abox.UserSecrets.UserSecretOriginalPolicy;
 
 namespace Abox.UserSecrets;
 
-public sealed partial class UserSecretsCopy
+internal static class SelectedSecretTargets
 {
+    internal static IReadOnlyDictionary<string, string> Build(
+        UserSecretSnapshot store,
+        IReadOnlyList<ProjectSettings> projects,
+        HashSet<int> ports
+    )
+    {
+        var targets = new Dictionary<string, string>(
+            SelectedSplitSettings(store, projects, ports),
+            StringComparer.OrdinalIgnoreCase
+        );
+        foreach (var (key, value) in store.Values)
+            if (value is not null && !targets.ContainsKey(key))
+                targets.Add(
+                    key,
+                    EndpointAdaptation.Rewrite(
+                        value,
+                        ports,
+                        key,
+                        store.Values,
+                        DescribeSetting(store.Id, key, null)
+                    )
+                );
+        return targets;
+    }
+
     private static IReadOnlyDictionary<string, string> SelectedSplitSettings(
         UserSecretSnapshot store,
         IReadOnlyList<ProjectSettings> projects,
@@ -43,19 +70,5 @@ public sealed partial class UserSecretsCopy
             adapted.TryGetValue(DatabaseHostKey, out var adaptedHost) ? adaptedHost : host
         );
         return result;
-    }
-
-    private static Dictionary<string, string?> EffectiveSettings(
-        ProjectSettings project,
-        UserSecretSnapshot store
-    )
-    {
-        var effective = new Dictionary<string, string?>(
-            project.AllSettings,
-            StringComparer.OrdinalIgnoreCase
-        );
-        foreach (var (key, value) in store.Values)
-            effective[key] = value;
-        return effective;
     }
 }

@@ -21,4 +21,22 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Abox/Abox.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Content
+      Include="../../../docs/verification/application-ports/ReceiverChecks.py"
+      Link="Fixtures/Verification/ApplicationPortsReceiverChecks.py"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
+      Include="../../../kits/opencode-config/opencode-config.yaml;../../../kits/pi-config/pi-config.yaml"
+      Link="Fixtures/Kits/%(Filename)/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+    <Content
+      Include="../../../docs/verification/user-secrets/metadata/*.policy.kit.json"
+      Link="Fixtures/Verification/%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
 </Project>

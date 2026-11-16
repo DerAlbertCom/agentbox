@@ -1,6 +1,6 @@
-using System.Security.Cryptography;
-using System.Security.Cryptography.X509Certificates;
-using System.Text.Json;
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
+using System.Security.Principal;
 using Abox.Https;
 using Abox.Infrastructure;
 using NSubstitute;
@@ -59,20 +59,7 @@ public sealed class HostDevelopmentCertificateTests
     {
         // Arrange
         using var root = new CertificateTestDirectory();
-        var tool = Path.Combine(
-            root.Path,
-            "sdk",
-            "10.0.100",
-            "DotnetTools",
-            "dotnet-dev-certs",
-            "10.0.0",
-            "tools",
-            "net10.0",
-            "any",
-            "dotnet-dev-certs.dll"
-        );
-        Directory.CreateDirectory(Path.GetDirectoryName(tool)!);
-        File.Copy(typeof(HostDevelopmentCertificateTests).Assembly.Location, tool);
+        var tool = InstallSyntheticTool(root.Path, "10.0.100");
         var runner = Substitute.For<IProcessRunner>();
         runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
@@ -113,6 +100,122 @@ public sealed class HostDevelopmentCertificateTests
                 ),
                 Arg.Any<CancellationToken>()
             );
+    }
+
+    [Fact]
+    public async Task InstalledToolFormatRatherThanSdkMajorAuthorizesExactExport()
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        using var identity = new SyntheticDevelopmentCertificate();
+        var tool = InstallSyntheticTool(root.Path, "99.0.100-preview.1");
+        const string password = "generated-test-password";
+        var bytes = identity.Export(password);
+        var calls = new List<ProcessRequest>();
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call =>
+            {
+                var child = call.Arg<ProcessRequest>();
+                calls.Add(child);
+                if (child.Arguments.Contains("--list-sdks"))
+                    return new ProcessResult(
+                        0,
+                        $"malformed listing\n99.0.100-preview.1 [{Path.Combine(root.Path, "sdk")}]",
+                        "secret"
+                    );
+                if (child.Arguments.Contains("--export-path"))
+                {
+                    AssertPrivateExportDestination(child);
+                    File.WriteAllBytes(ExportPath(child), bytes);
+                }
+                return new ProcessResult(0, identity.Metadata().ToJsonString(), "secret");
+            });
+        var exporter = new HostDevelopmentCertificate(runner, new TestConsole(), root.Path, null);
+
+        // Act
+        using var exported = await exporter.ExportAsync(password, CancellationToken.None);
+
+        // Assert
+        exported.Pfx.ToArray().Should().Equal(bytes);
+        calls.Should().HaveCount(4);
+        calls.Skip(1).Should().OnlyContain(call => call.Arguments[1] == tool);
+        AssertSafeToolCalls(calls);
+        Directory.GetDirectories(root.Path, "abox-certificate-*").Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData("listing-failed")]
+    [InlineData("malformed-listing")]
+    [InlineData("missing-tool")]
+    [InlineData("invalid-pe")]
+    [InlineData("no-format-constant")]
+    public async Task FailedOrUnknownInstalledToolDiscoveryCannotReachCertificateOperations(
+        string condition
+    )
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        var tool = InstallSyntheticTool(root.Path, "10.0.100");
+        if (condition == "missing-tool")
+            File.Delete(tool);
+        if (condition == "invalid-pe")
+            File.WriteAllText(tool, "not an assembly");
+        if (condition == "no-format-constant")
+            File.Copy(typeof(HostDevelopmentCertificate).Assembly.Location, tool, overwrite: true);
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProcessResult(
+                    condition == "listing-failed" ? 9 : 0,
+                    condition == "malformed-listing"
+                        ? "private malformed output"
+                        : $"10.0.100 [{Path.Combine(root.Path, "sdk")}]",
+                    "private diagnostic"
+                )
+            );
+        var exporter = new HostDevelopmentCertificate(runner, new TestConsole(), root.Path, null);
+
+        // Act
+        var action = () => exporter.ExportAsync("generated-test-password", CancellationToken.None);
+
+        // Assert
+        var error = (await action.Should().ThrowAsync<AboxException>()).Which;
+        error
+            .ToString()
+            .Should()
+            .NotContain("private diagnostic")
+            .And.NotContain("private malformed output");
+        runner.ReceivedCalls().Should().ContainSingle();
+        await runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.SequenceEqual(new[] { "--list-sdks" })
+                ),
+                Arg.Any<CancellationToken>()
+            );
+        Directory.GetDirectories(root.Path, "abox-certificate-*").Should().BeEmpty();
+    }
+
+    private static string InstallSyntheticTool(string root, string version)
+    {
+        var path = Path.Combine(
+            root,
+            "sdk",
+            version,
+            "DotnetTools",
+            "dotnet-dev-certs",
+            "tools",
+            "net10.0",
+            "any",
+            "dotnet-dev-certs.dll"
+        );
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.Copy(typeof(HostDevelopmentCertificateTests).Assembly.Location, path);
+        return path;
     }
 
     [Theory]
@@ -211,6 +314,10 @@ public sealed class HostDevelopmentCertificateTests
     [InlineData("[]")]
     [InlineData("")]
     [InlineData("not-json private diagnostic")]
+    [InlineData("{}")]
+    [InlineData("[{}]")]
+    [InlineData("[{\"Thumbprint\":true}]")]
+    [InlineData("[{\"Thumbprint\":\"A\",\"Thumbprint\":\"B\"}]")]
     public async Task MissingOrMalformedMetadataCannotReachTheCreatingCliExportPath(string metadata)
     {
         // Arrange
@@ -250,42 +357,10 @@ public sealed class HostDevelopmentCertificateTests
     {
         // Arrange
         using var root = new CertificateTestDirectory();
-        using var key = RSA.Create(2048);
-        var request = new CertificateRequest(
-            "CN=localhost",
-            key,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1
-        );
-        var san = new SubjectAlternativeNameBuilder();
-        san.AddDnsName("localhost");
-        request.CertificateExtensions.Add(san.Build());
-        request.CertificateExtensions.Add(
-            new X509Extension("1.3.6.1.4.1.311.84.1.1", [(byte)format], false)
-        );
-        using var certificate = request.CreateSelfSigned(
-            DateTimeOffset.UtcNow.AddDays(-1),
-            DateTimeOffset.UtcNow.AddDays(10)
-        );
+        using var identity = new SyntheticDevelopmentCertificate(format);
         const string password = "generated-test-password";
-        var bytes = certificate.Export(X509ContentType.Pfx, password);
-        var metadata = JsonSerializer.Serialize(
-            new[]
-            {
-                new
-                {
-                    certificate.Thumbprint,
-                    certificate.Subject,
-                    Version = format,
-                    ValidityNotBefore = certificate.NotBefore.ToUniversalTime(),
-                    ValidityNotAfter = certificate.NotAfter.ToUniversalTime(),
-                    IsHttpsDevelopmentCertificate = true,
-                    IsExportable = true,
-                    TrustLevel = "Full",
-                    X509SubjectAlternativeNameExtension = new[] { "localhost" },
-                },
-            }
-        );
+        var bytes = identity.Export(password);
+        var metadata = identity.Metadata().ToJsonString();
         var runner = Substitute.For<IProcessRunner>();
         var calls = new List<ProcessRequest>();
         runner
@@ -296,7 +371,7 @@ public sealed class HostDevelopmentCertificateTests
                 calls.Add(child);
                 if (child.Arguments.Contains("--export-path"))
                 {
-                    child.OutputPolicy.Should().Be(ProcessOutputPolicy.Sensitive);
+                    AssertPrivateExportDestination(child);
                     File.WriteAllBytes(
                         child.Arguments[
                             Array.IndexOf(child.Arguments.ToArray(), "--export-path") + 1
@@ -330,6 +405,35 @@ public sealed class HostDevelopmentCertificateTests
             .Single(call => call.Arguments.Contains("--export-path"))
             .Arguments.Should()
             .Contain(format == 6 ? "newer-installed-tool" : "older-installed-tool");
+        AssertSafeToolCalls(calls);
+        Directory.GetFileSystemEntries(root.Path).Should().BeEmpty();
+        var ownedBytes = exported.Pfx;
+        exported.Dispose();
+        ownedBytes.ToArray().Should().OnlyContain(value => value == 0);
+        bytes.Should().Contain(value => value != 0);
+    }
+
+    private static void AssertPrivateExportDestination(ProcessRequest child)
+    {
+        child.OutputPolicy.Should().Be(ProcessOutputPolicy.Sensitive);
+        var path = child.Arguments[Array.IndexOf(child.Arguments.ToArray(), "--export-path") + 1];
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.GetFileSystemEntries(directory).Should().BeEmpty();
+        foreach (var name in new[] { "TMPDIR", "TMP", "TEMP" })
+            child.Environment![name].Should().Be(directory);
+        File.GetAttributes(directory).Should().NotHaveFlag(FileAttributes.ReparsePoint);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.GetUnixFileMode(directory)
+                .Should()
+                .Be(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            return;
+        }
+        AssertPrivateWindowsDirectory(directory);
+    }
+
+    private static void AssertSafeToolCalls(IReadOnlyList<ProcessRequest> calls)
+    {
         calls
             .Where(call => !call.Arguments.Contains("--export-path"))
             .Should()
@@ -339,7 +443,29 @@ public sealed class HostDevelopmentCertificateTests
             .OnlyContain(call =>
                 call.Environment!["DOTNET_GENERATE_ASPNET_CERTIFICATE"] == "false"
             );
-        Directory.GetFileSystemEntries(root.Path).Should().BeEmpty();
+        calls.Should().OnlyContain(call => call.StandardInput == "");
+    }
+
+    private static string ExportPath(ProcessRequest child) =>
+        child.Arguments[Array.IndexOf(child.Arguments.ToArray(), "--export-path") + 1];
+
+    [SupportedOSPlatform("windows")]
+    private static void AssertPrivateWindowsDirectory(string directory)
+    {
+        var acl = new DirectoryInfo(directory).GetAccessControl();
+        var user = WindowsIdentity.GetCurrent().User!;
+        acl.AreAccessRulesProtected.Should().BeTrue();
+        acl.GetOwner(typeof(SecurityIdentifier)).Should().Be(user);
+        var rule = acl.GetAccessRules(true, true, typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>()
+            .Should()
+            .ContainSingle()
+            .Which;
+        rule.IdentityReference.Should().Be(user);
+        rule.AccessControlType.Should().Be(AccessControlType.Allow);
+        rule.FileSystemRights.Should().Be(FileSystemRights.FullControl);
+        rule.InheritanceFlags.Should()
+            .Be(InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit);
     }
 
     [Theory]
@@ -353,7 +479,15 @@ public sealed class HostDevelopmentCertificateTests
     [InlineData("post-empty")]
     [InlineData("post-multiple")]
     [InlineData("post-renewed")]
+    [InlineData("post-version")]
+    [InlineData("post-valid-from")]
+    [InlineData("post-valid-until")]
+    [InlineData("post-cancel")]
     [InlineData("partial-export")]
+    [InlineData("missing-pfx")]
+    [InlineData("empty-pfx")]
+    [InlineData("oversized-pfx")]
+    [InlineData("invalid-pfx")]
     [InlineData("throw")]
     [InlineData("cancel")]
     public async Task ExportedMaterialAndFreshTrustMustAgreeOrPrivateStagingIsCleaned(
@@ -362,130 +496,26 @@ public sealed class HostDevelopmentCertificateTests
     {
         // Arrange
         using var root = new CertificateTestDirectory();
-        using var key = RSA.Create(2048);
-        var request = new CertificateRequest(
-            "CN=localhost",
-            key,
-            HashAlgorithmName.SHA256,
-            RSASignaturePadding.Pkcs1
-        );
-        var san = new SubjectAlternativeNameBuilder();
-        san.AddDnsName(condition == "bad-san" ? "not-localhost" : "localhost");
-        request.CertificateExtensions.Add(san.Build());
-        request.CertificateExtensions.Add(
-            new X509Extension(
-                "1.3.6.1.4.1.311.84.1.1",
-                [condition == "bad-format" ? (byte)4 : (byte)6],
-                false
-            )
-        );
-        using var certificate = request.CreateSelfSigned(
-            condition == "future-pfx"
-                ? DateTimeOffset.UtcNow.AddDays(1)
-                : DateTimeOffset.UtcNow.AddDays(-10),
-            condition == "expired-pfx"
-                ? DateTimeOffset.UtcNow.AddDays(-1)
-                : DateTimeOffset.UtcNow.AddDays(10)
-        );
         const string password = "generated-test-password";
-        using var publicOnly = X509CertificateLoader.LoadCertificate(certificate.RawData);
-        var bytes = (condition == "no-key" ? publicOnly : certificate).Export(
-            X509ContentType.Pfx,
-            password
-        );
-        var before = new System.Text.Json.Nodes.JsonArray(
-            new System.Text.Json.Nodes.JsonObject
-            {
-                ["Thumbprint"] =
-                    condition == "wrong-identity" ? new string('A', 40) : certificate.Thumbprint,
-                ["Subject"] = "CN=localhost",
-                ["Version"] = 6,
-                ["ValidityNotBefore"] =
-                    condition == "future-pfx"
-                        ? DateTime.UtcNow.AddDays(-1)
-                        : certificate.NotBefore.ToUniversalTime(),
-                ["ValidityNotAfter"] =
-                    condition == "expired-pfx"
-                        ? DateTime.UtcNow.AddDays(1)
-                        : certificate.NotAfter.ToUniversalTime(),
-                ["IsHttpsDevelopmentCertificate"] = true,
-                ["IsExportable"] = true,
-                ["TrustLevel"] = "Full",
-                ["X509SubjectAlternativeNameExtension"] = new System.Text.Json.Nodes.JsonArray(
-                    "localhost"
-                ),
-            }
-        );
-        var after = before.DeepClone().AsArray();
-        switch (condition)
-        {
-            case "post-untrusted":
-                after[0]!["TrustLevel"] = "None";
-                break;
-            case "post-empty":
-                after.Clear();
-                break;
-            case "post-multiple":
-                after.Add(after[0]!.DeepClone());
-                break;
-            case "post-renewed":
-                after[0]!["Thumbprint"] = new string('B', 40);
-                break;
-        }
-        using var cancellation = new CancellationTokenSource();
-        var runner = Substitute.For<IProcessRunner>();
-        var read = 0;
-        runner
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var child = call.Arg<ProcessRequest>();
-                if (!child.Arguments.Contains("--export-path"))
-                    return Task.FromResult(
-                        new ProcessResult(
-                            0,
-                            (read++ == 0 ? before : after).ToJsonString(),
-                            "secret metadata"
-                        )
-                    );
-                var path = child.Arguments[
-                    Array.IndexOf(child.Arguments.ToArray(), "--export-path") + 1
-                ];
-                File.WriteAllBytes(path, bytes);
-                if (condition == "cancel")
-                {
-                    cancellation.Cancel();
-                    return Task.FromException<ProcessResult>(
-                        new OperationCanceledException("secret cancellation", cancellation.Token)
-                    );
-                }
-                if (condition == "throw")
-                    return Task.FromException<ProcessResult>(new IOException("secret export"));
-                return Task.FromResult(
-                    new ProcessResult(
-                        condition == "partial-export" ? 9 : 0,
-                        "secret export",
-                        "secret password"
-                    )
-                );
-            });
+        using var cli = new SyntheticCertificateExport(condition, password);
         var exporter = new HostDevelopmentCertificate(
-            runner,
+            cli.Runner,
             new TestConsole(),
             root.Path,
             [new("tool", 6)]
         );
 
         // Act
-        var action = () => exporter.ExportAsync(password, cancellation.Token);
+        var action = () => exporter.ExportAsync(password, cli.Token);
 
         // Assert
-        Exception failure =
-            condition == "cancel"
-                ? (await action.Should().ThrowAsync<OperationCanceledException>()).Which
-                : (await action.Should().ThrowAsync<AboxException>()).Which;
+        Exception failure = condition is "cancel" or "post-cancel"
+            ? (await action.Should().ThrowAsync<OperationCanceledException>()).Which
+            : (await action.Should().ThrowAsync<AboxException>()).Which;
         failure.ToString().Should().NotContain("secret").And.NotContain(password);
         failure.InnerException.Should().BeNull();
+        if (failure is OperationCanceledException canceled)
+            canceled.CancellationToken.Should().Be(cli.Token);
         Directory.GetFileSystemEntries(root.Path).Should().BeEmpty();
     }
 }

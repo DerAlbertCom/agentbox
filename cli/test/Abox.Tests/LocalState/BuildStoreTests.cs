@@ -5,21 +5,13 @@ namespace Abox.Tests;
 
 public sealed class BuildStoreTests
 {
-    private readonly TempDirectory _root = new();
-    private readonly BuildStore _store;
-
-    public BuildStoreTests()
-    {
-        _store = new BuildStore(
-            AboxPaths.For(Path.Combine(_root.Path, "config"), Path.Combine(_root.Path, "state"))
-        );
-    }
-
     [Fact]
     public void ABuildIsKeptUnderItsSquadAndTag()
     {
         // Arrange
-        _store.Save(
+        using var root = new TempDirectory();
+        var store = Store(root);
+        store.Save(
             new BuildManifest
             {
                 Squad = "ac",
@@ -29,7 +21,7 @@ public sealed class BuildStoreTests
         );
 
         // Act
-        var manifest = _store.Load("sample", "ac", "latest");
+        var manifest = store.Load("sample", "ac", "latest");
 
         // Assert
         manifest.Should().NotBeNull();
@@ -41,9 +33,11 @@ public sealed class BuildStoreTests
     public void ABuildThatIsNotThereIsNull()
     {
         // Arrange: the store has no saved build.
+        using var root = new TempDirectory();
+        var store = Store(root);
 
         // Act
-        var manifest = _store.Load("sample", "ac", "latest");
+        var manifest = store.Load("sample", "ac", "latest");
 
         // Assert
         manifest.Should().BeNull();
@@ -53,12 +47,14 @@ public sealed class BuildStoreTests
     public void ABuildThatIsNotReadableIsAnError()
     {
         // Arrange
-        var directory = _store.DirectoryFor("sample", "ac", "latest");
+        using var root = new TempDirectory();
+        var store = Store(root);
+        var directory = store.DirectoryFor("sample", "ac", "latest");
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "build.json"), "not json");
 
         // Act
-        var action = () => _store.Load("sample", "ac", "latest");
+        var action = () => store.Load("sample", "ac", "latest");
 
         // Assert
         action.Should().Throw<AboxException>().WithMessage("*not readable*");
@@ -68,35 +64,12 @@ public sealed class BuildStoreTests
     public void TheKitsAndStateOfABuildSurviveTheRoundTrip()
     {
         // Arrange
-        _store.Save(
-            new BuildManifest
-            {
-                Squad = "ac",
-                Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
-                WorkloadKitDirectory = "/kits/workload",
-                Kits =
-                [
-                    new ManifestKit
-                    {
-                        Name = "pi-config",
-                        Reference = "/kits/pi-config",
-                        IsLocal = true,
-                    },
-                ],
-                State =
-                [
-                    new ManifestState
-                    {
-                        SandboxPath = "/home/agent/.config/opencode",
-                        RelativePath = ".config/opencode",
-                    },
-                ],
-            }
-        );
+        using var root = new TempDirectory();
+        var store = Store(root);
+        store.Save(ManifestWithKitsAndState());
 
         // Act
-        var manifest = _store.Load("sample", "ac", "latest")!;
+        var manifest = store.Load("sample", "ac", "latest")!;
 
         // Assert
         manifest.WorkloadKitDirectory.Should().Be("/kits/workload");
@@ -107,4 +80,33 @@ public sealed class BuildStoreTests
             .Which.SandboxPath.Should()
             .Be("/home/agent/.config/opencode");
     }
+
+    private static BuildStore Store(TempDirectory root) =>
+        new(AboxPaths.For(Path.Combine(root.Path, "config"), Path.Combine(root.Path, "state")));
+
+    private static BuildManifest ManifestWithKitsAndState() =>
+        new()
+        {
+            Squad = "ac",
+            Tag = "latest",
+            Reference = "agentbox-rwest-sample:latest",
+            WorkloadKitDirectory = "/kits/workload",
+            Kits =
+            [
+                new ManifestKit
+                {
+                    Name = "pi-config",
+                    Reference = "/kits/pi-config",
+                    IsLocal = true,
+                },
+            ],
+            State =
+            [
+                new ManifestState
+                {
+                    SandboxPath = "/home/agent/.config/opencode",
+                    RelativePath = ".config/opencode",
+                },
+            ],
+        };
 }

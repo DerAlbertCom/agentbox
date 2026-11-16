@@ -117,6 +117,56 @@ public sealed class PrunePlanTests
             .BeEquivalentTo<TemplateImage>(full ? [newest, stale, source] : [stale, source]);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void GroupAgeIncludesAliasesAndKitsWhilePartitionsPreserveOrderAndDuplicates(bool full)
+    {
+        // Arrange
+        var root = Image("sandbox-kit-assembled", "new-a", "root", 1);
+        var alias = Image("sandbox-kit-assembled", "new-a-template", "alias", 4);
+        var tiedKit = Image("sandbox-kit-assembled", "new-b-kit-12", "kit", 4);
+        var source = Image("sbx-kit-src", "shared", "root", 1);
+        var stale = Image("sandbox-kit-assembled", "old", "root", 3);
+        var unrelated = Image("other", "new", "other", 5);
+        TemplateImage[] images = [stale, root, unrelated, alias, stale, tiedKit, source];
+
+        // Act
+        var plan = full ? PruneService.Everything(images) : PruneService.Plan(images);
+
+        // Assert
+        plan.Keep.Should().Equal(full ? [unrelated] : [root, unrelated, alias, tiedKit, source]);
+        plan.Remove.Should()
+            .Equal(full ? [stale, root, alias, stale, tiedKit, source] : [stale, stale]);
+    }
+
+    [Theory]
+    [InlineData(false, " ")]
+    [InlineData(true, " ")]
+    [InlineData(false, "\t")]
+    [InlineData(true, "\t")]
+    [InlineData(false, null)]
+    [InlineData(true, null)]
+    public void BlankAssembledIdentityProtectsItsAliasesAndEveryPotentialSource(
+        bool full,
+        string? id
+    )
+    {
+        // Arrange
+        var uncertain = Image("sandbox-kit-assembled", "old-kit-10", id!, 1);
+        var alias = Image("sandbox-kit-assembled", "old-template", "alias", 1);
+        var source = Image("sbx-kit-src", "potential", "source", 1);
+        var newest = Image("sandbox-kit-assembled", "new", "new", 2);
+        TemplateImage[] images = [uncertain, alias, source, newest];
+
+        // Act
+        var plan = full ? PruneService.Everything(images) : PruneService.Plan(images);
+
+        // Assert
+        plan.Keep.Should().Equal(full ? [uncertain, alias, source] : images);
+        plan.Remove.Should().Equal(full ? [newest] : []);
+    }
+
     private static TemplateImage Image(string repository, string tag, string id, int day) =>
         new(repository, tag, id, new DateTimeOffset(2026, 11, day, 0, 0, 0, TimeSpan.Zero));
 }

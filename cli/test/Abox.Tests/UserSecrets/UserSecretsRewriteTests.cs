@@ -14,7 +14,7 @@ public sealed class UserSecretsRewriteTests
     {
         // Arrange
         using var fixture = new CopyFixture("abox-issue5-local-191454a2");
-        fixture.Inventory = File.ReadAllText(RepositoryFile("local.policy.kit.json"));
+        fixture.Inventory = File.ReadAllText(VerificationFile("local.policy.kit.json"));
         fixture.Store("sample", """{"Url":"https://127.0.0.1:8006/path?x=localhost:8004"}""");
 
         // Act
@@ -33,6 +33,14 @@ public sealed class UserSecretsRewriteTests
     }
 
     [Theory]
+    [InlineData(
+        ";; Network Address = 'tcp:LOCALHOST,08004' ; Password = 'synthetic;it''s=localhost,8004';;",
+        ";; Network Address = 'tcp:host.docker.internal,08004' ; Password = 'synthetic;it''s=localhost,8004';;"
+    )]
+    [InlineData(
+        "Password=\"synthetic;\"\"quoted\"; Host = '[::1]:08004' ;Application Name=localhost",
+        "Password=\"synthetic;\"\"quoted\"; Host = 'host.docker.internal:08004' ;Application Name=localhost"
+    )]
     [InlineData(
         "Server=localhost,8004;Database=local;Password='localhost,8004;http://localhost:8004'",
         "Server=host.docker.internal,8004;Database=local;Password='localhost,8004;http://localhost:8004'"
@@ -67,6 +75,13 @@ public sealed class UserSecretsRewriteTests
     }
 
     [Theory]
+    [InlineData("Password='unfinished;Server=localhost,8004")]
+    [InlineData("Password={synthetic;Host=localhost;Port=8004}")]
+    [InlineData("Server=named.internal,8004;Password='unfinished")]
+    [InlineData("postgresql://localhost:8004/db?hostaddr=192.0.2.1&sslmode=verify-full")]
+    [InlineData(
+        "postgresql://named.internal:8004/db?host=localhost,remote.test&hostaddr=,192.0.2.1&port=5000,8004"
+    )]
     [InlineData("https://sql.internal:8004/path")]
     [InlineData("https://host.docker.internal:8004/path")]
     [InlineData("https://localhost:5432/path")]
@@ -131,7 +146,7 @@ public sealed class UserSecretsRewriteTests
     {
         // Arrange
         using var fixture = new CopyFixture();
-        fixture.Inventory = File.ReadAllText(RepositoryFile("published.policy.kit.json"));
+        fixture.Inventory = File.ReadAllText(VerificationFile("published.policy.kit.json"));
         fixture.Store("sample", """{"Url":"http://localhost:8004"}""");
 
         // Act
@@ -242,20 +257,33 @@ public sealed class UserSecretsRewriteTests
             exception.Message.Should().Contain("policy ls").And.Contain("policy check");
     }
 
-    [Fact]
-    public async Task APreparedSnapshotIsReusableWithoutMutatingItsOriginalHostValues()
+    [Theory]
+    [InlineData("http://localhost:8004", "http://host.docker.internal:8004")]
+    [InlineData(
+        "//localhost:8004/synthetic-service",
+        "//host.docker.internal:8004/synthetic-service"
+    )]
+    [InlineData(
+        "Data Source='(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=8004))'",
+        "Data Source='(ADDRESS=(PROTOCOL=TCP)(HOST=host.docker.internal)(PORT=8004))'"
+    )]
+    public async Task APreparedSnapshotIsReusableWithoutMutatingItsOriginalHostValues(
+        string original,
+        string expected
+    )
     {
         // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004);
-        fixture.Store("sample", """{"Url":"http://localhost:8004"}""");
+        var source = JsonSerializer.Serialize(new { Url = original });
+        fixture.Store("sample", source);
         var prepared = await fixture.PrepareAsync();
 
         // Act
         await fixture.CopyPreparedAsync(prepared);
 
         // Assert
-        fixture.Value("sample", "Url").Should().Be("http://host.docker.internal:8004");
+        fixture.Value("sample", "Url").Should().Be(expected);
 
         // Arrange
         fixture.DeniedPorts.Add(8004);
@@ -264,10 +292,8 @@ public sealed class UserSecretsRewriteTests
         await fixture.CopyPreparedAsync(prepared);
 
         // Assert
-        fixture.Value("sample", "Url").Should().Be("http://localhost:8004");
-        File.ReadAllText(fixture.SourcePath("sample"))
-            .Should()
-            .Be("""{"Url":"http://localhost:8004"}""");
+        fixture.Value("sample", "Url").Should().Be(original);
+        File.ReadAllText(fixture.SourcePath("sample")).Should().Be(source);
     }
 
     [Fact]
@@ -384,13 +410,70 @@ public sealed class UserSecretsRewriteTests
             .And.NotContain("synthetic-password");
     }
 
-    private static string RepositoryFile(string name)
+    [Fact]
+    public async Task PreparedProjectOriginalsAreReusedButGeneratedOverridesAndForceAccountingAreNot()
     {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-        while (directory is not null && !Directory.Exists(Path.Combine(directory.FullName, "docs")))
-            directory = directory.Parent;
-        return Path.Combine(directory!.FullName, "docs/verification/user-secrets/metadata", name);
+        // Arrange
+        using var fixture = new CopyFixture(
+            config: new AboxConfig { UserSecretsDenyList = ["localhost"] }
+        );
+        fixture.UsePorts(8004);
+        fixture.Store("sample", "{}");
+        fixture.Project("sample", """{"Url":"http://localhost:8004/synthetic-original"}""");
+        var prepared = await fixture.PrepareAsync(force: true);
+        fixture.Project("sample", """{"Url":"http://remote.test/synthetic-edited"}""");
+
+        // Act
+        var first = await fixture.CopyPreparedAsync(prepared);
+        var firstPayload = fixture.Written("sample");
+        fixture.DeniedPorts.Add(8004);
+        var second = await fixture.CopyPreparedAsync(prepared);
+
+        // Assert
+        first
+            .Should()
+            .BeEquivalentTo(
+                new UserSecretsReport(
+                    [new UserSecretsStoreReport("sample", 1) { RewrittenKeys = ["Url"] }],
+                    true
+                )
+            );
+        second
+            .Should()
+            .BeEquivalentTo(
+                new UserSecretsReport([new UserSecretsStoreReport("sample", 0)], false)
+            );
+        new[] { firstPayload, fixture.Written("sample") }
+            .Should()
+            .Equal("""{"Url":"http://host.docker.internal:8004/synthetic-original"}""", "{}");
+        string.Join(" ", prepared, first, second).Should().NotContain("synthetic-");
     }
+
+    [Fact]
+    public async Task LaterAdaptationFailurePreventsEvenEmptyStoreDestinationValidationAndWrites()
+    {
+        // Arrange
+        using var fixture = new CopyFixture();
+        fixture.UsePorts(8004);
+        fixture.Store("empty", "{}");
+        fixture.Store("last", """{"Url":"http://localhost:8004/synthetic"}""");
+        fixture.Project("last", """{"Invalid":"Host=localhost;Port=8004;Port=8004"}""");
+
+        // Act
+        var copy = () => fixture.CopyAsync();
+
+        // Assert
+        var exception = (await copy.Should().ThrowAsync<AboxException>()).Which;
+        exception
+            .Message.Should()
+            .Contain("last")
+            .And.Contain("Invalid")
+            .And.NotContain("synthetic");
+        fixture.Requests.Should().NotContain(request => request.Arguments[0] == "exec");
+    }
+
+    private static string VerificationFile(string name) =>
+        SyntheticTestResources.File(Path.Combine("Verification", name));
 
     private sealed class CopyFixture : IDisposable
     {
@@ -493,6 +576,15 @@ public sealed class UserSecretsRewriteTests
         {
             ids.Add(id);
             root.File($".microsoft/usersecrets/{id}/secrets.json", json);
+        }
+
+        internal void Project(string id, string json)
+        {
+            root.File(
+                $"{id}/App.csproj",
+                $"<Project><PropertyGroup><UserSecretsId>{id}</UserSecretsId></PropertyGroup></Project>"
+            );
+            root.File($"{id}/appsettings.json", json);
         }
 
         internal async Task<PreparedUserSecrets> PrepareAsync(bool force = false)

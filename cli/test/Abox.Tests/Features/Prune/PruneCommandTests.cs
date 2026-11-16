@@ -143,6 +143,48 @@ public sealed class PruneCommandTests
         File.ReadAllText(secret).Should().Be("synthetic secret sentinel");
     }
 
+    [Fact]
+    public async Task NewestTiesAndSharedSourcesAreRetainedAndReportedByBuildName()
+    {
+        // Arrange
+        using var cli = new UserSecretsCliHarness();
+        var requests = UseRuntime(cli, NewestTieInventory());
+
+        // Act
+        var exitCode = await cli.Invoke("prune");
+
+        // Assert
+        exitCode.Should().Be(0);
+        requests
+            .Where(IsRemoval)
+            .Select(request => request.Arguments[2])
+            .Should()
+            .Equal(
+                "docker.io/library/sandbox-kit-assembled:old-template",
+                "docker.io/library/sbx-kit-src:unused"
+            );
+        cli.Console.AllText.Should()
+            .Contain("Keeping assembled sets 'new-a new-b' and their kit sources.")
+            .And.Contain("Removing 2 stale template images");
+    }
+
+    private static string NewestTieInventory() =>
+        JsonSerializer.Serialize(
+            new[]
+            {
+                Template("sandbox-kit-assembled", "new-b-kit-0", "shared", "2026-11-03T00:00:00Z"),
+                Template("sandbox-kit-assembled", "old-template", "shared", "2026-11-01T00:00:00Z"),
+                Template(
+                    "sandbox-kit-assembled",
+                    "new-a-template",
+                    "alias",
+                    "2026-11-03T00:00:00Z"
+                ),
+                Template("sbx-kit-src", "shared", "shared", "2026-11-01T00:00:00Z"),
+                Template("sbx-kit-src", "unused", "unused", "2026-11-01T00:00:00Z"),
+            }
+        );
+
     private static object Template(string repository, string tag, string? id, string? created) =>
         new
         {

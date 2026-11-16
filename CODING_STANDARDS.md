@@ -10,6 +10,12 @@ or dogmatic application of patterns.
 - Make intent explicit through clear names and direct operations rather than
   clever indirection.
 - Add configuration only for real needs, not hypothetical future requirements.
+- **Partial classes:** prefer one cohesive class in one file. Avoid splitting
+  handwritten code across partial classes to manage size or separate responsibilities;
+  needing that split is a signal to reassess the single responsibility principle
+  and extract cohesive collaborators instead. Reserve partial classes for concrete
+  language or tooling requirements, such as source-generated members, and keep the
+  handwritten class cohesive.
 
 ## Architecture
 
