@@ -97,6 +97,12 @@ apps/agent/core parents may need **explicit** restarts; stale recognized parents
 prevent full activation success/new agent launches, never ordinary shell/exec/pipe
 save/recovery access or trigger automatic restarts. See
 [HTTPS prerequisites, launch/recovery contract and remaining verification gates](docs/https-development-certificates.md).
+Invalid/missing Node extra-CA inputs likewise warn without blocking ordinary/recovery
+commands: their original Node setting and protected Kestrel defaults are retained,
+but setup/readiness and new agent launches fail until corrected. Caller CA symlinks
+are supported. After upgrading the CLI, rerun folder-qualified `abox ports` before
+launching if the installed bootstrap hash differs; unverified installed code is
+never executed as an upgrade fallback.
 Automatic create/recreate publishing is not included yet.
 See [shared discovery/runtime rules](docs/verification/application-ports.md) and
 [Angular scope, supported forms and verification](docs/verification/angular-application-ports.md).

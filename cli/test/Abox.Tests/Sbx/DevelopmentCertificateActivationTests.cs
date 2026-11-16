@@ -159,6 +159,7 @@ public sealed class DevelopmentCertificateActivationTests
     [Theory]
     [InlineData(43, "/proc")]
     [InlineData(44, "NODE_EXTRA_CA_CERTS")]
+    [InlineData(75, "busy")]
     public async Task ReadinessExplainsProcessVisibilityAndExtraCaFailuresWithoutClaimingCompletion(
         int code,
         string guidance
@@ -180,5 +181,51 @@ public sealed class DevelopmentCertificateActivationTests
         var failure = (await action.Should().ThrowAsync<AboxException>()).Which;
         failure.Message.Should().Contain(guidance).And.NotContain("private child");
         await runner.Received(1).RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData("prepare")]
+    [InlineData("stage")]
+    public async Task RuntimeLockTimeoutGivesRetryGuidanceWithoutLeakingChildDiagnostics(
+        string mode
+    )
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(call => new ProcessResult(
+                call.Arg<ProcessRequest>().Arguments.Contains("cleanup") ? 0 : 75,
+                "private child stdout",
+                "private child stderr"
+            ));
+        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+
+        // Act
+        Func<Task> action =
+            mode == "prepare"
+                ? async () =>
+                {
+                    await client.GetDevelopmentCertificatePasswordAsync(
+                        "actual",
+                        CancellationToken.None
+                    );
+                }
+                : () =>
+                    client.StageDevelopmentCertificateAsync(
+                        "actual",
+                        new byte[] { 1, 2 },
+                        "password",
+                        CancellationToken.None
+                    );
+
+        // Assert
+        var failure = (await action.Should().ThrowAsync<AboxException>()).Which;
+        failure
+            .Message.Should()
+            .Contain("busy")
+            .And.Contain("retry")
+            .And.NotContain("private child");
     }
 }

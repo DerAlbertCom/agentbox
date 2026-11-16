@@ -20,7 +20,7 @@ try:
  assert hashlib.sha256(source).hexdigest()==sys.argv[1]
  os.close(d)
 except Exception:
- sys.stderr.write("abox HTTPS: protected bootstrap missing or changed; retry abox ports with this CLI version.\n")
+ sys.stderr.write("abox HTTPS: protected bootstrap missing or changed (also possible after a CLI upgrade). Launches fail closed; run abox ports --location <folder> with this CLI version to refresh the verified bootstrap, then retry. No installed unverified code was executed.\n")
  sys.exit(78)
 sys.argv=["abox-https","environment"]+sys.argv[2:]
 exec(compile(source,"<abox-https>","exec"))
@@ -28,10 +28,13 @@ exec(compile(source,"<abox-https>","exec"))
 password=${config%% *}; node=${config#* }
 case $password in ''|*[!0-9a-f]*) exit 78 ;; esac
 [ "${#password}" = 64 ] || exit 78
-case $node in node-*.pem) ;; *) exit 78 ;; esac
+case $node in node-*.pem|-) ;; *) exit 78 ;; esac
 case $node in *[!0-9a-z.-]*) exit 78 ;; esac
 ASPNETCORE_Kestrel__Certificates__Default__Path="/tmp/abox-https-$uid/active.pfx"
 ASPNETCORE_Kestrel__Certificates__Default__Password=$password
-NODE_EXTRA_CA_CERTS="/tmp/abox-https-$uid/$node"
-export ASPNETCORE_Kestrel__Certificates__Default__Path ASPNETCORE_Kestrel__Certificates__Default__Password NODE_EXTRA_CA_CERTS
+if [ "$node" != '-' ]; then
+    NODE_EXTRA_CA_CERTS="/tmp/abox-https-$uid/$node"
+    export NODE_EXTRA_CA_CERTS
+fi
+export ASPNETCORE_Kestrel__Certificates__Default__Path ASPNETCORE_Kestrel__Certificates__Default__Password
 exec "$@"

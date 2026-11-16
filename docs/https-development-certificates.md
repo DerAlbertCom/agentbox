@@ -62,8 +62,10 @@ literal version suffixes and `Sdk Name` elements) or an explicit
 imports, targets, scripts or package tasks. Standard artifact/link exclusions still
 apply. Computed/import-only custom SDKs are not inferred. Such projects need an
 explicit supported declaration to opt into this static detection contract.
-Unrelated unreadable/malformed/DTD-bearing project files are unsupported and
-ignored, not new blockers for existing port files. Malformed bounded project text
+Unreadable or linked project files fail with file-access guidance: without reading
+their bytes, discovery cannot safely establish that HTTPS is unrelated. Readable
+unrelated malformed/DTD-bearing project files are unsupported and ignored, not new
+blockers for existing port files. Malformed bounded project text
 explicitly mentioning either ASP.NET declaration fails closed (conservatively,
 even in a comment); DTDs/entities are never evaluated. Oversize unrelated projects
 are ignored; an ASP.NET marker in the bounded prefix retains the 1 MiB error.
@@ -97,7 +99,7 @@ Persistent runtime-only files under `/tmp/abox-https-<effective uid>/` are:
 - `active.pfx`: unchanged encrypted PFX bytes, ordinary single-link 0600 file.
 - `config.json`: protected 0600 configuration with the canonical path and generated
   password. It is not an appsettings file or a public shell profile.
-- `.lock`: private nonblocking writer lock. The containing directory is 0700.
+- `.lock`: private exclusive runtime lock. The containing directory is 0700.
 - `bootstrap.py`: installed configuration reader, checked against this CLI's exact
   SHA-256 before execution; it is not copied into every exec argument list.
 - `public.pem`, bounded `node-<digest>.source` / `.pem` pairs: protected public
@@ -128,7 +130,13 @@ back to an unrelated development certificate. A retry reuses that configuration.
 
 Separate bounded cleanup attempts remove the exact transfer's private temporary
 file after failure/cancellation. A successful serialized retry removes validated
-abandoned transfer files. Contended writers fail for retry rather than hang.
+abandoned transfer files. Launch, prepare, status, activation, staging and cleanup
+all use the **same exclusive lock**, including process scans and atomic Node-bundle
+writes; this is not a shared-reader/writer scheme. Brief contention retries inside
+the operation for at most three seconds, including cleanup (inside its separate
+five-second host budget). Signal cancellation interrupts the wait. Persistent
+contention returns a distinct busy/retry result (75), not invalid configuration
+(78); readiness is not claimed and unconfirmed cleanup is still reported honestly.
 After a lost acknowledgement the new PFX may already be committed; no rollback,
 power-loss durability or secure-erasure claim is made. The earlier private
 `StageDevelopmentCertificateAsync` bundle adapter remains a transport-only seam;
@@ -148,6 +156,15 @@ ASPNETCORE_Kestrel__Certificates__Default__Path
 ASPNETCORE_Kestrel__Certificates__Default__Password
 NODE_EXTRA_CA_CERTS
 ```
+
+Kestrel settings remain available for ordinary/recovery launches when only Node
+bundle preparation fails, as described below. Invalid protected runtime state
+still fails closed. **After a CLI upgrade**, an old installed bootstrap has a
+different exact hash: all configured launches, including ordinary/recovery
+commands, return 78 rather than executing unverified installed code or launching
+without the protected environment. Run `abox ports --location "<folder>"` with the
+new CLI to refresh its verified bootstrap, then retry. Setup uses the CLI's embedded
+receiver directly and does not depend on executing that old installed bootstrap.
 
 and the shell replaces itself with the original argv. Python is never the app's
 exec parent: CPython's ignored SIGPIPE/SIGXFSZ and locale initialization cannot
@@ -204,11 +221,21 @@ the **bytes** of the caller's existing `NODE_EXTRA_CA_CERTS`, retaining Node's
 built-in roots and original extra roots. Unset/empty means no original extra
 roots. A propagated abox bundle reuses its protected original source, not a
 previous merged bundle (so renewals do not accumulate old leaves). The original
-must be an accessible ordinary nonsymlink file of at most 1 MiB; unreadable,
-unsupported or forged abox paths fail actionably rather than silently discarding
-trust configuration. Up to 16 distinct source-content variants are retained per
+must resolve to an accessible regular PEM file of at most 1 MiB (an empty file
+adds no original roots). Caller-selected symlinks, including system/corporate CA
+links, are followed **only as the unprivileged application user**. Reads are bounded
+and nonblocking; directories/devices/FIFOs, unreadable/oversize inputs and invalid
+PEM fail Node readiness. Abox-owned runtime paths/sources retain strict no-follow,
+ownership, mode and single-link checks. Up to 16 distinct source-content variants are retained per
 sandbox, without evicting trust files potentially needed by running Node clients;
-a 17th fails with recovery guidance. Prefer stable extra-CA inputs; recreate the
+a 17th fails Node readiness with recovery guidance. Any Node-bundle failure blocks
+setup/status success (44) and recognized new agent launches (78), but **not ordinary
+commands or the explicit recovery argv above**. Those commands receive the verified
+Kestrel settings, retain the caller's original `NODE_EXTRA_CA_CERTS` unchanged and
+print a warning on stderr that Node trust is **NOT configured**. A missing input is
+not treated as empty or silently replaced, matching Node's warning semantics;
+ordinary child exit status is preserved. Recovery access is not Node-trust success.
+Prefer stable extra-CA inputs; recreate the
 disposable or deliberately inspect/remove unused owned node pairs when changing
 many configurations. Existing Node processes can cache roots and must be explicitly
 restarted for renewal, even with a stable inherited environment path.

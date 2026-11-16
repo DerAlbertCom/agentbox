@@ -12,6 +12,8 @@ public sealed partial class SbxClient
     private static readonly Lazy<string> DevelopmentCertificateReceiver = new(
         ReadDevelopmentCertificateReceiver
     );
+    private const string DevelopmentCertificateBusy =
+        "Protected HTTPS runtime is busy after 3 seconds; retry the operation or 'abox ports'. No complete readiness is claimed. Child diagnostics were suppressed. ";
 
     public Task StageDevelopmentCertificateAsync(
         string sandbox,
@@ -104,9 +106,10 @@ public sealed partial class SbxClient
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ProcessResult result;
         try
         {
-            var result = await runner.RunAsync(
+            result = await runner.RunAsync(
                 new ProcessRequest(
                     ExecutableName,
                     [
@@ -124,13 +127,6 @@ public sealed partial class SbxClient
                 ),
                 cancellationToken
             );
-            var password = result.StandardOutput.Trim();
-            if (
-                !result.Succeeded
-                || !System.Text.RegularExpressions.Regex.IsMatch(password, "^[0-9a-f]{64}$")
-            )
-                throw new AboxException("Cannot prepare protected HTTPS runtime configuration.");
-            return password;
         }
         catch (OperationCanceledException)
         {
@@ -145,6 +141,17 @@ public sealed partial class SbxClient
                 "Cannot prepare protected HTTPS runtime configuration. Check Python 3.8+, non-root execution and owner-only nonmounted /tmp paths. Child diagnostics were suppressed."
             );
         }
+        if (result.ExitCode == 75)
+            throw new AboxException(DevelopmentCertificateBusy);
+        var password = result.StandardOutput.Trim();
+        if (
+            !result.Succeeded
+            || !System.Text.RegularExpressions.Regex.IsMatch(password, "^[0-9a-f]{64}$")
+        )
+            throw new AboxException(
+                "Cannot prepare protected HTTPS runtime configuration. Check Python 3.8+, non-root execution and owner-only nonmounted /tmp paths. Child diagnostics were suppressed."
+            );
+        return password;
     }
 
     public async Task VerifyDevelopmentCertificateActivationAsync(
@@ -187,8 +194,10 @@ public sealed partial class SbxClient
             );
         if (result.ExitCode == 44)
             throw new AboxException(
-                "HTTPS trust/private activation may be present, but Node extra-CA configuration is incomplete. Check NODE_EXTRA_CA_CERTS: require a readable ordinary nonsymlink file of at most 1 MiB and no more than 16 distinct source-content variants. Original trust configuration was not discarded; correct the input and retry abox ports. No complete activation is claimed."
+                "HTTPS trust/private activation may be present, but Node extra-CA configuration is incomplete. Check NODE_EXTRA_CA_CERTS: require a user-readable regular PEM file (caller-selected symlinks are supported) of at most 1 MiB and no more than 16 distinct source-content variants. Ordinary/recovery access retains the original Node setting and protected Kestrel configuration. Correct the input or inspect unused owned node pairs and retry abox ports. No complete activation is claimed."
             );
+        if (result.ExitCode == 75)
+            throw new AboxException(DevelopmentCertificateBusy);
         if (!result.Succeeded)
             throw new AboxException(
                 "Cannot verify protected HTTPS launch configuration. Check runtime file ownership, permissions and process visibility; no complete activation is claimed."
@@ -241,6 +250,7 @@ public sealed partial class SbxClient
             CryptographicOperations.ZeroMemory(bytes);
         }
         var transfer = Guid.NewGuid().ToString("N");
+        var busy = false;
         try
         {
             var result = await RunDevelopmentCertificateReceiverAsync(
@@ -250,6 +260,7 @@ public sealed partial class SbxClient
                 frame,
                 cancellationToken
             );
+            busy = result.ExitCode == 75;
             if (!result.Succeeded)
                 throw new AboxException("Certificate transfer failed.");
         }
@@ -282,7 +293,11 @@ public sealed partial class SbxClient
                     cancellationToken
                 );
             throw new AboxException(
-                "Cannot transfer the development certificate. Check Python 3.8+, the non-root application user, ordinary owner-only runtime paths and mount layout. Child diagnostics were suppressed. "
+                (
+                    busy
+                        ? DevelopmentCertificateBusy
+                        : "Cannot transfer the development certificate. Check Python 3.8+, the non-root application user, ordinary owner-only runtime paths and mount layout. Child diagnostics were suppressed. "
+                )
                     + (
                         cleaned
                             ? "Retry after correcting the destination; an existing active certificate is retained unless the completed commit was not acknowledged. Initial protected configuration may already be present; no rollback is promised."
