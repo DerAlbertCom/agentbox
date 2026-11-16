@@ -98,12 +98,12 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
 
         if (!result.Succeeded)
         {
-            return false;
+            throw new AboxException(
+                $"'hc machine ls --json' failed with exit code {result.ExitCode}. Check 'hc machine ls' before retrying; no machine was added."
+            );
         }
 
-        // The shape of the listing is not known here, so the name is looked for in the
-        // output instead of in a fixed place.
-        return result.StandardOutput.Contains(sandboxName, StringComparison.Ordinal);
+        return HerdrResponses.ContainsMachine(result.StandardOutput, sandboxName);
     }
 
     private async Task AddMachineAsync(LauncherContext context, CancellationToken cancellationToken)
@@ -129,16 +129,37 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
 
     private async Task StartAppAsync(CancellationToken cancellationToken)
     {
-        if (await AppIsRunningAsync(cancellationToken))
+        // The released status client can itself wait 35 seconds. Bound the whole
+        // discovery/start/readiness exchange, not just the delay between probes.
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(TimeSpan.FromSeconds(45));
+        try
         {
-            return;
-        }
+            if (await AppIsRunningAsync(deadline.Token))
+                return;
 
-        // The app keeps running when it is started on its own.
-        await runner.RunAsync(
-            new ProcessRequest(AppProgram, [], AttachConsole: false),
-            cancellationToken
-        );
+            var result = await runner.RunUntilReadyAsync(
+                new ProcessRequest(AppProgram, [], AttachConsole: true),
+                WaitForAppAsync,
+                deadline.Token
+            );
+            if (!result.Succeeded)
+                throw new AboxException(
+                    $"'herdr-app' startup failed with exit code {result.ExitCode}. Run 'herdr-app' and inspect 'herdr-app status' before retrying. Herdr space was not opened."
+                );
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new AboxException(
+                "Herdr app readiness timed out after 45 seconds. Run 'herdr-app' and inspect 'herdr-app status' before retrying. Herdr space was not opened; no existing app or core was restarted."
+            );
+        }
+    }
+
+    private async Task WaitForAppAsync(CancellationToken cancellationToken)
+    {
+        while (!await AppIsRunningAsync(cancellationToken))
+            await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
     }
 
     private async Task<bool> AppIsRunningAsync(CancellationToken cancellationToken)
@@ -150,19 +171,23 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
 
         if (!result.Succeeded)
         {
-            return false;
+            // Released control client uses exit 2 and this diagnostic only on
+            // connection failure. Other control failures do not prove absence.
+            if (
+                result.ExitCode == 2
+                && string.IsNullOrWhiteSpace(result.StandardOutput)
+                && result.StandardError.StartsWith(
+                    "herdr-app: no Herdr window at ",
+                    StringComparison.Ordinal
+                )
+            )
+                return false;
+            throw new AboxException(
+                $"'herdr-app status' failed with exit code {result.ExitCode}. Inspect the app and run 'herdr-app status' before retrying. No app or core was restarted."
+            );
         }
 
-        try
-        {
-            using var document = JsonDocument.Parse(result.StandardOutput);
-            return !document.RootElement.TryGetProperty("errors", out var errors)
-                || errors.ValueKind != JsonValueKind.Array
-                || errors.GetArrayLength() == 0;
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        HerdrResponses.RequireHealthyStatus(result.StandardOutput);
+        return true;
     }
 }

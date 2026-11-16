@@ -14,6 +14,85 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
     internal ProcessRunner(ProcessOutput? output, Action<Process> kill)
         : this(output) => this.kill = kill;
 
+    public async Task<ProcessResult> RunUntilReadyAsync(
+        ProcessRequest request,
+        Func<CancellationToken, Task> confirmReadiness,
+        CancellationToken cancellationToken
+    )
+    {
+        // A released desktop cannot retain capture pipes owned by a short-lived CLI.
+        // Make inheritance explicit, and never broaden sensitive-stream permissions.
+        if (
+            request.OutputPolicy != ProcessOutputPolicy.Normal
+            || !request.AttachConsole
+            || request.StandardInput is not null
+        )
+            throw new AboxException(
+                "Desktop startup requires normal inherited streams and no supplied stdin."
+            );
+        cancellationToken.ThrowIfCancellationRequested();
+        using var process = new Process { StartInfo = StartInfo(request) };
+        Start(process, request.FileName);
+        try
+        {
+            return await ConfirmDesktopAsync(process, confirmReadiness, cancellationToken);
+        }
+        catch
+        {
+            await StopAsync(process);
+            throw;
+        }
+    }
+
+    private static async Task<ProcessResult> ConfirmDesktopAsync(
+        Process process,
+        Func<CancellationToken, Task> confirmReadiness,
+        CancellationToken cancellationToken
+    )
+    {
+        using var observation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var exited = process.WaitForExitAsync(observation.Token);
+        try
+        {
+            var readiness = confirmReadiness(observation.Token);
+            var completed = await Task.WhenAny(exited, readiness);
+            if (completed == exited && process.HasExited && process.ExitCode != 0)
+            {
+                observation.Cancel();
+                await JoinCancelledObservationAsync(readiness, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                return new ProcessResult(process.ExitCode, "", "");
+            }
+            await readiness;
+            cancellationToken.ThrowIfCancellationRequested();
+            return new ProcessResult(process.HasExited ? process.ExitCode : 0, "", "");
+        }
+        finally
+        {
+            // Cancel only the exit observer, not the healthy desktop. No background
+            // wait or capture task is left behind when ownership transfers to the user.
+            observation.Cancel();
+            await JoinCancelledObservationAsync(exited, cancellationToken);
+        }
+    }
+
+    private static async Task JoinCancelledObservationAsync(
+        Task observation,
+        CancellationToken caller
+    )
+    {
+        try
+        {
+            await observation;
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopping our observer is not cancellation of the user's desktop;
+            // explicit caller cancellation still takes precedence.
+            caller.ThrowIfCancellationRequested();
+        }
+    }
+
     public async Task<ProcessResult> RunAsync(
         ProcessRequest request,
         CancellationToken cancellationToken
@@ -173,24 +252,28 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
         catch (OperationCanceledException)
         {
             // Cancellation during input or exit must not leave children or their workers running.
-            try
-            {
-                kill(process);
-                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
-                await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            }
-            catch (Exception exception)
-                when (exception
-                        is InvalidOperationException
-                            or Win32Exception
-                            or AggregateException
-                            or OperationCanceledException
-                )
-            {
-                // Cleanup is best effort; preserve cancellation even if children survive.
-            }
-
+            await StopAsync(process);
             throw;
+        }
+    }
+
+    private async Task StopAsync(Process process)
+    {
+        try
+        {
+            kill(process);
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(3));
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+        }
+        catch (Exception exception)
+            when (exception
+                    is InvalidOperationException
+                        or Win32Exception
+                        or AggregateException
+                        or OperationCanceledException
+            )
+        {
+            // Cleanup is best effort; preserve the original failure even if children survive.
         }
     }
 }
