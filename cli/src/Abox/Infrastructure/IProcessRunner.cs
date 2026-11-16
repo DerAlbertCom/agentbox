@@ -17,5 +17,5 @@ public interface IProcessRunner
         ProcessRequest request,
         Func<CancellationToken, Task> confirmReadiness,
         CancellationToken cancellationToken
-    ) => throw new AboxException("This process runner does not support desktop startup.");
+    );
 }

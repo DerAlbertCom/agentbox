@@ -65,6 +65,12 @@ public sealed class UserSecretsSensitivePolicyProcessTests
         internal TaskCompletionSource Release { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
+        public Task<ProcessResult> RunUntilReadyAsync(
+            ProcessRequest request,
+            Func<CancellationToken, Task> confirmReadiness,
+            CancellationToken cancellationToken
+        ) => throw new InvalidOperationException("Policy fixtures must not start a desktop.");
+
         public async Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken token)
         {
             var inventory = request.Arguments[1] == "ls";

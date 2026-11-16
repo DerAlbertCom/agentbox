@@ -287,6 +287,12 @@ public sealed class UserSecretsTransportTests
             Client = new SbxClient(this, AboxPaths.For(root.Path, root.Path));
         }
 
+        public Task<ProcessResult> RunUntilReadyAsync(
+            ProcessRequest request,
+            Func<CancellationToken, Task> confirmReadiness,
+            CancellationToken cancellationToken
+        ) => throw new InvalidOperationException("Receiver fixtures must not start a desktop.");
+
         public Task<ProcessResult> RunAsync(
             ProcessRequest request,
             CancellationToken cancellationToken

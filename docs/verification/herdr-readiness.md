@@ -36,7 +36,9 @@ No desktop, host core, sandbox or installed Herdr state was changed to verify it
 
 Normal captured `IProcessRunner.RunAsync` still waits for exit. The necessary
 additional operation, `RunUntilReadyAsync`, starts a desktop and retains ownership
-until a caller-supplied readiness check completes. It observes premature nonzero
+until a caller-supplied readiness check completes. It is a required interface
+member, not a default unsupported fallback; each adapter must implement it
+explicitly. It observes premature nonzero
 exit, cancels and joins its readiness probe, and returns that startup failure.
 On failed readiness or caller cancellation it makes the same bounded best-effort
 process-tree cleanup as ordinary process cancellation. It never signals a process
