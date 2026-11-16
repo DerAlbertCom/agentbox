@@ -165,6 +165,10 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     [InlineData("null")]
     [InlineData("[]")]
     [InlineData("{}")]
+    [InlineData("{\"key\":\"kit.allowedSources\",\"type\":\"json\",\"source\":\" \",\"value\":[]}")]
+    [InlineData(
+        "{\"key\":\"kit.allowedSources\",\"type\":\"json\",\"source\":\"default\",\"value\":[\"docker.io/\",\" \"]}"
+    )]
     [InlineData("{\"key\":\"kit.allowedSources\",\"type\":\"json\",\"value\":[]}")]
     [InlineData("{\"key\":\"kit.allowedSources\",\"type\":\"json\",\"source\":42,\"value\":[]}")]
     [InlineData(
@@ -471,6 +475,9 @@ public sealed class SbxAllowedSourcesTests : IDisposable
     {
         // Arrange
         var sources = new[] { "docker.io/", "dhi.io/" };
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var reads = 0;
         _runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
@@ -482,28 +489,36 @@ public sealed class SbxAllowedSourcesTests : IDisposable
                     return new ProcessResult(0, "", "");
                 }
 
-                var snapshot = JsonSerializer.Serialize(
-                    new
-                    {
-                        key = "kit.allowedSources",
-                        type = "json",
-                        source = "override",
-                        value = sources,
-                    }
-                );
-                await Task.Delay(100);
-                return new ProcessResult(0, snapshot, "");
+                var snapshot = EvaluatedSources(sources);
+                if (Interlocked.Increment(ref reads) == 1)
+                {
+                    entered.TrySetResult();
+                    await release.Task;
+                }
+                return snapshot;
             });
         var other = new SbxClient(_runner, _paths);
 
         // Act
-        await Task.WhenAll(
-            _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None),
-            other.EnsureKitSourceAllowedAsync(
+        var first = _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
+        var second = Task.CompletedTask;
+        try
+        {
+            await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            second = other.EnsureKitSourceAllowedAsync(
                 "rwest.jfrog.io/team-docker-dev/",
                 CancellationToken.None
-            )
-        );
+            );
+
+            // Assert: the second client cannot read the stale snapshot while the lock is held.
+            reads.Should().Be(1);
+            second.IsCompleted.Should().BeFalse();
+        }
+        finally
+        {
+            release.TrySetResult();
+            await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+        }
 
         // Assert
         sources
@@ -525,32 +540,22 @@ public sealed class SbxAllowedSourcesTests : IDisposable
                 Interlocked.Increment(ref reads);
                 entered.TrySetResult();
                 await release.Task;
-                return new ProcessResult(
-                    0,
-                    JsonSerializer.Serialize(
-                        new
-                        {
-                            key = "kit.allowedSources",
-                            type = "json",
-                            source = "override",
-                            value = new[] { Prefix },
-                        }
-                    ),
-                    ""
-                );
+                return EvaluatedSources([Prefix]);
             });
         var first = _client.EnsureKitSourceAllowedAsync(Prefix, CancellationToken.None);
         try
         {
             await entered.Task.WaitAsync(TimeSpan.FromSeconds(5));
-            using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(200));
+            using var cancellation = new CancellationTokenSource();
             var other = new SbxClient(_runner, _paths);
 
             // Act
-            var waiting = () => other.EnsureKitSourceAllowedAsync(Prefix, cancellation.Token);
+            var waiting = other.EnsureKitSourceAllowedAsync(Prefix, cancellation.Token);
+            await cancellation.CancelAsync();
+            var action = async () => await waiting;
 
             // Assert
-            await waiting.Should().ThrowAsync<OperationCanceledException>();
+            await action.Should().ThrowAsync<OperationCanceledException>();
             reads.Should().Be(1);
         }
         finally
@@ -636,4 +641,19 @@ public sealed class SbxAllowedSourcesTests : IDisposable
         );
         _runner.ReceivedCalls().Should().BeEmpty();
     }
+
+    private static ProcessResult EvaluatedSources(string[] sources) =>
+        new(
+            0,
+            JsonSerializer.Serialize(
+                new
+                {
+                    key = "kit.allowedSources",
+                    type = "json",
+                    source = "override",
+                    value = sources,
+                }
+            ),
+            ""
+        );
 }
