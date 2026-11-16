@@ -14,6 +14,42 @@ public sealed partial class SbxClient
     )
     {
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateApplicationMappings(mappings);
+        if (mappings.Count == 0)
+            return;
+        // sbx 0.51.0 can race its own startup when publishing to a stopped sandbox.
+        // A completed exec waits for startup and restores previously saved bindings first.
+        await RunOrThrowAsync(
+            new ProcessRequest(ExecutableName, ["exec", sandbox, "true"], StandardInput: ""),
+            "sbx exec (start before publishing)",
+            cancellationToken
+        );
+        var existing = await ReadApplicationBindingsAsync(sandbox, cancellationToken);
+        var relayPorts = await EnsureApplicationRelaysAsync(
+            sandbox,
+            mappings,
+            existing,
+            cancellationToken
+        );
+        var forwarded = mappings
+            .Select(mapping => new ApplicationPortMapping(
+                relayPorts[mapping.SandboxPort],
+                mapping.HostPort
+            ))
+            .Distinct()
+            .ToArray();
+        RejectApplicationBindingConflicts(existing, forwarded);
+        var missing = forwarded
+            .Where(mapping => !existing.Any(binding => Matches(binding, mapping)))
+            .ToArray();
+        if (missing.Length == 0)
+            return;
+        await PublishMissingApplicationBindingsAsync(sandbox, missing, cancellationToken);
+        await ConfirmApplicationBindingsAsync(sandbox, forwarded, cancellationToken);
+    }
+
+    private static void ValidateApplicationMappings(IReadOnlyList<ApplicationPortMapping> mappings)
+    {
         if (
             mappings.Any(mapping =>
                 mapping.SandboxPort is < 1 or > 65535 || mapping.HostPort is < 1 or > 65535
@@ -34,48 +70,34 @@ public sealed partial class SbxClient
             throw new AboxException(
                 "Application port mappings must use the same offset. No runtime changes were attempted."
             );
-        // sbx 0.51.0 can race its own startup when publishing to a stopped sandbox.
-        // A completed exec waits for startup and restores previously saved bindings first.
-        await RunOrThrowAsync(
-            new ProcessRequest(ExecutableName, ["exec", sandbox, "true"], StandardInput: ""),
-            "sbx exec (start before publishing)",
-            cancellationToken
-        );
-        var existing = await ReadApplicationBindingsAsync(sandbox, cancellationToken);
-        var relayPorts = await EnsureApplicationRelaysAsync(
-            sandbox,
-            mappings,
-            existing,
-            cancellationToken
-        );
-        var forwarded = mappings
-            .Select(mapping => new ApplicationPortMapping(
-                relayPorts[mapping.SandboxPort],
-                mapping.HostPort
-            ))
-            .ToArray();
-        foreach (var mapping in mappings)
+    }
+
+    private static void RejectApplicationBindingConflicts(
+        IReadOnlyList<ApplicationBinding> existing,
+        IReadOnlyList<ApplicationPortMapping> forwarded
+    )
+    {
+        foreach (var mapping in forwarded)
         {
             var conflict = existing.FirstOrDefault(binding =>
                 binding.HostPort == mapping.HostPort
                 && binding.Protocol is "tcp" or "tcp4"
                 && binding.HostIp is "127.0.0.1" or "0.0.0.0"
-                && !Matches(
-                    binding,
-                    new ApplicationPortMapping(relayPorts[mapping.SandboxPort], mapping.HostPort)
-                )
+                && !Matches(binding, mapping)
             );
             if (conflict is not null)
                 throw new AboxException(
                     $"Host port 127.0.0.1:{mapping.HostPort} has a conflicting runtime mapping {conflict.HostIp}:{conflict.HostPort}:{conflict.SandboxPort}/{conflict.Protocol}. Ownership is unproven; abox will not replace it. Inspect sandbox ports and, only if you intend to replace it, explicitly remove only that exact binding before retrying; existing mappings were not changed."
                 );
         }
-        var missing = forwarded
-            .Distinct()
-            .Where(mapping => !existing.Any(binding => Matches(binding, mapping)))
-            .ToArray();
-        if (missing.Length == 0)
-            return;
+    }
+
+    private async Task PublishMissingApplicationBindingsAsync(
+        string sandbox,
+        IReadOnlyList<ApplicationPortMapping> missing,
+        CancellationToken cancellationToken
+    )
+    {
         var arguments = new List<string> { "ports", sandbox };
         foreach (var mapping in missing)
             arguments.AddRange([
@@ -88,6 +110,14 @@ public sealed partial class SbxClient
             "sbx ports --publish",
             cancellationToken
         );
+    }
+
+    private async Task ConfirmApplicationBindingsAsync(
+        string sandbox,
+        IReadOnlyList<ApplicationPortMapping> forwarded,
+        CancellationToken cancellationToken
+    )
+    {
         var published = await ReadApplicationBindingsAsync(sandbox, cancellationToken);
         if (forwarded.Any(mapping => !published.Any(binding => Matches(binding, mapping))))
             throw new AboxException(
@@ -105,6 +135,25 @@ public sealed partial class SbxClient
         using var source = new StreamReader(
             typeof(SbxClient).Assembly.GetManifestResourceStream("Abox.ApplicationPortsRelay")!
         );
+        var result = await RunOrThrowAsync(
+            new ProcessRequest(
+                ExecutableName,
+                ApplicationRelayArguments(sandbox, mappings, existing),
+                StandardInput: await source.ReadToEndAsync(token),
+                UseUtf8StandardInput: true
+            ),
+            "application-port relay (requires Python 3.8+ in the sandbox; nothing is installed automatically)",
+            token
+        );
+        return DecodeApplicationRelays(result.StandardOutput, mappings);
+    }
+
+    private static List<string> ApplicationRelayArguments(
+        string sandbox,
+        IReadOnlyList<ApplicationPortMapping> mappings,
+        IReadOnlyList<ApplicationBinding> existing
+    )
+    {
         var arguments = new List<string>
         {
             "exec",
@@ -142,20 +191,18 @@ public sealed partial class SbxClient
                     .Select(binding => new[] { binding.SandboxPort, binding.HostPort })
             ),
         ]);
-        var result = await RunOrThrowAsync(
-            new ProcessRequest(
-                ExecutableName,
-                arguments,
-                StandardInput: await source.ReadToEndAsync(token),
-                UseUtf8StandardInput: true
-            ),
-            "application-port relay (requires Python 3.8+ in the sandbox; nothing is installed automatically)",
-            token
-        );
+        return arguments;
+    }
+
+    private static Dictionary<int, int> DecodeApplicationRelays(
+        string json,
+        IReadOnlyList<ApplicationPortMapping> mappings
+    )
+    {
         try
         {
             using var document = JsonDocument.Parse(
-                result.StandardOutput,
+                json,
                 new JsonDocumentOptions { AllowDuplicateProperties = false }
             );
             var relays =
@@ -201,10 +248,15 @@ public sealed partial class SbxClient
             "sbx ports --json",
             token
         );
+        return DecodeApplicationBindings(result.StandardOutput);
+    }
+
+    private static List<ApplicationBinding> DecodeApplicationBindings(string json)
+    {
         try
         {
             using var document = JsonDocument.Parse(
-                result.StandardOutput,
+                json,
                 new JsonDocumentOptions { AllowDuplicateProperties = false }
             );
             var bindings = document.RootElement.Deserialize<List<ApplicationBinding>>();

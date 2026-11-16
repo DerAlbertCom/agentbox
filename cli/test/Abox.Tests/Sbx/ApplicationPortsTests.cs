@@ -13,6 +13,7 @@ public sealed class ApplicationPortsTests : IDisposable
     private string inventory = "[]";
     private ProcessResult? publishFailure;
     private bool acknowledgeWithoutPublishing;
+    private string? publicationInventory;
     private string relayInventory = "[{\"application_port\":8203,\"relay_port\":58203}]";
     private ProcessResult? relayFailure;
     private readonly SbxClient client;
@@ -22,30 +23,33 @@ public sealed class ApplicationPortsTests : IDisposable
         client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
         runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var request = call.Arg<ProcessRequest>();
-                calls.Add(request);
-                if (request.Arguments.Contains("python3") && relayFailure is not null)
-                    return relayFailure;
-                if (request.Arguments.Contains("--unpublish"))
-                    inventory =
-                        "[{\"host_ip\":\"127.0.0.1\",\"host_port\":19000,\"sandbox_port\":9000,\"protocol\":\"tcp4\"}]";
-                if (request.Arguments.Contains("--publish") && publishFailure is not null)
-                    return publishFailure;
-                if (request.Arguments.Contains("--publish") && !acknowledgeWithoutPublishing)
-                    inventory = """
-                        [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":58203,"protocol":"tcp4"},
-                         {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
-                        """;
-                return new ProcessResult(
-                    0,
-                    request.Arguments.Contains("python3") ? relayInventory
-                        : request.Arguments[0] == "ports" ? inventory
-                        : "",
-                    ""
-                );
-            });
+            .Returns(call => RespondToRuntime(call.Arg<ProcessRequest>()));
+    }
+
+    private ProcessResult RespondToRuntime(ProcessRequest request)
+    {
+        calls.Add(request);
+        if (request.Arguments.Contains("python3") && relayFailure is not null)
+            return relayFailure;
+        if (request.Arguments.Contains("--unpublish"))
+            inventory =
+                "[{\"host_ip\":\"127.0.0.1\",\"host_port\":19000,\"sandbox_port\":9000,\"protocol\":\"tcp4\"}]";
+        if (request.Arguments.Contains("--publish") && publishFailure is not null)
+            return publishFailure;
+        if (request.Arguments.Contains("--publish") && !acknowledgeWithoutPublishing)
+            inventory =
+                publicationInventory
+                ?? """
+                    [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":58203,"protocol":"tcp4"},
+                     {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
+                    """;
+        return new ProcessResult(
+            0,
+            request.Arguments.Contains("python3") ? relayInventory
+                : request.Arguments[0] == "ports" ? inventory
+                : "",
+            ""
+        );
     }
 
     [Fact]
@@ -380,6 +384,34 @@ public sealed class ApplicationPortsTests : IDisposable
 
         // Assert
         await action.Should().ThrowAsync<AboxException>().WithMessage("*did not confirm*retry*");
+    }
+
+    [Theory]
+    [InlineData("127.0.0.1", 58204, "tcp4")]
+    [InlineData("0.0.0.0", 58203, "tcp4")]
+    [InlineData("127.0.0.1", 58203, "tcp")]
+    public async Task ConfirmationCannotSubstituteAnotherTargetOrExposure(
+        string hostIp,
+        int target,
+        string protocol
+    )
+    {
+        // Arrange
+        publicationInventory = $$"""
+            [{"host_ip":"{{hostIp}}","host_port":18203,"sandbox_port":{{target}},"protocol":"{{protocol}}"}]
+            """;
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync(
+                "actual",
+                [new(8203, 18203)],
+                CancellationToken.None
+            );
+
+        // Assert
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*did not confirm*retry*");
+        calls.Should().NotContain(call => call.Arguments.Contains("--unpublish"));
     }
 
     [Fact]
