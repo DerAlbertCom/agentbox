@@ -1,6 +1,7 @@
 """Private runtime certificate transfer and argv-preserving launch bootstrap."""
 
 import base64
+from contextlib import contextmanager
 import fcntl
 import hashlib
 import json
@@ -12,6 +13,10 @@ import ssl
 import stat
 import sys
 import time
+
+
+NODE_SOURCE_LIMIT = 1024 * 1024
+MAX_NODE_SOURCES = 16
 
 
 def require(condition):
@@ -203,90 +208,238 @@ def read_public_certificate(root, uid):
     return leaf
 
 
-def node_bundle(root, uid):
-    # Protected-state failures must never be treated as recoverable caller input.
-    leaf = read_public_certificate(root, uid)
-    original = os.environ.get("NODE_EXTRA_CA_CERTS", "")
-    prefix = "/tmp/abox-https-" + str(uid) + "/"
-    own = original.startswith(prefix)
-    if own:
-        require(re.fullmatch(r"node-[0-9a-f]{64}\.pem", original[len(prefix):]) is not None)
-        path = original[:-4] + ".source"
-    else:
-        path = original
+def read_node_source(path, uid, owned):
     content = b""
+    if path:
+        # Caller trust may be a system/corporate CA symlink. Follow it only as
+        # this unprivileged user; abox-owned sources remain no-follow.
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if owned else 0))
+        with os.fdopen(fd, "rb") as source:
+            info = os.fstat(source.fileno())
+            if owned:
+                ordinary_file(info, uid)
+            require(stat.S_ISREG(info.st_mode) and info.st_size <= NODE_SOURCE_LIMIT)
+            content = source.read(NODE_SOURCE_LIMIT + 1)
+            require(len(content) <= NODE_SOURCE_LIMIT)
+    if content:
+        validate_node_certificates(content)
+    return content
+
+
+def validate_node_certificates(content):
+    # Node/OpenSSL allow non-ASCII comments and Bag Attributes outside PEM.
+    # Validate complete ASCII certificates without normalizing the source bytes.
+    blocks = re.findall(rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", content, re.DOTALL)
+    require(blocks and len(blocks) == content.count(b"-----BEGIN CERTIFICATE-----") == content.count(b"-----END CERTIFICATE-----"))
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    for block in blocks:
+        context.load_verify_locations(cadata=block.decode("ascii"))
+
+
+def caller_node_source(path, uid):
     try:
-        if path:
-            # Caller trust inputs may be system/corporate CA symlinks. Follow them
-            # only as this unprivileged user; abox-owned sources remain no-follow.
-            fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if own else 0))
-            with os.fdopen(fd, "rb") as source:
-                info = os.fstat(source.fileno())
-                if own:
-                    ordinary_file(info, uid)
-                require(stat.S_ISREG(info.st_mode) and info.st_size <= 1024 * 1024)
-                content = source.read(1024 * 1024 + 1)
-                require(len(content) <= 1024 * 1024)
-        if content:
-            # Node/OpenSSL allow non-ASCII comments and Bag Attributes outside PEM.
-            # Validate only complete ASCII certificates; retain the exact caller bytes.
-            blocks = re.findall(rb"-----BEGIN CERTIFICATE-----.*?-----END CERTIFICATE-----", content, re.DOTALL)
-            require(blocks and len(blocks) == content.count(b"-----BEGIN CERTIFICATE-----") == content.count(b"-----END CERTIFICATE-----"))
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-            for block in blocks:
-                context.load_verify_locations(cadata=block.decode("ascii"))
+        return read_node_source(path, uid, False)
     except (OSError, ValueError):
-        if own:
-            raise
         raise CallerCAInputError() from None
+
+
+def persist_node_bundle(root, uid, content, leaf):
     name = "node-" + hashlib.sha256(content).hexdigest()
-    if own:
-        require(path == prefix + name + ".source")
     if name + ".source" in os.listdir(root):
         fd = os.open(name + ".source", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root)
         with os.fdopen(fd, "rb") as source:
             ordinary_file(os.fstat(source.fileno()), uid)
-            require(source.read(1024 * 1024 + 1) == content)
+            require(source.read(NODE_SOURCE_LIMIT + 1) == content)
     else:
         # Bound distinct user trust configurations, never evict a running Node's
         # trust file or silently replace a user's independently selected CA roots.
-        if sum(entry.endswith(".source") for entry in os.listdir(root)) >= 16:
+        if sum(entry.endswith(".source") for entry in os.listdir(root)) >= MAX_NODE_SOURCES:
             raise NodeTrustCapacityError()
         write_atomic(root, name + ".source", content)
     write_atomic(root, name + ".pem", content + b"\n" + leaf)
     return name + ".pem"
 
 
-def bootstrap(uid):
-    require(len(sys.argv) >= 3)
-    root = open_root(uid, False)
-    require(root is not None)
+def node_bundle(root, uid):
+    # Protected-state failures must never be treated as recoverable caller input.
+    leaf = read_public_certificate(root, uid)
+    original = os.environ.get("NODE_EXTRA_CA_CERTS", "")
+    prefix = "/tmp/abox-https-" + str(uid) + "/"
+    if original.startswith(prefix):
+        require(re.fullmatch(r"node-[0-9a-f]{64}\.pem", original[len(prefix):]) is not None)
+        path = original[:-4] + ".source"
+        content = read_node_source(path, uid, True)
+        require(path == prefix + "node-" + hashlib.sha256(content).hexdigest() + ".source")
+    else:
+        content = caller_node_source(original, uid)
+    return persist_node_bundle(root, uid, content, leaf)
+
+
+@contextmanager
+def locked_runtime(uid, create=False, wait=3):
+    root = open_root(uid, create)
+    if root is None:
+        yield None
+        return
     try:
         lock = os.open(".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=root)
         try:
             ordinary_file(os.fstat(lock), uid)
-            acquire_lock(lock, 5)
+            acquire_lock(lock, wait)
             check_contents(root, uid)
-            config = read_config(root, uid)
-            ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
-            current = parents_current(config, uid)
-            recovery = sys.argv[2:] in (["hc", "server", "restart", "--fresh"], ["hc", "server", "stop"], ["hc", "server", "start"], ["opencode", "service", "stop"])
-            if current is not True:
-                sys.stderr.write("abox HTTPS: " + ("stale Herdr/agent parent" if current is False else "cannot inspect existing agent process environment (/proc permissions)") + "; existing agents are NOT confirmed configured. Save/exit and ordinary transport remain available. Explicitly initialize fresh parents through abox; no restart was performed.\n")
-                if is_agent(sys.argv[2:]) and not recovery:
-                    return 42 if current is False else 43
-            try:
-                node = node_bundle(root, uid)
-            except (CallerCAInputError, NodeTrustCapacityError):
-                sys.stderr.write("abox HTTPS: Node trust is NOT configured. Check NODE_EXTRA_CA_CERTS (readable regular PEM file, at most 1 MiB; maximum 16 distinct trust inputs). Preserve/fix the caller input or inspect unused owned node pairs, then retry 'abox ports'. Ordinary/recovery commands retain the caller's original Node setting and protected Kestrel configuration.\n")
-                if is_agent(sys.argv[2:]) and not recovery:
-                    return 78
-                node = "-"
-            print(config["password"] + " " + node)
+            yield root
         finally:
             os.close(lock)
     finally:
         os.close(root)
+
+
+def bootstrap(uid):
+    require(len(sys.argv) >= 3)
+    with locked_runtime(uid, wait=5) as root:
+        require(root is not None)
+        return launch_environment(root, uid, sys.argv[2:])
+
+
+def launch_environment(root, uid, command):
+    config = read_config(root, uid)
+    ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
+    recovery = command in (["hc", "server", "restart", "--fresh"], ["hc", "server", "stop"], ["hc", "server", "start"], ["opencode", "service", "stop"])
+    refusal = parent_launch_refusal(parents_current(config, uid), command, recovery)
+    if refusal is not None:
+        return refusal
+    try:
+        node = node_bundle(root, uid)
+    except (CallerCAInputError, NodeTrustCapacityError):
+        sys.stderr.write("abox HTTPS: Node trust is NOT configured. Check NODE_EXTRA_CA_CERTS (readable regular PEM file, at most 1 MiB; maximum 16 distinct trust inputs). Preserve/fix the caller input or inspect unused owned node pairs, then retry 'abox ports'. Ordinary/recovery commands retain the caller's original Node setting and protected Kestrel configuration.\n")
+        if is_agent(command) and not recovery:
+            return 78
+        node = "-"
+    print(config["password"] + " " + node)
+
+
+def parent_launch_refusal(current, command, recovery):
+    if current is True:
+        return None
+    sys.stderr.write("abox HTTPS: " + ("stale Herdr/agent parent" if current is False else "cannot inspect existing agent process environment (/proc permissions)") + "; existing agents are NOT confirmed configured. Save/exit and ordinary transport remain available. Explicitly initialize fresh parents through abox; no restart was performed.\n")
+    if is_agent(command) and not recovery:
+        return 42 if current is False else 43
+    return None
+
+
+def remove_transfer(root, temporary):
+    if temporary in os.listdir(root):
+        os.unlink(temporary, dir_fd=root)
+
+
+def remove_abandoned_transfers(root):
+    # Called only by serialized writers after every entry has been validated.
+    # The current writer has not created its transfer file yet.
+    for name in os.listdir(root):
+        if name.startswith(".transfer-"):
+            os.unlink(name, dir_fd=root)
+
+
+def write_transfer(root, temporary, payload):
+    output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=root)
+    with os.fdopen(output, "wb") as destination:
+        destination.write(payload)
+        destination.flush()
+        os.fsync(destination.fileno())
+
+
+class CertificateCommit:
+    """Commit stages under the caller's validated runtime lock, never outside it."""
+
+    def __init__(self, root, uid):
+        self.root = root
+        self.uid = uid
+
+    def activate(self, temporary, payload):
+        data = json.loads(payload)
+        require(re.fullmatch(r"[0-9a-f]{64}", data["password"]) is not None)
+        config = {"path": "/tmp/abox-https-" + str(self.uid) + "/active.pfx", "password": data["password"]}
+        require(isinstance(data.get("public"), str) and len(data["public"]) <= 16384)
+        if "config.json" in os.listdir(self.root):
+            require(read_config(self.root, self.uid) == config)
+        else:
+            # Commit the immutable pair first. Interrupted first activation fails
+            # closed; retry must reuse this same path/password before the PFX.
+            write_transfer(self.root, temporary, json.dumps(config).encode())
+            os.replace(temporary, "config.json", src_dir_fd=self.root, dst_dir_fd=self.root)
+            os.fsync(self.root)
+        write_atomic(self.root, "public.pem", data["public"].encode("ascii"))
+        self.install_bootstrap()
+        self.commit(temporary, "active.pfx", base64.b64decode(data["pfx"], validate=True))
+
+    def install_bootstrap(self):
+        installed = None
+        if "bootstrap.py" in os.listdir(self.root):
+            fd = os.open("bootstrap.py", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=self.root)
+            with os.fdopen(fd, "rb") as source:
+                installed = source.read(131072)
+        # Stable code is not replaced on renewal: a launcher can validate its
+        # inode before acquiring the setup lock.
+        if installed != SOURCE.encode("utf-8"):
+            write_atomic(self.root, "bootstrap.py", SOURCE.encode("utf-8"))
+
+    def commit(self, temporary, target, payload):
+        # Preserve the final staging-file cleanup even when writing fails.
+        output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=self.root)
+        try:
+            with os.fdopen(output, "wb") as destination:
+                destination.write(payload)
+                destination.flush()
+                os.fsync(destination.fileno())
+            check_contents(self.root, self.uid)
+            # Stable path/password: renewal replaces only the certificate bytes.
+            os.replace(temporary, target, src_dir_fd=self.root, dst_dir_fd=self.root)
+            if target == "active.pfx" and "active.json" in os.listdir(self.root):
+                os.unlink("active.json", dir_fd=self.root)
+            os.fsync(self.root)
+        finally:
+            remove_transfer(self.root, temporary)
+
+
+def runtime_status(root, uid):
+    config = read_config(root, uid)
+    ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
+    try:
+        node_bundle(root, uid)
+    except (CallerCAInputError, NodeTrustCapacityError):
+        return 44
+    current = parents_current(config, uid)
+    return 0 if current is True else 42 if current is False else 43
+
+
+def dispatch(root, uid, operation):
+    mode, transfer, payload = operation
+    if root is None:
+        require(mode in ("prepare", "cleanup"))
+        if mode == "prepare":
+            print(secrets.token_hex(32))
+        return
+    temporary = ".transfer-" + transfer + ".tmp"
+    if mode == "prepare":
+        print(read_config(root, uid)["password"] if "config.json" in os.listdir(root) else secrets.token_hex(32))
+        return
+    if mode == "refresh-bootstrap":
+        read_config(root, uid)
+        ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
+        read_public_certificate(root, uid)
+        write_atomic(root, "bootstrap.py", SOURCE.encode("utf-8"))
+        return
+    if mode == "status":
+        return runtime_status(root, uid)
+    if mode == "cleanup":
+        remove_transfer(root, temporary)
+        return
+    remove_abandoned_transfers(root)
+    commit = CertificateCommit(root, uid)
+    if mode == "activate":
+        commit.activate(temporary, payload)
+    else:
+        commit.commit(temporary, "active.json", payload)
 
 
 def run():
@@ -300,96 +453,8 @@ def run():
     mode, transfer = sys.argv[1:]
     require(mode in ("stage", "activate", "prepare", "status", "cleanup", "refresh-bootstrap") and re.fullmatch(r"[0-9a-f]{32}", transfer) is not None)
     payload = read_payload() if mode in ("stage", "activate") else None
-    root = open_root(uid, mode in ("stage", "activate"))
-    if root is None:
-        require(mode in ("prepare", "cleanup"))
-        if mode == "prepare":
-            print(secrets.token_hex(32))
-        return
-    temporary = ".transfer-" + transfer + ".tmp"
-    try:
-        lock = os.open(".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=root)
-        try:
-            ordinary_file(os.fstat(lock), uid)
-            acquire_lock(lock)
-            check_contents(root, uid)
-            if mode == "prepare":
-                print(read_config(root, uid)["password"] if "config.json" in os.listdir(root) else secrets.token_hex(32))
-                return
-            if mode == "refresh-bootstrap":
-                read_config(root, uid)
-                ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
-                read_public_certificate(root, uid)
-                write_atomic(root, "bootstrap.py", SOURCE.encode("utf-8"))
-                return
-            if mode == "status":
-                config = read_config(root, uid)
-                ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
-                try:
-                    node_bundle(root, uid)
-                except (CallerCAInputError, NodeTrustCapacityError):
-                    return 44
-                current = parents_current(config, uid)
-                return 0 if current is True else 42 if current is False else 43
-            if mode == "cleanup":
-                if temporary in os.listdir(root):
-                    os.unlink(temporary, dir_fd=root)
-                return
-            # Serialized writers can safely remove only validated, abandoned abox
-            # staging files. The current writer has not created its file yet.
-            for name in os.listdir(root):
-                if name.startswith(".transfer-"):
-                    os.unlink(name, dir_fd=root)
-            target = "active.json"
-            if mode == "activate":
-                data = json.loads(payload)
-                require(re.fullmatch(r"[0-9a-f]{64}", data["password"]) is not None)
-                config = {"path": "/tmp/abox-https-" + str(uid) + "/active.pfx", "password": data["password"]}
-                require(isinstance(data.get("public"), str) and len(data["public"]) <= 16384)
-                if "config.json" in os.listdir(root):
-                    require(read_config(root, uid) == config)
-                else:
-                    # The immutable pair is committed first. If interrupted before
-                    # the first PFX, launches fail closed and a retry reuses it.
-                    output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=root)
-                    with os.fdopen(output, "wb") as destination:
-                        destination.write(json.dumps(config).encode())
-                        destination.flush()
-                        os.fsync(destination.fileno())
-                    os.replace(temporary, "config.json", src_dir_fd=root, dst_dir_fd=root)
-                    os.fsync(root)
-                write_atomic(root, "public.pem", data["public"].encode("ascii"))
-                installed = None
-                if "bootstrap.py" in os.listdir(root):
-                    fd = os.open("bootstrap.py", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root)
-                    with os.fdopen(fd, "rb") as source:
-                        installed = source.read(131072)
-                # Stable code is not replaced on certificate renewal: a launcher
-                # can validate its inode before acquiring the setup lock.
-                if installed != SOURCE.encode("utf-8"):
-                    write_atomic(root, "bootstrap.py", SOURCE.encode("utf-8"))
-                payload = base64.b64decode(data["pfx"], validate=True)
-                target = "active.pfx"
-            output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=root)
-            try:
-                with os.fdopen(output, "wb") as destination:
-                    destination.write(payload)
-                    destination.flush()
-                    os.fsync(destination.fileno())
-                check_contents(root, uid)
-                # Activation uses a stable password/path. Only unchanged PFX bytes
-                # change on refresh; inherited canonical pairs cannot go stale.
-                os.replace(temporary, target, src_dir_fd=root, dst_dir_fd=root)
-                if mode == "activate" and "active.json" in os.listdir(root):
-                    os.unlink("active.json", dir_fd=root)
-                os.fsync(root)
-            finally:
-                if temporary in os.listdir(root):
-                    os.unlink(temporary, dir_fd=root)
-        finally:
-            os.close(lock)
-    finally:
-        os.close(root)
+    with locked_runtime(uid, create=mode in ("stage", "activate")) as root:
+        return dispatch(root, uid, (mode, transfer, payload))
 
 
 def interrupted(signum, frame):
