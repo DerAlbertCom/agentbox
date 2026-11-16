@@ -217,13 +217,24 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
 ### Shared existing-sandbox resolution (#10)
 
 `Sandboxes/SandboxResolver.FindAsync(location, token)` is the single location-to-existing-
-sandbox rule for run, on-demand user secrets and create/replacement checks. It returns
-the actual `SandboxInfo` or null: current `SandboxName.For` first, then the exact
+sandbox rule for run, on-demand user secrets, ports and create/replacement checks.
+It returns the actual `SandboxInfo` or null: current `SandboxName.For` first (also
+without an optional trailing directory separator on Windows), then the exact
 cape-agent-sandbox generated name only after a genuine null/not-found. Discovery
 exceptions and cancellation propagate, never enabling fallback or creation.
-Current naming and effective-location precedence are unchanged. No fuzzy/prefix or
-workspace-metadata matching is used; both-present inventories select the current
-candidate without touching the legacy one.
+Current naming and effective-location precedence are unchanged; both-present
+inventories select the current candidate without touching the legacy one.
+
+If both exact identities are absent on Windows, the resolver reads the runtime's
+primary host workspace (`workspaces[0]`). It compares fully qualified paths using
+Windows case-insensitive semantics, ignoring an optional trailing separator, then
+verifies that the actual sandbox name is the historical generated name for that
+**recorded spelling and historical real path**. This recovers existing identities
+without guessing casing, changing their hashes or adopting custom/lookalike names,
+additional workspaces or another folder. Multiple verified matches fail with an
+actionable ambiguity error; exact current/legacy matches still win. Missing usable
+workspace metadata does not enable this fallback. Unix retains exact historical
+lookup and case sensitivity.
 
 `Naming/LegacySandboxName` keeps sanitization and hashing pure; `SandboxResolver`
 privately resolves the historical real path before calling it. The contract is

@@ -62,7 +62,10 @@ public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : 
                 sandbox.Name!,
                 sandbox.Status ?? string.Empty,
                 sandbox.CreatedAt
-            ))
+            )
+            {
+                Workspaces = sandbox.Workspaces ?? [],
+            })
             .ToList();
     }
 

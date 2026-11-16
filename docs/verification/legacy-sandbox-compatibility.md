@@ -118,9 +118,9 @@ No live sbx sandbox, real host secret, registry, persistent global setting or He
 registration was changed. Port-command acceptance remains with #3; compatibility
 does not implement forwarding or broaden discovery to arbitrary custom names.
 Current and fallback lookups can read separate inventory snapshots; discovery is
-not atomic against concurrent runtime changes. Lookup derives one exact historical
-candidate from the effective path spelling, not every alternative historical
-trailing-separator spelling.
+not atomic against concurrent runtime changes. At that revision, lookup derived one
+exact historical candidate from the effective path spelling. The Windows spelling
+correction below adds a verified primary-workspace fallback after exact lookups.
 
 ## On-demand user-secrets squad-policy correction
 
@@ -168,3 +168,63 @@ Verification after the correction:
 
 This remains Windows-host synthetic verification, not a new live-sbx or independent
 Unix-host run. The user's uncommitted `run-abox.ps1` is excluded from this correction.
+
+## Windows legacy workspace spelling correction (PR #48)
+
+The user reported that `ports` could not find the existing legacy sandbox for
+`d:\dev\rwe\`, although its recorded workspace was `D:\dev\rwe`. The historical
+case-sensitive path hash is `41bc30` for the recorded spelling, `b8bd16` with only
+the drive lowercased, and `a7ad9b` with only a trailing backslash appended.
+`Path.GetFullPath` preserves these differences. Both `ports` and `user-secrets`
+already called the same resolver; this was not a missing ports-only compatibility
+path. No historical naming/hash rule was changed.
+
+Before production edits, the composed CLI/real sbx adapter with a substituted
+process runner reproduced the exact missing-sandbox message twice: 3 controls
+passed and 4 cases failed. Adding the uppercase-drive/trailing-separator control
+also failed independently. Expanded pre-fix cases reproduced whole-path casing,
+combined spelling changes, ambiguity handling and fallback-inventory errors.
+
+The fix retains current identity precedence (including its Windows no-trailing-
+separator equivalent), then exact legacy identity precedence. Only after genuine
+absence does Windows match the runtime's primary workspace and recompute the
+historical identity from its recorded spelling/real path. It returns the actual
+identity, never renames or records an alias. Custom names, wrong hashes, other
+folders, secondary/relative/missing workspaces and ambiguous verified matches are
+not adopted. Inventory errors and cancellation remain failures, not absence.
+Unix performs no new case-insensitive fallback; the historical symlink tests remain
+unchanged.
+
+Regression commands:
+
+```sh
+dotnet test --project cli/test/Abox.Tests -- --filter-method '*LegacyWorkspaceLookupSurvivesWindowsDriveCaseAtTheComposedCli*' --filter-method '*RecordedRweLegacyInventoryIsRecognizedByTheComposedPortsLookup*'
+dotnet test --project cli/test/Abox.Tests -- --filter-class '*LegacySandboxInventoryTests' --filter-class '*LegacySandboxNamingTests' --filter-class '*LegacySandboxCompatibilityTests'
+```
+
+The first command now passes **8 cases**. The second passes **67 cases**, with
+**1 explicit Unix-host-only skip** on this Windows host. Tests cover ordinary ports,
+on-demand user secrets, run identity propagation and create's retained replacement
+consent. The exact reported-name fixture is reconstructed from the known identity
+and workspace, not a raw live inventory capture; it uses the ports refresh action
+only to skip real-workspace reads, with all refresh transport substituted. Ordinary
+ports and user-secrets cases use isolated temporary folders and no selected stores.
+
+Final verification on this Windows host:
+
+- Debug and Release solution builds: **zero warnings/errors**.
+- Complete Debug and Release suites: each **2058 passed / 22 explicit skips /
+  0 failures**, 2080 total. The additional Unix-only case is skipped, not claimed
+  as Unix execution evidence.
+- CSharpier: **254 files checked**; working/staged whitespace checks passed.
+- Isolated clean-code comparison against `6793de5b7019aea7a57da8bf415068412eb42048`
+  across all six changed source/test files: **UNCHANGED**, no maintainability
+  regressions. The resolver remains **10/10**; this does not clear unrelated
+  whole-branch debt.
+
+No live sbx command, sandbox/process/mapping mutation, certificate export/trust,
+create/recreate, or user launcher edit was performed. The user's actual `abox`
+binary was not discoverable on this agent process's PATH. This synthetic regression
+does not claim that the user's live command was rerun successfully. AC9 remains
+postponed/nonblocking, not passed; existing whole-branch review findings are not
+cleared by this focused fix.
