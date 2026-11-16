@@ -1,4 +1,4 @@
-# Application ports: first HTTP slice (#43)
+# Application ports: shared discovery and HTTP publishing (#43, #44)
 
 ## Discovery and publishing contract
 
@@ -7,7 +7,8 @@
   every operation retains its returned actual name. Missing sandboxes give an
   actionable create command. No sandbox creation/replacement, squad/build lookup,
   folder config or project evaluation/execution is part of discovery.
-- Recursively inspect exactly named `Properties/launchSettings.json` files beneath
+- Recursively inspect exactly named `Properties/launchSettings.json`, `angular.json`
+  and `package.json` files beneath
   the selected root, never parents. Skip directories named `.git`, `bin`, `obj`,
   `node_modules`, `dist`, `coverage`, `.angular`, `.abox`, `.vs` (case-insensitive).
   Skip **all descendant directory links/reparse points**, including internal aliases,
@@ -24,7 +25,9 @@
   semicolon-separated absolute HTTP(S) URLs. Accept IPv4, bracketed IPv6 and Kestrel
   `*`/`+` hosts; ports must be literal decimal integers 1..65535. Explicit `:80`/`:443`
   count, implicit scheme defaults do not. Unknown unrelated JSON fields are ignored.
-  Invalid inputs name the source, not its raw URL/configuration contents.
+  Invalid inputs name the source, not its raw URL/configuration contents. Angular
+  uses the same file/JSON/bounds policy; its format-specific scope and literal
+  start-script grammar are [documented separately](angular-application-ports.md).
 - Preserve every occurrence across URLs, profiles and files; report source/profile,
   sandbox port and host port. Warn for repeated ports and publish each distinct
   mapping once. The complete plan is validated before publishing: with offset 10000,
@@ -300,5 +303,7 @@ contract proven is command-exit persistence, repeated invocation and stopped-san
 startup/restoration. No host forwarder is needed; the sandbox stdlib relay is required
 for localhost apps. No runtime upgrades/restarts,
 global settings/trust changes, registry publication, real secrets or existing user
-sandbox mutations were performed. Angular #44, offsets #45, HTTPS #46 and automatic
-create/recreate lifecycle #47 remain intentionally unimplemented.
+sandbox mutations were performed. These #43 runs predate Angular;
+[the #44 verification record](angular-application-ports.md) adds Angular discovery
+evidence. Offsets #45, HTTPS #46 and automatic create/recreate lifecycle #47 were
+not part of those runs.

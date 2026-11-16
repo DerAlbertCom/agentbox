@@ -13,11 +13,11 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
         CancellationToken cancellationToken
     )
     {
-        var occurrences = await DotnetLaunchSettings.DiscoverAsync(location, cancellationToken);
+        var occurrences = await AppPortDiscovery.DiscoverAsync(location, cancellationToken);
         foreach (var occurrence in occurrences)
             if (occurrence.Port + 10000 > 65535)
                 throw new AboxException(
-                    $"Invalid host port for {JsonSerializer.Serialize(occurrence.SourceFile)}: sandbox port {occurrence.Port} plus offset 10000 exceeds 65535. Fix applicationUrl before publishing; no ports were published."
+                    $"Invalid host port for {JsonSerializer.Serialize(occurrence.SourceFile)}: sandbox port {occurrence.Port} plus offset 10000 exceeds 65535. Fix the configured application port before publishing; no ports were published."
                 );
         if (occurrences.Count == 0)
         {
@@ -25,7 +25,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
             return;
         }
 
-        console.WriteLine("Source file (profile) | Sandbox port | Host port");
+        console.WriteLine("Source file (profile/configuration) | Sandbox port | Host port");
         foreach (var occurrence in occurrences)
             console.WriteLine(
                 $"{JsonSerializer.Serialize(occurrence.SourceFile)} ({JsonSerializer.Serialize(occurrence.Profile)}) | {occurrence.Port} | {occurrence.Port + 10000}"

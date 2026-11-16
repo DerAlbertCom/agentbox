@@ -725,12 +725,17 @@ passes its actual identity to `ApplicationPorts/AppPorts`. Location precedence i
 explicit, `defaultLocation`, current folder. No team sources, build metadata or
 folder configuration is required, and no create/replacement occurs.
 
-The shared module statically discovers all explicit .NET launch-profile URL ports,
+The shared module statically discovers all explicit .NET launch-profile URL ports
+and Angular serve/start-script ports,
 validates the complete plan, prints source occurrences and duplicate warnings, then
 asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset-10000 mappings.
 Discovery/reporting/application orchestration stays outside the command slice so
-the later Angular, offset, HTTPS and lifecycle slices can reuse it without importing
-a command. This slice adds none of those later features.
+the offset, HTTPS and lifecycle slices can reuse it without importing a command.
+`AppPortDiscovery` owns one bounded filesystem walk/read/JSON policy for both formats;
+`DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
+parsing. No extension framework or project-tool execution is involved. Angular #44
+includes options and all named serve configurations, and a conservative literal
+direct-CLI start-script grammar. See [scope/tests/live evidence](verification/angular-application-ports.md).
 
 The sbx adapter completes a fixed noninteractive `exec <sandbox> true` before reading
 `ports <sandbox> --json`: this waits for startup and restores existing bindings,
