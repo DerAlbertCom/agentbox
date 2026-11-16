@@ -257,20 +257,33 @@ public sealed class UserSecretsRewriteTests
             exception.Message.Should().Contain("policy ls").And.Contain("policy check");
     }
 
-    [Fact]
-    public async Task APreparedSnapshotIsReusableWithoutMutatingItsOriginalHostValues()
+    [Theory]
+    [InlineData("http://localhost:8004", "http://host.docker.internal:8004")]
+    [InlineData(
+        "//localhost:8004/synthetic-service",
+        "//host.docker.internal:8004/synthetic-service"
+    )]
+    [InlineData(
+        "Data Source='(ADDRESS=(PROTOCOL=TCP)(HOST=localhost)(PORT=8004))'",
+        "Data Source='(ADDRESS=(PROTOCOL=TCP)(HOST=host.docker.internal)(PORT=8004))'"
+    )]
+    public async Task APreparedSnapshotIsReusableWithoutMutatingItsOriginalHostValues(
+        string original,
+        string expected
+    )
     {
         // Arrange
         using var fixture = new CopyFixture();
         fixture.UsePorts(8004);
-        fixture.Store("sample", """{"Url":"http://localhost:8004"}""");
+        var source = JsonSerializer.Serialize(new { Url = original });
+        fixture.Store("sample", source);
         var prepared = await fixture.PrepareAsync();
 
         // Act
         await fixture.CopyPreparedAsync(prepared);
 
         // Assert
-        fixture.Value("sample", "Url").Should().Be("http://host.docker.internal:8004");
+        fixture.Value("sample", "Url").Should().Be(expected);
 
         // Arrange
         fixture.DeniedPorts.Add(8004);
@@ -279,10 +292,8 @@ public sealed class UserSecretsRewriteTests
         await fixture.CopyPreparedAsync(prepared);
 
         // Assert
-        fixture.Value("sample", "Url").Should().Be("http://localhost:8004");
-        File.ReadAllText(fixture.SourcePath("sample"))
-            .Should()
-            .Be("""{"Url":"http://localhost:8004"}""");
+        fixture.Value("sample", "Url").Should().Be(original);
+        File.ReadAllText(fixture.SourcePath("sample")).Should().Be(source);
     }
 
     [Fact]
