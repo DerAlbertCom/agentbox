@@ -55,12 +55,12 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
         catch (Exception exception) when (exception is AboxException or OperationCanceledException)
         {
             console.WriteError(
-                $"Application-port publishing did not complete. Some mappings may remain published; no rollback is attempted. Inspect sandbox ports, free conflicting host ports if needed, then retry 'abox ports --location {JsonSerializer.Serialize(location)}'."
+                $"Application-port publishing did not complete. Some mappings may remain published and sandbox relays may remain running; no rollback is attempted. Inspect sandbox ports and relay diagnostics, free conflicting ports if needed, then retry 'abox ports --location {JsonSerializer.Serialize(location)}'."
             );
             throw;
         }
         console.WriteLine(
-            "Application ports published on 127.0.0.1 (existing matching mappings reused). HTTPS certificates are not configured by this command."
+            "Application ports published on 127.0.0.1 via sandbox relays (existing matching mappings reused). HTTPS certificates are not configured by this command."
         );
     }
 }

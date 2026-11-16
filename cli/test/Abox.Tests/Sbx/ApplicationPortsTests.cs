@@ -13,6 +13,9 @@ public sealed class ApplicationPortsTests : IDisposable
     private string inventory = "[]";
     private ProcessResult? publishFailure;
     private bool acknowledgeWithoutPublishing;
+    private string relayInventory = "[{\"application_port\":8203,\"relay_port\":58203}]";
+    private ProcessResult? relayFailure;
+    private bool acknowledgeWithoutUnpublishing;
     private readonly SbxClient client;
 
     public ApplicationPortsTests()
@@ -24,15 +27,214 @@ public sealed class ApplicationPortsTests : IDisposable
             {
                 var request = call.Arg<ProcessRequest>();
                 calls.Add(request);
+                if (request.Arguments.Contains("python3") && relayFailure is not null)
+                    return relayFailure;
+                if (request.Arguments.Contains("--unpublish") && !acknowledgeWithoutUnpublishing)
+                    inventory =
+                        "[{\"host_ip\":\"127.0.0.1\",\"host_port\":19000,\"sandbox_port\":9000,\"protocol\":\"tcp4\"}]";
                 if (request.Arguments.Contains("--publish") && publishFailure is not null)
                     return publishFailure;
                 if (request.Arguments.Contains("--publish") && !acknowledgeWithoutPublishing)
                     inventory = """
-                        [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":8203,"protocol":"tcp4"},
+                        [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":58203,"protocol":"tcp4"},
                          {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
                         """;
-                return new ProcessResult(0, request.Arguments[0] == "ports" ? inventory : "", "");
+                return new ProcessResult(
+                    0,
+                    request.Arguments.Contains("python3") ? relayInventory
+                        : request.Arguments[0] == "ports" ? inventory
+                        : "",
+                    ""
+                );
             });
+    }
+
+    [Fact]
+    public async Task UpgradesOnlyTheRequestedExactDirectNativeMappingToALocalhostRelay()
+    {
+        // Arrange
+        inventory = """
+            [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":8203,"protocol":"tcp4"},
+             {"host_ip":"127.0.0.1","host_port":19000,"sandbox_port":9000,"protocol":"tcp4"}]
+            """;
+
+        // Act
+        await client.EnsureApplicationPortsAsync(
+            "actual",
+            [new(8203, 18203)],
+            CancellationToken.None
+        );
+        await client.EnsureApplicationPortsAsync(
+            "actual",
+            [new(8203, 18203)],
+            CancellationToken.None
+        );
+
+        // Assert
+        var upgrade = calls
+            .Should()
+            .ContainSingle(call => call.Arguments.Contains("--unpublish"))
+            .Which;
+        upgrade
+            .Arguments.Should()
+            .Equal("ports", "actual", "--unpublish", "127.0.0.1:18203:8203/tcp4", "--json");
+        calls.Where(call => call.Arguments.Contains("--publish")).Should().ContainSingle();
+        calls
+            .FindIndex(call => call.Arguments.Contains("python3"))
+            .Should()
+            .BeLessThan(calls.IndexOf(upgrade));
+        inventory.Should().Contain("19000").And.Contain("9000");
+    }
+
+    [Fact]
+    public async Task UnconfirmedDirectMappingRemovalCannotProceedToPublication()
+    {
+        // Arrange
+        acknowledgeWithoutUnpublishing = true;
+        inventory =
+            "[{\"host_ip\":\"127.0.0.1\",\"host_port\":18203,\"sandbox_port\":8203,\"protocol\":\"tcp4\"}]";
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync(
+                "actual",
+                [new(8203, 18203)],
+                CancellationToken.None
+            );
+
+        // Assert
+        await action
+            .Should()
+            .ThrowAsync<AboxException>()
+            .WithMessage("*did not confirm*upgrade*retry*");
+        calls.Should().NotContain(call => call.Arguments.Contains("--publish"));
+    }
+
+    [Fact]
+    public async Task AllRequestedConflictsAreCheckedBeforeUpgradingAnyDirectMapping()
+    {
+        // Arrange
+        relayInventory =
+            "[{\"application_port\":8203,\"relay_port\":58203},{\"application_port\":8204,\"relay_port\":58204}]";
+        inventory = """
+            [{"host_ip":"127.0.0.1","host_port":18203,"sandbox_port":8203,"protocol":"tcp4"},
+             {"host_ip":"127.0.0.1","host_port":18204,"sandbox_port":9000,"protocol":"tcp4"}]
+            """;
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync(
+                "actual",
+                [new(8203, 18203), new(8204, 18204)],
+                CancellationToken.None
+            );
+
+        // Assert
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*18204*conflicting*");
+        calls
+            .Should()
+            .NotContain(call =>
+                call.Arguments.Contains("--unpublish") || call.Arguments.Contains("--publish")
+            );
+    }
+
+    [Fact]
+    public async Task PublishesDedicatedRelayRatherThanOccupyingTheApplicationListener()
+    {
+        // Arrange
+        acknowledgeWithoutPublishing = true;
+        inventory =
+            "[{\"host_ip\":\"127.0.0.1\",\"host_port\":18203,\"sandbox_port\":58203,\"protocol\":\"tcp4\"}]";
+
+        // Act
+        await client.EnsureApplicationPortsAsync(
+            "actual",
+            [new(8203, 18203)],
+            CancellationToken.None
+        );
+
+        // Assert
+        calls.Should().ContainSingle(call => call.Arguments.Contains("python3"));
+        calls.Should().NotContain(call => call.Arguments.Contains("--publish"));
+        var relay = calls.Single(call => call.Arguments.Contains("python3"));
+        relay.Arguments.Take(6).Should().Equal("exec", "-i", "actual", "python3", "-I", "-c");
+        relay.Arguments.Skip(7).Should().Equal("8203", "--reserved", "58203");
+        relay.AttachConsole.Should().BeFalse();
+        relay.UseUtf8StandardInput.Should().BeTrue();
+        relay.StandardInput.Should().NotBeNullOrEmpty();
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[null]")]
+    [InlineData("[]")]
+    [InlineData("[{\"application_port\":8204,\"relay_port\":58203}]")]
+    [InlineData("[{\"application_port\":8203,\"relay_port\":8203}]")]
+    [InlineData("[{\"application_port\":8203,\"relay_port\":65536}]")]
+    [InlineData("[{\"application_port\":8203,\"relay_port\":58203,\"relay_port\":58204}]")]
+    public async Task UnconfirmedRelayListenersPreventHostPublication(string json)
+    {
+        // Arrange
+        relayInventory = json;
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync(
+                "actual",
+                [new(8203, 18203)],
+                CancellationToken.None
+            );
+
+        // Assert
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*relay*confirm*retry*");
+        calls.Should().NotContain(call => call.Arguments.Contains("--publish"));
+    }
+
+    [Fact]
+    public async Task MissingPythonIsActionableAndCannotPublishAnUnreachableNativeMapping()
+    {
+        // Arrange
+        relayFailure = new ProcessResult(127, "", "python3: not found");
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync(
+                "actual",
+                [new(8203, 18203)],
+                CancellationToken.None
+            );
+
+        // Assert
+        await action
+            .Should()
+            .ThrowAsync<AboxException>()
+            .WithMessage("*Python 3.8+*nothing is installed automatically*python3: not found*");
+        calls.Should().NotContain(call => call.Arguments.Contains("--publish"));
+    }
+
+    [Fact]
+    public async Task CancellationWhileStartingRelaysDoesNotProceedToHostPublication()
+    {
+        // Arrange
+        using var cancellation = new CancellationTokenSource();
+        runner
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request => request.Arguments.Contains("python3")),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(_ =>
+            {
+                cancellation.Cancel();
+                return Task.FromCanceled<ProcessResult>(cancellation.Token);
+            });
+
+        // Act
+        var action = () =>
+            client.EnsureApplicationPortsAsync("actual", [new(8203, 18203)], cancellation.Token);
+
+        // Assert
+        await action.Should().ThrowAsync<OperationCanceledException>();
+        calls.Should().NotContain(call => call.Arguments.Contains("--publish"));
     }
 
     [Fact]
@@ -179,7 +381,7 @@ public sealed class ApplicationPortsTests : IDisposable
                 "ports",
                 "actual-legacy-name",
                 "--publish",
-                "127.0.0.1:18203:8203/tcp4",
+                "127.0.0.1:18203:58203/tcp4",
                 "--json"
             );
         calls

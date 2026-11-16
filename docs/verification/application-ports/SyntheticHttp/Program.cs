@@ -1,10 +1,14 @@
 using System.Net;
 using System.Text;
 
-if (args is ["--get"])
+if (args is ["--get"] or ["--get", _])
 {
+    var port =
+        args.Length == 2
+            ? int.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture)
+            : 8203;
     using var client = new HttpClient(new SocketsHttpHandler { UseProxy = false });
-    Console.WriteLine(await client.GetStringAsync("http://localhost:8203/"));
+    Console.WriteLine(await client.GetStringAsync($"http://localhost:{port}/"));
     return;
 }
 

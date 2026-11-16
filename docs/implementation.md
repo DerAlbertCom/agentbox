@@ -734,15 +734,32 @@ a command. This slice adds none of those later features.
 
 The sbx adapter completes a fixed noninteractive `exec <sandbox> true` before reading
 `ports <sandbox> --json`: this waits for startup and restores existing bindings,
-avoiding a verified sbx 0.51.0 stopped-publishing race. It reuses exact
-`127.0.0.1:<host>:<sandbox>/tcp4` mappings, refuses conflicting or malformed inventory,
-only appends missing bindings and verifies them after publication. It never removes
-or overwrites unrelated mappings. Application publishing is deliberately separate
-from user-secrets' opposite-direction authorized host-access policy inventory.
+avoiding a verified sbx 0.51.0 stopped-publishing race. Native publishing does not
+reach sandbox loopback, so `Sbx/application_ports.py` is an embedded receiver sent
+through the same argv/stdin adapter. It requires existing sandbox Python 3.8+, uses
+only its standard library, and never installs tools. Detached, non-root sandbox
+relays listen on separate high ports and connect to application IPv4/IPv6 loopback
+or the ingress sandbox IPv4 address. They never reserve the app port or mutate app
+startup settings. Private owned state/control sockets under sandbox `~/.abox-ports-v1`
+provide bounded readiness, serialized setup, repeat reuse and same-port restoration.
+No host worker, shell-lifetime assumption or PID-based adoption/killing is needed.
+
+The adapter reuses exact `127.0.0.1:<host>:<relay>/tcp4` mappings, refuses conflicting
+or malformed inventory, only appends missing bindings and verifies them after
+publication. After validating all conflicts and relay readiness, it upgrades an exact
+requested direct native mapping using its complete original loopback/host/app/protocol
+spec, confirms removal and unrelated-inventory preservation, then publishes the relay.
+It never removes or overwrites unrelated mappings; different targets, wildcard binds
+and non-exact protocols remain conflicts. Upgrade failure/cancellation may leave the
+requested host binding absent; retry republishes it without replacing the sandbox.
+Application publishing is deliberately separate from user-secrets' opposite-direction
+authorized host-access policy inventory.
 
 Failures and cancellation explain possible partial state and retry, without claiming
-success or rollback. Publishing does not run apps, make IPv6-only apps reachable or
-configure HTTPS certificates. See [discovery bounds, runtime evidence and limitations](verification/application-ports.md).
+success or rollback; relays may also remain after interruption. Publishing does not
+run apps or configure HTTPS certificates. Relays end when the sandbox stops; run
+`abox ports` after starting it again to restore them (the command itself handles a
+stopped sandbox). See [discovery bounds, runtime evidence and limitations](verification/application-ports.md).
 
 ### `abox prune [--full] [--sbx]`
 

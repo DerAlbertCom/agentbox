@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource
+      Include="../../../../cli/src/Abox/Sbx/application_ports.py"
+      LogicalName="Abox.ApplicationPortsRelay"
+    />
     <Compile
       Include="../../../../cli/src/Abox/**/*.cs"
       Exclude="../../../../cli/src/Abox/Program.cs;../../../../cli/src/Abox/obj/**/*.cs;../../../../cli/src/Abox/bin/**/*.cs"

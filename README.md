@@ -34,8 +34,8 @@ team sources are used.
 
 ### Reaching sandbox apps over HTTP
 
-Start your app inside the existing sandbox, listening on IPv4 (for example
-`http://0.0.0.0:8203`), then run:
+Start your app inside the existing sandbox with its normal launch profile (including
+localhost-only bindings), then run:
 
 ```sh
 abox ports --location /path/to/project
@@ -49,12 +49,20 @@ It prints each source occurrence, warns about duplicates and publishes each dist
 mapping once. No `abox.json`, team sources or build is needed. It never creates or
 replaces a sandbox; a missing sandbox gives a create hint.
 
-Publishing is managed by sbx, not a background abox process. It binds **127.0.0.1
-only**, reuses exact existing mappings on subsequent runs and preserves unrelated
-mappings. A stopped sandbox is started first, but **apps are not started** by this
-command. Ports still occupied by another host service fail with a diagnostic;
-fix the conflict and retry. Failure/cancellation can leave some mappings published
-and does not roll back. The table is a plan, not proof the app is running.
+sbx publishes **127.0.0.1 only** to a small sandbox-owned TCP relay, because native
+publishing cannot reach sandbox loopback on sbx 0.51.0. **Python 3.8+ must already be
+available as `python3` inside the sandbox**, running as its non-root application user;
+abox checks it and never installs dependencies. No extra host runtime or background
+abox process is needed. The relay uses a separate sandbox port, so it does not
+reserve or change your application's listener, sources, profiles or startup flags.
+
+Subsequent runs reuse matching relays/mappings and preserve unrelated mappings.
+An exact requested direct native mapping is upgraded to its localhost-capable relay;
+other targets or non-loopback bindings are conflicts, not overwritten mappings.
+A stopped sandbox is started first and its relays are restored, but **apps are not
+started** by this command. Ports occupied by another service fail with a diagnostic;
+fix the conflict and retry. Failure/cancellation can leave mappings and sandbox
+relays in place; there is no rollback. The table is a plan, not proof the app is running.
 
 This first slice supports .NET discovery and HTTP reachability with fixed offset
 10000. HTTPS ports are discovered too, but certificates/trust are **not** configured.

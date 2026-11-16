@@ -49,4 +49,33 @@ public sealed partial class SbxClient
 
     public Task<ProcessResult> ProbePortsAsync(string name, CancellationToken token) =>
         runner.RunAsync(new ProcessRequest(ExecutableName, ["ports", name, "--json"]), token);
+
+    public Task<ProcessResult> PublishDirectProbeMappingAsync(
+        string name,
+        int sandboxPort,
+        int hostPort,
+        CancellationToken token
+    ) =>
+        runner.RunAsync(
+            new ProcessRequest(
+                ExecutableName,
+                ["ports", name, "--publish", $"127.0.0.1:{hostPort}:{sandboxPort}/tcp4", "--json"]
+            ),
+            token
+        );
+
+    public Task<ProcessResult> ProbePythonAsync(
+        string name,
+        string source,
+        CancellationToken token
+    ) =>
+        runner.RunAsync(
+            new ProcessRequest(
+                ExecutableName,
+                ["exec", "-i", name, "python3", "-c", "import sys; exec(sys.stdin.read())"],
+                StandardInput: source,
+                UseUtf8StandardInput: true
+            ),
+            token
+        );
 }
