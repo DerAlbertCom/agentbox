@@ -6,6 +6,27 @@ namespace Abox.Sbx;
 /// </summary>
 public interface ISbxClient
 {
+    Task<string> GetDevelopmentCertificatePasswordAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+    Task ActivateDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
+        CancellationToken cancellationToken
+    );
+    Task VerifyDevelopmentCertificateActivationAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary>Refreshes only the verified reader of an existing protected HTTPS runtime.</summary>
+    Task RefreshDevelopmentCertificateBootstrapAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+
     /// <summary>The first sbx version abox works with.</summary>
     const string MinimumVersion = "0.51.0";
 
@@ -16,6 +37,13 @@ public interface ISbxClient
     Task<IReadOnlyList<SandboxInfo>> ListSandboxesAsync(CancellationToken cancellationToken);
 
     Task<SandboxInfo?> FindSandboxAsync(string name, CancellationToken cancellationToken);
+
+    /// <summary>Starts the sandbox if needed and ensures loopback TCP app mappings without removing others.</summary>
+    Task EnsureApplicationPortsAsync(
+        string sandbox,
+        IReadOnlyList<ApplicationPortMapping> mappings,
+        CancellationToken cancellationToken
+    );
 
     /// <summary>The template images the local runtime holds.</summary>
     Task<IReadOnlyList<TemplateImage>> ListTemplatesAsync(CancellationToken cancellationToken);
@@ -58,6 +86,14 @@ public interface ISbxClient
         string sandbox,
         string id,
         string json,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary>Stages an already authorized export atomically with its password; does not configure Kestrel or establish host trust.</summary>
+    Task StageDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
         CancellationToken cancellationToken
     );
 

@@ -62,7 +62,8 @@ accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
    preparation; see [bounded discovery](user-secrets-appsettings.md#bounded-discovery-not-application-startup).
    A missing host file is allowed when an associated project's appsettings supplies
    configuration. No sandbox metadata or destination access is needed for preparation.
-3. Validate squad/build/state/MCP inputs and obtain replacement consent. Prepare
+3. Prepare the shared app-port discovery plan and validate its snapshot-selected
+   offset before runtime mutations. Validate squad/build/state/MCP inputs and obtain replacement consent. Prepare
    state/MCP changes and then remove the old sandbox, if replacing.
 4. Create the sandbox. Only a successful creation saves its actual new record.
 5. Call shared `CopyAsync(prepared, sandbox, token)` **after saving that record**.
@@ -71,11 +72,12 @@ accepted newer-local-build replacement from `abox run` use `SandboxCreator`:
    transport. Generation needs runtime policy, so generated-original deny checks,
    unsafe adaptation and all-consumer shared-store compatibility checks occur here. All stores'
    target/destination validation finishes before the first destination write.
-6. Only a successful required copy reports full creation success. `run` launches
-   only after that succeeds.
+6. Configure shared app ports/HTTPS, then report full creation success. `run` launches
+   only after both required copying and app setup succeed. See
+   [app-port lifecycle ordering/recovery](application-ports-lifecycle.md).
 
-A folder without `abox.json` retains its existing create/run behavior, with no
-user-secret host-store reads, target discovery or writes. A config with no
+A folder without `abox.json` performs no user-secret host-store reads, target discovery
+or writes; creation/replacement still configures app ports/HTTPS. A config with no
 selected stores copies nothing. Ordinary `run`, including declining a newer-build
 replacement, never resynchronizes secrets or reads selected host stores. Creation
 failure, declined explicit replacement, or cancellation never starts a subsequent

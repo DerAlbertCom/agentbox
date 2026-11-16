@@ -217,13 +217,24 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
 ### Shared existing-sandbox resolution (#10)
 
 `Sandboxes/SandboxResolver.FindAsync(location, token)` is the single location-to-existing-
-sandbox rule for run, on-demand user secrets and create/replacement checks. It returns
-the actual `SandboxInfo` or null: current `SandboxName.For` first, then the exact
+sandbox rule for run, on-demand user secrets, ports and create/replacement checks.
+It returns the actual `SandboxInfo` or null: current `SandboxName.For` first (also
+without an optional trailing directory separator on Windows), then the exact
 cape-agent-sandbox generated name only after a genuine null/not-found. Discovery
 exceptions and cancellation propagate, never enabling fallback or creation.
-Current naming and effective-location precedence are unchanged. No fuzzy/prefix or
-workspace-metadata matching is used; both-present inventories select the current
-candidate without touching the legacy one.
+Current naming and effective-location precedence are unchanged; both-present
+inventories select the current candidate without touching the legacy one.
+
+If both exact identities are absent on Windows, the resolver reads the runtime's
+primary host workspace (`workspaces[0]`). It compares fully qualified paths using
+Windows case-insensitive semantics, ignoring an optional trailing separator, then
+verifies that the actual sandbox name is the historical generated name for that
+**recorded spelling and historical real path**. This recovers existing identities
+without guessing casing, changing their hashes or adopting custom/lookalike names,
+additional workspaces or another folder. Multiple verified matches fail with an
+actionable ambiguity error; exact current/legacy matches still win. Missing usable
+workspace metadata does not enable this fallback. Unix retains exact historical
+lookup and case sensitivity.
 
 `Naming/LegacySandboxName` keeps sanitization and hashing pure; `SandboxResolver`
 privately resolves the historical real path before calling it. The contract is
@@ -260,9 +271,9 @@ sensitive transport checks are unchanged. This supersedes the earlier on-demand
 record prerequisite in #2/#10, per the user's subsequent policy correction.
 
 Explicit-name `exec`/`pipe`, inventory-wide prune and host proxy-secret commands do
-not use location fallback. Future location-based commands, including ports (#3),
-must use this resolver and retain the actual selected identity; this change adds
-neither ports nor public stop/delete commands. See [verification and red evidence](verification/legacy-sandbox-compatibility.md).
+not use location fallback. Location-based ports (#43) also uses this resolver and
+retains the actual selected identity. Public stop/delete commands are not included.
+See [verification and red evidence](verification/legacy-sandbox-compatibility.md).
 
 ### `abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag>]
 [--local] [--yes]`
@@ -334,11 +345,18 @@ neither ports nor public stop/delete commands. See [verification and red evidenc
    launcher. A post-create copy failure retains the actual sandbox/new record,
    returns failure (1, or 130 for cancellation) and gives a folder-qualified
    `abox user-secrets --location "<folder>"` retry, without recreating. Creation
-   failure, declined replacement or cancellation never starts a subsequent copy.
+    failure, declined replacement or cancellation never starts a subsequent copy.
+10. Runs the shared prepared app-port/HTTPS flow after required secret copying.
+    The entry-time folder snapshot supplies the explicit offset (default 10000),
+    even without `abox.json`. Discovery/mapping validation happens before runtime
+    mutations, not after deleting the old sandbox. Required setup failure keeps
+    the sandbox/record, suppresses full-success/open output and launcher start,
+    returns 1 (130 on cancellation), and prints a folder-qualified `abox ports`
+    retry with that offset. See [the complete lifecycle contract](application-ports-lifecycle.md).
 
 Automatic copying never forces deny-list matches: neither `--yes` nor replacement
-consent is a safety override. Missing `abox.json` retains the old create/run behavior
-with no user-secret store reads, target discovery or writes. See the
+consent is a safety override. Missing `abox.json` performs no user-secret store
+reads, target discovery or writes; app-port setup is independent of that opt-in. See the
 [lifecycle contract](user-secrets-lifecycle.md) for squad checks and intentional
 on-demand override/recovery.
 
@@ -435,7 +453,7 @@ published tag.
    resolving team sources from the newer build's recorded root (or the sandbox
    location for legacy metadata), so a separate `create --root` project stays usable.
    Accepted replacement uses `SandboxCreator`, including shared user-secret
-   preparation/copying. Failed required copying prevents launch. Ordinary run or
+    preparation/copying and app-port/HTTPS setup. Failed required setup prevents launch. Ordinary run or
     declining the newer build never reads selected host stores or resyncs secrets.
     Another team's build is never offered or borrowed for a create hint. Unproven or
     invalid local metadata reports a rebuild instruction without interrupting an
@@ -718,6 +736,145 @@ documents explicitly authorized local declarations on the existing `D:\dev\rwe`
 sandbox and read-only production port discovery; no real secret copy, connectivity
 or authentication check was performed for that change.
 
+### `abox ports [--location <path>] [--offset <n>]` (#43, #44, #45, #46)
+
+Resolves the existing sandbox with the shared current-first/legacy resolver and
+passes its actual identity to `ApplicationPorts/AppPorts`. Location precedence is
+explicit, `defaultLocation`, current folder. No team sources, build metadata or
+folder configuration is required, and no create/replacement occurs.
+
+The shared module statically discovers all explicit .NET launch-profile URL ports
+and Angular serve/start-script ports,
+validates the complete plan, prints source occurrences and duplicate warnings, then
+asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset mappings.
+Discovery/reporting/application orchestration stays outside the command slice so
+the HTTPS and lifecycle slices can reuse it without importing a command.
+`AppPortDiscovery` owns one bounded filesystem walk/read policy for both formats and
+static explicit Web SDK / ASP.NET framework-reference project detection;
+`DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
+parsing. No extension framework or project-tool execution is involved. Angular #44
+includes options and all named serve configurations, and a conservative literal
+direct-CLI start-script grammar. See [scope/tests/live evidence](verification/angular-application-ports.md).
+
+The command loads `FolderConfig` once before runtime access. Configuration owns
+`portOffset` parsing/validation and `FolderConfig.SelectPortOffset(snapshot, option)`:
+option, snapshot setting, then 10000. The same immutable snapshot still contains
+squad and user-secret selections for creation/replacement callers; absence stays null.
+Lifecycle setup selects from that entry-time snapshot without rereading the workspace.
+`AppPorts.PrepareAsync(location, offset, token)` discovers and validates once, before
+creation/replacement mutations. The prepared plan retains its explicit offset and
+discovery result for post-record publishing. On demand,
+`AppPorts.PublishAsync(location, sandbox, offset, token)` uses those same preparation
+and application steps. No shared overload silently substitutes 10000 and no command
+slice is imported. Automatic create/replacement (#47) uses the same table, adapter
+and HTTPS flow; ordinary non-replacing run adds no discovery/setup.
+
+Offsets are integers -65534..65534, including zero and negatives, with complete-plan
+widened arithmetic and resulting-port validation in 1..65535 before runtime mutation.
+All adapter mappings must have one common offset. Neither global settings nor
+configuration writes are introduced. See [offset semantics and evidence](application-port-offsets.md).
+
+The sbx adapter completes a fixed noninteractive `exec <sandbox> true` before reading
+`ports <sandbox> --json`: this waits for startup and restores existing bindings,
+avoiding a verified sbx 0.51.0 stopped-publishing race. Native publishing does not
+reach sandbox loopback, so `Sbx/application_ports.py` is an embedded receiver sent
+through the same argv/stdin adapter. It requires existing sandbox Python 3.8+, uses
+only its standard library, and never installs tools. Detached, non-root sandbox
+relays listen on separate high ports and connect to application IPv4/IPv6 loopback
+or the ingress sandbox IPv4 address. They never reserve the app port or mutate app
+startup settings. Private owned state/control sockets under sandbox `~/.abox-ports-v1`
+provide bounded readiness, serialized setup, repeat reuse and same-port restoration.
+No host worker, shell-lifetime assumption or PID-based adoption/killing is needed.
+
+The receiver gets the selected offset and validated TCP-binding snapshot. Under its
+setup lock it reads all saved relay ports/control sockets, including no-longer-discovered
+apps and running relays whose save acknowledgement was lost. Any existing binding
+to a known relay with a different offset
+refuses the whole change before starting new relays or changing bindings. Operators
+must remove exact old bindings explicitly to change offsets; no ownership guessing,
+automatic stale-binding removal or concurrent runtime-writer transaction is claimed.
+Direct bindings to a requested app at another host port are also refused conservatively,
+with an unproven-direct-mapping diagnostic, not a claim of a previous abox offset.
+
+The adapter reuses exact `127.0.0.1:<host>:<relay>/tcp4` mappings, refuses conflicting
+or malformed inventory, only appends missing bindings and verifies them after
+publication. Every unproven direct native binding at a requested host port is a conflict,
+even an exact loopback/host/app/protocol match at offset 10000. Matching numbers are not
+ownership provenance. abox never unpublishes bindings automatically; diagnostics identify
+the full conflicting spec and require deliberate operator inspection and exact removal
+if replacement is intended. Different targets, wildcard binds and non-exact protocols
+also remain conflicts. The historical #43 automatic native upgrade is retired; existing
+proven relay mappings remain reusable, including the already-converted Deals mapping.
+Application publishing is deliberately separate from user-secrets' opposite-direction
+authorized host-access policy inventory.
+
+Failures and cancellation explain possible partial state and retry, without claiming
+success or rollback; relays may also remain after interruption. Publishing does not
+run apps. Relays end when the sandbox stops; run
+`abox ports` after starting it again to restore them (the command itself handles a
+stopped sandbox). See [discovery bounds, runtime evidence and limitations](verification/application-ports.md).
+
+#### Shared development HTTPS setup (#46)
+
+After validated forwarding (or without ports when a Web SDK project is explicit),
+`AppPorts` invokes shared `Https/DevelopmentHttps`. Non-Web/non-.NET folders perform
+no host certificate operation. The host exporter locates an already-installed
+dev-certs DLL with an eligible certificate-format requirement, privately checks
+machine-readable existing identity/trust metadata, exports with a generated
+password into owner-only staging, validates actual ephemeral PFX/key/SAN/dates and
+fresh exact trust metadata, then clears/removes temporary private material. No
+native-store export fallback, automatic alternative identity or host trust change
+is allowed. CLI pre/post checks cannot make concurrent store renewal/deletion
+atomic; see [the explicit CLI race contract](https-development-certificates.md).
+
+`SbxClient` activates unchanged encrypted PFX bytes at an owner-only runtime path
+outside workspace/HOME/build mounts. Protected `config.json` fixes the canonical
+Kestrel path/password for subsequent launches. Stable password/path make renewal
+one atomic PFX replacement rather than mismatched independent file updates.
+Shared `ExecAsync` bootstrap covers shell/direct argv/exec/pipe and newly initialized
+agent/core children after abox exits; it preserves streams, argv, workdir, TTY flags
+and actual child exit status. It is not a shell-profile-only mechanism.
+
+Exact public sandbox system trust is installed through root exec into the existing
+Debian-style CA store; only public PEM reaches root. Node's protected extra-CA
+bundle preserves the caller's original roots. A compact shell exec parent reads
+hash-verified installed bootstrap code, avoiding CPython signal/locale inheritance
+and the previous per-exec source-size regression. Runtime reads/writes share the
+exclusive setup lock with signal-cancellable contention retries: five seconds for
+launches, three seconds for other operations, including cleanup within its separate
+five-second host budget (not parallel shared readers). Caller-CA input/capacity
+failures preserve ordinary/recovery access, the caller's original Node setting
+and protected Kestrel defaults, while readiness
+and recognized agent launches fail actionably. Caller-selected CA symlinks are
+read as the application user; abox-owned runtime paths remain strict no-follow.
+See the HTTPS contract for prerequisites, bounded bundles and partial
+trust/activation recovery.
+
+Existing recognizable hc/OpenCode/Copilot/pi/Claude parents with missing/mismatched
+settings block full activation and new recognized agent launches, not ordinary
+shell/exec/pipe save/recovery transport; nothing is automatically restarted.
+Herdr checks readiness before desktop opening. Explicit fresh-parent recovery and
+running-app renewal/restart requirements are documented in the
+[HTTPS contract](https-development-certificates.md). New processes cannot mutate an
+arbitrary old Unix shell's environment, and raw sbx launches bypass this contract.
+
+Production export/activation and synthetic exact-leaf .NET 10/real-local-tool
+verification are present; #46 was accepted for the current Windows-host scope per
+the [tracker closure clarification](https://github.com/DerAlbertCom/agentbox/issues/46#issuecomment-6918879462). See
+[the scoped production-path record](verification/https/README.md). The latest
+[Windows real-host production evidence](verification/https/real-host-production-verification.md)
+is pinned to `5b40b570aff9fb76b9c6379e55569eef83dc2df9`: actual Release setup exited
+before app startup, strict host/system/Node TLS passed at 8443 → 18443, and repeat
+setup, bootstrap-only refresh and cleanup passed. Separately,
+[the manual Deals preservation checks](verification/https/real-host-production-verification.md#preservation-and-still-missing-gates)
+confirmed default host TLS (Swagger HEAD 200) without changing that manually
+configured sandbox. That result remains distinct from production-fixture evidence. The user
+confirmed the existing Deals browser lock at 18203 and working Herdr SSH. Copilot is
+excluded from this acceptance; independent Linux-host proof is deferred. No real-host
+renewal was authorized or performed. Those excluded/deferred items are not new #47
+gates. #47 automatic creation/replacement now uses this shared module; its synthetic
+tests and live-evidence boundaries are recorded [separately](verification/application-ports-lifecycle.md).
+
 ### `abox prune [--full] [--sbx]`
 
 Sbx stores every kit it builds as a template image: one image per build plus one per kit
@@ -883,6 +1040,7 @@ cli/src/Abox/
     Run/            abox run: the command and the service that does its work
     Secrets/        abox secrets: the command and the service that does its work
     UserSecrets/    abox user-secrets: on-demand command only
+    Ports/          abox ports: on-demand command only
     Prune/          abox prune: the command and the service that does its work
     Sandbox/        the commands other programs call: abox exec and abox pipe
     CommandHandling.cs  turns an abox error into a message and an exit code
@@ -890,6 +1048,7 @@ cli/src/Abox/
     FolderConfig.cs runtime-only abox.json (not squad/build configuration)
   UserSecrets/      shared selection/policy, bounded project/appsettings discovery,
                     endpoint override generation and runtime copy flow
+  ApplicationPorts/ shared static discovery, occurrence reporting and publishing flow
   Kits/             the .abox and .workload files, the chain, the kit generators
   LocalState/       local on-disk state shared by the command slices
     BuildManifest.cs

@@ -19,6 +19,19 @@
     <InternalsVisibleTo Include="Abox.Tests" />
     <None Include="../../../README.md" Pack="true" PackagePath="/" />
     <EmbeddedResource Include="Assets/rwe_inspection_certificate_chain.pem" />
+    <EmbeddedResource Include="Sbx/application_ports.py" LogicalName="Abox.ApplicationPortsRelay" />
+    <EmbeddedResource
+      Include="Sbx/development_certificate.py"
+      LogicalName="Abox.DevelopmentCertificateReceiver"
+    />
+    <EmbeddedResource
+      Include="Sbx/development_certificate_exec.sh"
+      LogicalName="Abox.DevelopmentCertificateExec"
+    />
+    <EmbeddedResource
+      Include="Sbx/development_certificate_trust.py"
+      LogicalName="Abox.DevelopmentCertificateTrust"
+    />
   </ItemGroup>
 
   <ItemGroup>

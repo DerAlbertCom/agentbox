@@ -16,6 +16,9 @@ internal sealed class SbxSandbox
 
     [JsonPropertyName("created_at")]
     public DateTimeOffset? CreatedAt { get; set; }
+
+    [JsonPropertyName("workspaces")]
+    public List<string>? Workspaces { get; set; }
 }
 
 /// <summary>The report of <c>sbx diagnose --json</c>.</summary>

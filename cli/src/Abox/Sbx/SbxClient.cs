@@ -62,7 +62,10 @@ public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : 
                 sandbox.Name!,
                 sandbox.Status ?? string.Empty,
                 sandbox.CreatedAt
-            ))
+            )
+            {
+                Workspaces = sandbox.Workspaces ?? [],
+            })
             .ToList();
     }
 
@@ -215,6 +218,17 @@ public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : 
         }
 
         arguments.Add(request.Sandbox);
+        arguments.AddRange([
+            "sh",
+            "-c",
+            DevelopmentCertificateExecBootstrap.Value,
+            "abox-https",
+            Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(DevelopmentCertificateReceiver.Value)
+                )
+            ),
+        ]);
         arguments.AddRange(request.Command);
 
         var result = await runner.RunAsync(

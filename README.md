@@ -21,15 +21,128 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
 | `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
 | `abox user-secrets [--location <path>] [--force]` | Copies explicitly selected local .NET user-secret stores into the folder's existing sandbox. |
+| `abox ports [--location <path>] [--offset <n>]` | Discovers .NET and Angular app ports and publishes them on host loopback at port + offset (default 10000). |
 
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
 
-`create`, `run` and `user-secrets` use `--location`, then the user setting `defaultLocation`,
+`create`, `run`, `user-secrets` and `ports` use `--location`, then the user setting `defaultLocation`,
 then the current folder. For `create --local`, team discovery starts at that location
 and searches its parents, unless `--root <dir>` selects a separate source project.
 For `create`, `--root` requires `--local`; remote create rejects it because no local
 team sources are used.
+
+### Reaching sandbox apps over HTTP
+
+Successful local/published `abox create`, explicit replacement, and an accepted
+newer-local-build replacement from `abox run` automatically configure app forwarding
+and applicable .NET HTTPS. No `abox.json` or separate setup command is needed. Start
+your apps afterward with their normal profiles (including localhost-only bindings).
+For an existing sandbox, changed project ports, or a setup retry, run:
+
+```sh
+abox ports --location /path/to/project
+# app/Properties/launchSettings.json declares http://localhost:8203
+# Open http://localhost:18203 on the host after abox exits.
+```
+
+The command reads explicit ports beneath the folder from:
+
+- Every profile's semicolon-separated `applicationUrl` values in
+  `Properties/launchSettings.json`.
+- `angular.json`: every project's `architect.serve` (or `targets.serve`) `options.port`
+  and every named `configurations.<name>.port`, whether currently selected or not.
+- `package.json`: the exact `scripts.start` entry, for direct `ng serve` / `ng s` / `ng dev`
+  commands with one `--port 4200` or `--port=4200`. Literal single/double quoting of
+  the value or argument is supported. No scripts or tooling are executed to scan.
+
+Angular ports must be literal integers; no implicit default 4200, environment-variable
+expansion, wrapper commands (`npx`, `cross-env`, npm scripts), shell operators or
+duplicate `--port` flags are interpreted. A recognized `ng` start script with an
+explicit `--port` in an unsupported/dynamic form fails with a fix hint; put a literal
+serve port in `angular.json` and remove that dynamic flag instead. Non-`ng` start
+commands (including wrappers, Vite, Next and custom Node servers) are ignored even
+when they contain `--port`; configure their Angular port in `angular.json` if needed.
+Runtime environment overrides such as Angular's `PORT` are not evaluated and can
+make the actual listener differ from the static plan. Other scripts/targets are ignored.
+All inputs and mapped ranges are validated **before publishing anything**.
+It prints each source occurrence, warns about duplicates and publishes each distinct
+mapping once. No `abox.json`, team sources or build is needed. It never creates or
+replaces a sandbox; a missing sandbox gives a create hint.
+
+sbx publishes **127.0.0.1 only** to a small sandbox-owned TCP relay, because native
+publishing cannot reach sandbox loopback on sbx 0.51.0. **Python 3.8+ must already be
+available as `python3` inside the sandbox**, running as its non-root application user;
+abox checks it and never installs dependencies. No extra host runtime or background
+abox process is needed. The relay uses a separate sandbox port, so it does not
+reserve or change your application's listener, sources, profiles or startup flags.
+
+Subsequent runs reuse matching relays/mappings and preserve unrelated mappings.
+An existing direct native mapping at the requested host port is a conflict **at every
+offset, including 10000**: its matching numbers do not prove abox ownership. abox never
+automatically removes or replaces it. Inspect the full binding and, only if you intend
+to replace it, explicitly remove that exact binding before retrying; see the
+[manual recovery examples](docs/application-port-offsets.md#persistent-mapping-and-ownership-contract).
+Other targets or non-loopback bindings are also conflicts, not overwritten mappings.
+A stopped sandbox is started first and its relays are restored, but **apps are not
+started** by this command. Ports occupied by another service fail with a diagnostic;
+fix the conflict and retry. Failure/cancellation can leave mappings and sandbox
+relays in place; there is no rollback. The table is a plan, not proof the app is running.
+
+This supports .NET/Angular discovery and HTTP reachability with configurable offsets.
+Explicit ASP.NET Core Web SDK / `Microsoft.AspNetCore.App` projects also require the existing trusted host dev
+certificate: abox exports it through a compatible installed dev-certs CLI and
+persists a protected explicit Kestrel default for new apps launched through abox.
+It also installs only that public leaf in the sandbox's existing Debian-style system
+CA store using root exec, and merges it with Node's existing extra-CA roots.
+It never changes host trust or silently substitutes another certificate. Existing
+apps/agent/core parents may need **explicit** restarts; stale recognized parents
+prevent full activation success/new agent launches, never ordinary shell/exec/pipe
+save/recovery access or trigger automatic restarts. See
+[HTTPS prerequisites, launch/recovery contract and remaining verification gates](docs/https-development-certificates.md).
+Invalid/missing Node extra-CA inputs likewise warn without blocking ordinary/recovery
+commands: their original Node setting and protected Kestrel defaults are retained,
+but setup/readiness and new agent launches fail until corrected. Caller CA symlinks
+and non-ASCII comments/Bag Attributes outside certificate PEM blocks are supported;
+original extra-CA bytes are preserved. Damaged protected abox files instead fail
+closed. After upgrading the CLI, a bootstrap hash mismatch can be recovered with
+`abox ports --location "<folder>" --refresh-https-bootstrap`. This explicit reader-only
+refresh preserves private activation, needs no host export, project discovery,
+port changes or root trust, and does **not** claim full HTTPS readiness. Unverified
+installed code is never executed as an upgrade fallback.
+Automatic setup uses the entry-time folder `portOffset` (default **10000**), after
+creation, record save and required user-secret copying. Invalid discoveries or mapped
+ranges fail before creation/replacement changes. Required setup failure retains the
+created sandbox and record, returns **1** (or **130** on cancellation), suppresses
+full-success output and prevents replacement `run` from launching. Partial setup may
+remain; follow the printed `abox ports --location "<folder>" --offset N` retry rather
+than recreating. Ordinary non-replacing `run` does **not** implicitly scan, publish,
+export certificates or resync secrets. See [lifecycle ordering and recovery](docs/application-ports-lifecycle.md).
+See [shared discovery/runtime rules](docs/verification/application-ports.md) and
+[Angular scope, supported forms and verification](docs/verification/angular-application-ports.md).
+
+#### Folder and one-run port offsets
+
+An optional `abox.json` in the sandbox folder can select a default without changing
+`squad` or `userSecrets` behavior:
+
+```json
+{ "portOffset": 20000 }
+```
+
+For sandbox port 8203, `abox ports` now requests host 28203. `abox ports --offset 30000`
+requests 38203 instead. Precedence is **`--offset`, folder `portOffset`, 10000**;
+there is no global setting, no file is required, and abox never writes configuration.
+Offsets are decimal integers **-65534..65534**; zero keeps the same port number and
+negative offsets subtract. Every resulting host port must still be **1..65535**.
+Fractions, exponent notation, overflow and out-of-range mappings fail before publishing.
+
+**An override does not undo persistent forwarding on exit.** Repeating the same
+offset is safe. Changing it while old abox relay bindings exist fails without
+removing them or adding new bindings. First explicitly remove only the exact old
+bindings, then rerun with the new offset; never clear relay state or unrelated ports.
+After a failure or cancellation, retry with the **same offset** to complete missing
+bindings. See [offset-change and recovery examples](docs/application-port-offsets.md).
 
 ### Seeing tool output
 
@@ -152,7 +265,7 @@ userSecretsDenyList:
   - production.example.internal
 ```
 
-- `defaultLocation` is unset by default: `create`, `run` and `user-secrets` use the current folder unless `--location` is given.
+- `defaultLocation` is unset by default: `create`, `run`, `user-secrets` and `ports` use the current folder unless `--location` is given.
 - `teamsDirectory` names the project's teams directory; the default is `teams`.
 - `kitsDirectory` names the kits directory relative to the project root; the default is `kits`.
 - `userSecretsDenyList` is a list of nonempty **literal substrings**, matched
@@ -169,7 +282,7 @@ values use the default. It is independent of each workload's `publishRepository`
 
 ### Reusing cape-agent-sandbox environments
 
-`run`, `user-secrets` and create/replacement checks find the sandbox for the
+`run`, `user-secrets`, `ports` and create/replacement checks find the sandbox for the
 effective folder (`--location`, then `defaultLocation`, then the current folder).
 They first check the current `<folder>-abox-<hash>` name. Only when it is absent
 do they check the exact historical `<folder>-ai-sbx-<hash>` generated name.
@@ -284,11 +397,12 @@ Local/published creation, explicit replacement and an accepted newer-local-build
 replacement from `run` use the **same copy flow** as `abox user-secrets`. Folder
 configuration, project appsettings and all selected host originals are validated **before removal** of
 an existing sandbox. After successful creation, abox saves the truthful new sandbox
-record, then copies secrets **before reporting full success or launching**.
+record, then copies secrets and configures app ports/HTTPS **before reporting full
+success or launching**.
 Target-only discovery/transfer failures can therefore occur after creation.
 
-A folder without `abox.json` retains its existing create/run behavior, without
-user-secret store reads, target discovery or writes. Ordinary `run`, including
+A folder without `abox.json` performs no user-secret store reads, target discovery
+or writes; creation/replacement still configures app ports/HTTPS. Ordinary `run`, including
 declining a newer-build replacement, does **not** resync secrets. Failed creation,
 declined replacement and cancellation do not start a subsequent copy. Missing or
 invalid `abox.json` is an on-demand error. See the
