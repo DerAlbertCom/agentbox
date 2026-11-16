@@ -63,6 +63,15 @@ public sealed class OciRegistry(IProcessRunner runner) : IOciRegistry
         return descriptor.Clone();
     }
 
+    internal static JsonElement ParseManifest(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var root = document.RootElement;
+        if (root.GetProperty("schemaVersion").GetInt32() != 2)
+            throw new JsonException("Expected an OCI image manifest or index.");
+        return root.Clone();
+    }
+
     public static IReadOnlyList<string> ImageToolsArguments(
         string? builder,
         IReadOnlyList<string> arguments

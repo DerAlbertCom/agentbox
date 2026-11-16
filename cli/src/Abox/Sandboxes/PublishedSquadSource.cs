@@ -161,12 +161,9 @@ public sealed class PublishedSquadSource(
             ),
             "buildx"
         );
-        using var document = JsonDocument.Parse(result.StandardOutput);
-        var root = document.RootElement;
-        if (root.GetProperty("schemaVersion").GetInt32() != 2)
-            throw new JsonException("Expected an OCI image manifest or index.");
+        var root = OciRegistry.ParseManifest(result.StandardOutput);
         if (!root.TryGetProperty("manifests", out var manifests))
-            return new OciManifest(digest, root.Clone());
+            return new OciManifest(digest, root);
 
         var selected = manifests
             .EnumerateArray()
