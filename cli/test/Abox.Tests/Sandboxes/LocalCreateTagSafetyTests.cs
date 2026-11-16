@@ -47,7 +47,8 @@ public sealed class LocalCreateTagSafetyTests
             console,
             source,
             new RemoteSquadSource(config, sbx, published),
-            new UserSecretsCopy(config, new UserSecretsHost(null, null), sbx)
+            new UserSecretsCopy(config, new UserSecretsHost(null, null), sbx),
+            SandboxTest.Ports(sbx, console)
         );
         var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam("sample", root.Path, ["ac", "bd"]),
@@ -58,25 +59,7 @@ public sealed class LocalCreateTagSafetyTests
             AssumeYes: true,
             Local: true
         );
-        Func<Task> create = operation switch
-        {
-            "resolve" => () =>
-            {
-                source.Resolve(request);
-                return Task.CompletedTask;
-            },
-            "load" => async () =>
-            {
-                await source.LoadAsync(
-                    new SquadSelection("sample", "ac", tag),
-                    CancellationToken.None
-                );
-            },
-            _ => async () =>
-            {
-                await creator.CreateAsync(request, CancellationToken.None);
-            },
-        };
+        var create = Operation(operation, source, creator, request);
 
         // Act
         var result = await create.Should().ThrowAsync<AboxException>();
@@ -94,4 +77,30 @@ public sealed class LocalCreateTagSafetyTests
         Directory.GetFiles(outside.Path, "*", SearchOption.AllDirectories).Should().Equal(sentinel);
         Directory.Exists(paths.StateDirectory).Should().BeFalse();
     }
+
+    private static Func<Task> Operation(
+        string operation,
+        LocalSquadSource source,
+        SandboxCreator creator,
+        SandboxCreationRequest request
+    ) =>
+        operation switch
+        {
+            "resolve" => () =>
+            {
+                source.Resolve(request);
+                return Task.CompletedTask;
+            },
+            "load" => async () =>
+            {
+                await source.LoadAsync(
+                    new SquadSelection("sample", "ac", request.Tag),
+                    CancellationToken.None
+                );
+            },
+            _ => async () =>
+            {
+                await creator.CreateAsync(request, CancellationToken.None);
+            },
+        };
 }

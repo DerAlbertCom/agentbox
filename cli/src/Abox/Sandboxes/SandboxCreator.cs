@@ -1,3 +1,4 @@
+using Abox.ApplicationPorts;
 using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Kits;
@@ -39,7 +40,8 @@ public sealed class SandboxCreator(
     IConsole console,
     LocalSquadSource local,
     RemoteSquadSource remote,
-    UserSecretsCopy userSecrets
+    UserSecretsCopy userSecrets,
+    AppPorts appPorts
 )
 {
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
@@ -66,6 +68,11 @@ public sealed class SandboxCreator(
         var preparedSecrets = await userSecrets.PrepareAsync(
             folderConfig,
             force: false,
+            cancellationToken
+        );
+        var preparedPorts = await AppPorts.PrepareAsync(
+            location,
+            FolderConfig.SelectPortOffset(folderConfig),
             cancellationToken
         );
         var prepared = await source.LoadAsync(selection, cancellationToken);
@@ -134,30 +141,65 @@ public sealed class SandboxCreator(
 
         if (folderConfig is not null)
         {
-            var recovery =
-                $"The sandbox was created and its record retained, but required user-secret copying did not complete. "
-                + $"Completed files may remain replaced; no cross-store rollback is attempted. "
-                + $"Fix the folder configuration or destination/runtime and retry without recreating: abox user-secrets --location \"{location}\"";
-            try
-            {
-                var report = await userSecrets.CopyAsync(preparedSecrets, name, cancellationToken);
-                cancellationToken.ThrowIfCancellationRequested();
-                UserSecretsReportWriter.WriteStores(report, console);
-            }
-            catch (OperationCanceledException)
-            {
-                console.WriteError(recovery);
-                throw;
-            }
-            catch (AboxException exception)
-            {
-                throw new AboxException($"{exception.Message}{Environment.NewLine}{recovery}");
-            }
+            await CopyUserSecretsAsync(preparedSecrets, preparedPorts, name, cancellationToken);
         }
+
+        await ConfigureApplicationPortsAsync(preparedPorts, name, cancellationToken);
 
         console.WriteLine($"Created sandbox '{name}' for '{location}'.");
         console.WriteLine($"Open it with: abox run --location {location}");
         return 0;
+    }
+
+    private async Task CopyUserSecretsAsync(
+        PreparedUserSecrets preparedSecrets,
+        PreparedAppPorts preparedPorts,
+        string name,
+        CancellationToken cancellationToken
+    )
+    {
+        var recovery =
+            "The sandbox was created and its record retained, but required user-secret copying did not complete. "
+            + "Completed files may remain replaced; no cross-store rollback is attempted. "
+            + $"Fix the folder configuration or destination/runtime and retry without recreating: abox user-secrets --location \"{preparedPorts.Location}\". "
+            + $"Application-port/HTTPS setup has not started; after copying succeeds run: abox ports --location \"{preparedPorts.Location}\" --offset {preparedPorts.Offset}";
+        try
+        {
+            var report = await userSecrets.CopyAsync(preparedSecrets, name, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            UserSecretsReportWriter.WriteStores(report, console);
+        }
+        catch (OperationCanceledException)
+        {
+            console.WriteError(recovery);
+            throw;
+        }
+        catch (AboxException exception)
+        {
+            throw new AboxException($"{exception.Message}{Environment.NewLine}{recovery}");
+        }
+    }
+
+    private async Task ConfigureApplicationPortsAsync(
+        PreparedAppPorts prepared,
+        string name,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await appPorts.PublishAsync(prepared, name, cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+        catch (Exception exception) when (exception is AboxException or OperationCanceledException)
+        {
+            console.WriteError(
+                "The sandbox was created and its record retained, but required application-port/HTTPS setup did not complete. "
+                    + "Completed user-secret copies, mappings, relays or certificate configuration may remain; no rollback is attempted. "
+                    + $"Fix the reported problem and retry without recreating: abox ports --location \"{prepared.Location}\" --offset {prepared.Offset}"
+            );
+            throw;
+        }
     }
 
     private bool ConfirmReplacement(SandboxInfo? existing, string location, bool assumeYes)

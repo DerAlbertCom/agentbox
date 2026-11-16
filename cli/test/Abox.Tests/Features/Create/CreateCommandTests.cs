@@ -295,12 +295,7 @@ public sealed class CreateCommandTests
                 LocalWorkload = LocalWorkloadTest.Artifact(_root),
             }
         );
-        var programs = Substitute.For<IHostPrograms>();
-        programs.Exists("sbx").Returns(true);
-        _sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
-        _sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
-        _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new SbxOutcome(0, string.Empty));
+        var programs = ReadyRuntime();
         return new CreateCommand(
             new Lazy<AboxConfig>(() => config),
             new Preflight(_console, _sbx, programs),
@@ -314,11 +309,23 @@ public sealed class CreateCommandTests
                     _console,
                     new LocalSquadSource(store, LocalWorkloadTest.Images(), _console),
                     new RemoteSquadSource(config, _sbx, PublishedSquadTest.Source()),
-                    new UserSecretsCopy(config, new UserSecretsHost(null, null), _sbx)
+                    new UserSecretsCopy(config, new UserSecretsHost(null, null), _sbx),
+                    SandboxTest.Ports(_sbx, _console)
                 )
             ),
             _console
         );
+    }
+
+    private IHostPrograms ReadyRuntime()
+    {
+        var programs = Substitute.For<IHostPrograms>();
+        programs.Exists("sbx").Returns(true);
+        _sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
+        _sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
+        _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new SbxOutcome(0, string.Empty));
+        return programs;
     }
 }
 

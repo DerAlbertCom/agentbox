@@ -16,6 +16,22 @@ namespace Abox.Tests;
 
 public sealed partial class SandboxCreatorTests
 {
+    private SandboxCreator Creator(
+        RemoteSquadSource? remote = null,
+        LocalWorkloadImages? images = null
+    ) =>
+        new(
+            _records,
+            _paths,
+            SandboxTest.Resolver(_sbx),
+            _sbx,
+            _console,
+            new LocalSquadSource(_store, images ?? LocalWorkloadTest.Images(), _console),
+            remote ?? new RemoteSquadSource(new AboxConfig(), _sbx, _published),
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx),
+            SandboxTest.Ports(_sbx, _console)
+        );
+
     private readonly TempDirectory _root = new();
     private readonly TestConsole _console = new();
     private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
@@ -33,16 +49,7 @@ public sealed partial class SandboxCreatorTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _service = new SandboxCreator(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(new AboxConfig(), _sbx, _published),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
-        );
+        _service = Creator();
 
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
@@ -159,21 +166,14 @@ public sealed partial class SandboxCreatorTests
     {
         // Arrange
         SaveBuild(mcp: [new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
-        var service = new SandboxCreator(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+        var service = Creator(
             new RemoteSquadSource(
                 new AboxConfig { PullRepository = repository },
                 _sbx,
                 PublishedSquadTest.Source([
                     new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
                 ])
-            ),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
+            )
         );
 
         // Act
@@ -247,15 +247,8 @@ public sealed partial class SandboxCreatorTests
     )
     {
         // Arrange
-        var service = new SandboxCreator(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(new AboxConfig { PullRepository = repository }, _sbx, _published),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
+        var service = Creator(
+            new RemoteSquadSource(new AboxConfig { PullRepository = repository }, _sbx, _published)
         );
         var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam(team, "teams/sample", [squad]),
@@ -428,15 +421,8 @@ public sealed partial class SandboxCreatorTests
             new() { Name = "elastic", Url = "https://example.com/mcp" },
         };
         SaveBuild(mcp);
-        var service = new SandboxCreator(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(new AboxConfig(), _sbx, PublishedSquadTest.Source(mcp)),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
+        var service = Creator(
+            new RemoteSquadSource(new AboxConfig(), _sbx, PublishedSquadTest.Source(mcp))
         );
         _console.Answer = false;
         var name = SandboxName.For(_root.Path);
@@ -651,16 +637,7 @@ public sealed partial class SandboxCreatorTests
         build.LocalWorkload = null;
         _store.Save(build);
         var runner = LocalWorkloadTest.Runner();
-        var service = new SandboxCreator(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(runner), _console),
-            new RemoteSquadSource(new AboxConfig(), _sbx, _published),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
-        );
+        var service = Creator(images: LocalWorkloadTest.Images(runner));
 
         // Act
         var exitCode = await service.CreateAsync(
@@ -724,19 +701,13 @@ public sealed partial class SandboxCreatorTests
         _store.Load("sample", "ac", "latest")!.LocalWorkload.Should().BeNull();
         _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<string>)["elastic"]);
-        var service = new SandboxCreator(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, images, _console),
+        var service = Creator(
             new RemoteSquadSource(
                 new AboxConfig(),
                 _sbx,
                 PublishedSquadTest.Source([new ManifestMcp { Name = "elastic" }])
             ),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
+            images
         );
 
         // Act

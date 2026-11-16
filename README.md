@@ -34,8 +34,11 @@ team sources are used.
 
 ### Reaching sandbox apps over HTTP
 
-Start your app inside the existing sandbox with its normal launch profile (including
-localhost-only bindings), then run:
+Successful local/published `abox create`, explicit replacement, and an accepted
+newer-local-build replacement from `abox run` automatically configure app forwarding
+and applicable .NET HTTPS. No `abox.json` or separate setup command is needed. Start
+your apps afterward with their normal profiles (including localhost-only bindings).
+For an existing sandbox, changed project ports, or a setup retry, run:
 
 ```sh
 abox ports --location /path/to/project
@@ -107,7 +110,14 @@ closed. After upgrading the CLI, a bootstrap hash mismatch can be recovered with
 refresh preserves private activation, needs no host export, project discovery,
 port changes or root trust, and does **not** claim full HTTPS readiness. Unverified
 installed code is never executed as an upgrade fallback.
-Automatic create/recreate publishing is not included yet.
+Automatic setup uses the entry-time folder `portOffset` (default **10000**), after
+creation, record save and required user-secret copying. Invalid discoveries or mapped
+ranges fail before creation/replacement changes. Required setup failure retains the
+created sandbox and record, returns **1** (or **130** on cancellation), suppresses
+full-success output and prevents replacement `run` from launching. Partial setup may
+remain; follow the printed `abox ports --location "<folder>" --offset N` retry rather
+than recreating. Ordinary non-replacing `run` does **not** implicitly scan, publish,
+export certificates or resync secrets. See [lifecycle ordering and recovery](docs/application-ports-lifecycle.md).
 See [shared discovery/runtime rules](docs/verification/application-ports.md) and
 [Angular scope, supported forms and verification](docs/verification/angular-application-ports.md).
 
@@ -387,11 +397,12 @@ Local/published creation, explicit replacement and an accepted newer-local-build
 replacement from `run` use the **same copy flow** as `abox user-secrets`. Folder
 configuration, project appsettings and all selected host originals are validated **before removal** of
 an existing sandbox. After successful creation, abox saves the truthful new sandbox
-record, then copies secrets **before reporting full success or launching**.
+record, then copies secrets and configures app ports/HTTPS **before reporting full
+success or launching**.
 Target-only discovery/transfer failures can therefore occur after creation.
 
-A folder without `abox.json` retains its existing create/run behavior, without
-user-secret store reads, target discovery or writes. Ordinary `run`, including
+A folder without `abox.json` performs no user-secret store reads, target discovery
+or writes; creation/replacement still configures app ports/HTTPS. Ordinary `run`, including
 declining a newer-build replacement, does **not** resync secrets. Failed creation,
 declined replacement and cancellation do not start a subsequent copy. Missing or
 invalid `abox.json` is an on-demand error. See the

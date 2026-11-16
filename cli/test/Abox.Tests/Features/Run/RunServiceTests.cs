@@ -40,16 +40,7 @@ public sealed partial class RunServiceTests
         );
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _create = new SandboxCreator(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(_config, _sbx, PublishedSquadTest.Source()),
-            new UserSecretsCopy(_config, new UserSecretsHost(null, null), _sbx)
-        );
+        _create = Creator();
         _service = new RunService(
             launchers,
             _config,
@@ -67,6 +58,19 @@ public sealed partial class RunServiceTests
         _sbx.HasProgramAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(true);
     }
+
+    private SandboxCreator Creator() =>
+        new(
+            _records,
+            _paths,
+            SandboxTest.Resolver(_sbx),
+            _sbx,
+            _console,
+            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new RemoteSquadSource(_config, _sbx, PublishedSquadTest.Source()),
+            new UserSecretsCopy(_config, new UserSecretsHost(null, null), _sbx),
+            SandboxTest.Ports(_sbx, _console)
+        );
 
     [Fact]
     public async Task TheShellRunsInTheWorkspaceOfTheSandbox()

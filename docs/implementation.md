@@ -334,11 +334,18 @@ See [verification and red evidence](verification/legacy-sandbox-compatibility.md
    launcher. A post-create copy failure retains the actual sandbox/new record,
    returns failure (1, or 130 for cancellation) and gives a folder-qualified
    `abox user-secrets --location "<folder>"` retry, without recreating. Creation
-   failure, declined replacement or cancellation never starts a subsequent copy.
+    failure, declined replacement or cancellation never starts a subsequent copy.
+10. Runs the shared prepared app-port/HTTPS flow after required secret copying.
+    The entry-time folder snapshot supplies the explicit offset (default 10000),
+    even without `abox.json`. Discovery/mapping validation happens before runtime
+    mutations, not after deleting the old sandbox. Required setup failure keeps
+    the sandbox/record, suppresses full-success/open output and launcher start,
+    returns 1 (130 on cancellation), and prints a folder-qualified `abox ports`
+    retry with that offset. See [the complete lifecycle contract](application-ports-lifecycle.md).
 
 Automatic copying never forces deny-list matches: neither `--yes` nor replacement
-consent is a safety override. Missing `abox.json` retains the old create/run behavior
-with no user-secret store reads, target discovery or writes. See the
+consent is a safety override. Missing `abox.json` performs no user-secret store
+reads, target discovery or writes; app-port setup is independent of that opt-in. See the
 [lifecycle contract](user-secrets-lifecycle.md) for squad checks and intentional
 on-demand override/recovery.
 
@@ -435,7 +442,7 @@ published tag.
    resolving team sources from the newer build's recorded root (or the sandbox
    location for legacy metadata), so a separate `create --root` project stays usable.
    Accepted replacement uses `SandboxCreator`, including shared user-secret
-   preparation/copying. Failed required copying prevents launch. Ordinary run or
+    preparation/copying and app-port/HTTPS setup. Failed required setup prevents launch. Ordinary run or
     declining the newer build never reads selected host stores or resyncs secrets.
     Another team's build is never offered or borrowed for a create hint. Unproven or
     invalid local metadata reports a rebuild instruction without interrupting an
@@ -742,12 +749,14 @@ The command loads `FolderConfig` once before runtime access. Configuration owns
 `portOffset` parsing/validation and `FolderConfig.SelectPortOffset(snapshot, option)`:
 option, snapshot setting, then 10000. The same immutable snapshot still contains
 squad and user-secret selections for creation/replacement callers; absence stays null.
-Future lifecycle setup can select from that entry-time snapshot without rereading
-the workspace. `AppPorts.PublishAsync(location, sandbox, offset, token)` applies the
-selected offset to every discovered occurrence before calling the adapter. An explicit
-offset is required: there is no overload that silently substitutes 10000. Lifecycle
-callers (#47) must select from their entry-time folder snapshot, not reread configuration.
-This does not add automatic create/recreate setup.
+Lifecycle setup selects from that entry-time snapshot without rereading the workspace.
+`AppPorts.PrepareAsync(location, offset, token)` discovers and validates once, before
+creation/replacement mutations. The prepared plan retains its explicit offset and
+discovery result for post-record publishing. On demand,
+`AppPorts.PublishAsync(location, sandbox, offset, token)` uses those same preparation
+and application steps. No shared overload silently substitutes 10000 and no command
+slice is imported. Automatic create/replacement (#47) uses the same table, adapter
+and HTTPS flow; ordinary non-replacing run adds no discovery/setup.
 
 Offsets are integers -65534..65534, including zero and negatives, with complete-plan
 widened arithmetic and resulting-port validation in 1..65535 before runtime mutation.
@@ -839,7 +848,8 @@ running-app renewal/restart requirements are documented in the
 arbitrary old Unix shell's environment, and raw sbx launches bypass this contract.
 
 Production export/activation and synthetic exact-leaf .NET 10/real-local-tool
-verification are present, but #46 acceptance remains incomplete; see
+verification are present; #46 was accepted for the current Windows-host scope per
+the [tracker closure clarification](https://github.com/DerAlbertCom/agentbox/issues/46#issuecomment-6918879462). See
 [the scoped production-path record](verification/https/README.md). The latest
 [Windows real-host production evidence](verification/https/real-host-production-verification.md)
 is pinned to `5b40b570aff9fb76b9c6379e55569eef83dc2df9`: actual Release setup exited
@@ -848,10 +858,12 @@ setup, bootstrap-only refresh and cleanup passed. Separately,
 [manual Windows verification](agents/story-3-host-certificate-verification.md)
 completed exact host CLI export/copy and explicit Deals activation with default
 host TLS (Swagger HEAD 200) and sandbox TLS (HEAD 404), without changing host trust.
-That manual Deals result is not production acceptance evidence. Production browser
-reload, Copilot's actual shell tool, the host Herdr desktop, independent Linux-host
-evidence, real-host renewal and isolated exact 18203 production proof remain open.
-No #47 automatic create/replace/lifecycle integration is implemented.
+That manual Deals result remains distinct from production-fixture evidence. The user
+confirmed the existing Deals browser lock at 18203 and working Herdr SSH. Copilot is
+excluded from this acceptance; independent Linux-host proof is deferred. No real-host
+renewal was authorized or performed. Those excluded/deferred items are not new #47
+gates. #47 automatic creation/replacement now uses this shared module; its synthetic
+tests and live-evidence boundaries are recorded [separately](verification/application-ports-lifecycle.md).
 
 ### `abox prune [--full] [--sbx]`
 
