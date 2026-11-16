@@ -31,6 +31,8 @@ public sealed class RunService(
     IConsole console
 )
 {
+    private readonly CreateRecoveryHints _recoveryHints = new(config, resolver, store, records);
+
     /// <summary>Starts the launcher and returns the exit code of the command.</summary>
     public async Task<int> RunAsync(RunRequest request, CancellationToken cancellationToken)
     {
@@ -58,7 +60,7 @@ public sealed class RunService(
         {
             var name = SandboxName.For(location);
             console.WriteError($"There is no sandbox for '{location}'.");
-            console.WriteError($"Create it with: {CreateCommandFor(name, location, folderConfig)}");
+            WriteCreateHint("Create it with: ", name, location, folderConfig);
             return 1;
         }
 
@@ -77,8 +79,11 @@ public sealed class RunService(
             console.WriteError(
                 $"The image of '{sandbox.Name}' has no '{program}'. The image predates the '{launcher.Id}' launcher."
             );
-            console.WriteError(
-                $"Create the sandbox again for this folder: {CreateCommandFor(sandbox.Name, location, folderConfig)}"
+            WriteCreateHint(
+                "Create the sandbox again for this folder: ",
+                sandbox.Name,
+                location,
+                folderConfig
             );
             return 1;
         }
@@ -95,58 +100,17 @@ public sealed class RunService(
         return await launcher.RunAsync(context, cancellationToken);
     }
 
-    private string CreateCommandFor(string name, string location, FolderConfig? folderConfig)
+    private void WriteCreateHint(
+        string prefix,
+        string name,
+        string location,
+        FolderConfig? folderConfig
+    )
     {
-        var record = records.Load(name);
-        var squad =
-            folderConfig?.Squad ?? (string.IsNullOrWhiteSpace(record?.Squad) ? null : record.Squad);
-        var tag = string.IsNullOrWhiteSpace(record?.Tag) ? config.DefaultTag : record.Tag;
-        var team = string.IsNullOrWhiteSpace(record?.Team) ? null : record.Team;
-        BuildManifest? manifest = null;
-        if (record is { KitReference: null } && squad is not null)
-        {
-            try
-            {
-                manifest = team is null
-                    ? store.LoadLegacy(squad, tag)
-                    : store.Load(team, squad, tag);
-            }
-            catch (AboxException exception)
-            {
-                console.WriteError(exception.Message);
-            }
-        }
-        ImageName.TryParseTeam(manifest?.Reference, tag, out var buildTeam);
-        team ??= buildTeam;
-        team ??= config.DefaultTeam;
-        if (squad is null && team is not null)
-        {
-            try
-            {
-                var resolved = resolver.ResolveTeam(location, team);
-                team = resolved.Name;
-                if (resolved.Squads.Count == 1)
-                {
-                    squad = resolved.Squads[0];
-                }
-            }
-            catch (AboxException)
-            {
-                // Remote creation does not require local team sources.
-            }
-        }
-
-        var placeholders =
-            team is null || squad is null ? " (replace <name> placeholders)" : string.Empty;
-        var local =
-            buildTeam is not null && buildTeam.Equals(team, StringComparison.OrdinalIgnoreCase)
-                ? " --local"
-                : string.Empty;
-        var root =
-            local.Length > 0 && !string.IsNullOrWhiteSpace(manifest?.RootDirectory)
-                ? $" --root \"{manifest.RootDirectory}\""
-                : string.Empty;
-        return $"abox create --team {team ?? "<name>"} --squad {squad ?? "<name>"} --tag {tag}{local}{root} --location \"{location}\"{placeholders}";
+        var hint = _recoveryHints.Resolve(name, location, folderConfig);
+        if (hint.Diagnostic is not null)
+            console.WriteError(hint.Diagnostic);
+        console.WriteError(prefix + hint.Command);
     }
 
     /// <summary>
