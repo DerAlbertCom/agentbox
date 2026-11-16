@@ -732,7 +732,7 @@ asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset mappings.
 Discovery/reporting/application orchestration stays outside the command slice so
 the HTTPS and lifecycle slices can reuse it without importing a command.
 `AppPortDiscovery` owns one bounded filesystem walk/read policy for both formats and
-static explicit Web SDK project detection;
+static explicit Web SDK / ASP.NET framework-reference project detection;
 `DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
 parsing. No extension framework or project-tool execution is involved. Angular #44
 includes options and all named serve configurations, and a conservative literal
@@ -815,8 +815,22 @@ Shared `ExecAsync` bootstrap covers shell/direct argv/exec/pipe and newly initia
 agent/core children after abox exits; it preserves streams, argv, workdir, TTY flags
 and actual child exit status. It is not a shell-profile-only mechanism.
 
+Exact public sandbox system trust is installed through root exec into the existing
+Debian-style CA store; only public PEM reaches root. Node's protected extra-CA
+bundle preserves the caller's original roots. A compact shell exec parent reads
+hash-verified installed bootstrap code, avoiding CPython signal/locale inheritance
+and the previous per-exec source-size regression. Runtime reads/writes share the
+exclusive setup lock with a signal-cancellable three-second contention retry (not
+parallel shared readers). Node-only failures preserve ordinary/recovery access,
+the caller's original Node setting and protected Kestrel defaults, while readiness
+and recognized agent launches fail actionably. Caller-selected CA symlinks are
+read as the application user; abox-owned runtime paths remain strict no-follow.
+See the HTTPS contract for prerequisites, bounded bundles and partial
+trust/activation recovery.
+
 Existing recognizable hc/OpenCode/Copilot/pi/Claude parents with missing/mismatched
-settings block full activation and launch; nothing is automatically restarted.
+settings block full activation and new recognized agent launches, not ordinary
+shell/exec/pipe save/recovery transport; nothing is automatically restarted.
 Herdr checks readiness before desktop opening. Explicit fresh-parent recovery and
 running-app renewal/restart requirements are documented in the
 [HTTPS contract](https-development-certificates.md). New processes cannot mutate an

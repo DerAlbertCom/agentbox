@@ -218,10 +218,13 @@ public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : 
         arguments.AddRange([
             "sh",
             "-c",
-            DevelopmentCertificateExecBootstrap,
+            DevelopmentCertificateExecBootstrap.Value,
             "abox-https",
-            "python3",
-            DevelopmentCertificateReceiver.Value,
+            Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(DevelopmentCertificateReceiver.Value)
+                )
+            ),
         ]);
         arguments.AddRange(request.Command);
 

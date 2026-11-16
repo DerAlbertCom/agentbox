@@ -8,8 +8,10 @@ import os
 import re
 import secrets
 import signal
+import ssl
 import stat
 import sys
+import time
 
 
 def require(condition):
@@ -20,6 +22,24 @@ def require(condition):
 def ordinary_file(info, uid):
     require(stat.S_ISREG(info.st_mode) and info.st_uid == uid)
     require(stat.S_IMODE(info.st_mode) == 0o600 and info.st_nlink == 1)
+
+
+class RuntimeBusy(Exception):
+    pass
+
+
+def acquire_lock(lock):
+    # All operations can write (including launch/status Node bundles). A short
+    # exclusive retry stays below the host cleanup budget and honors signals.
+    deadline = time.monotonic() + 3
+    while True:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if time.monotonic() >= deadline:
+                raise RuntimeBusy() from None
+            time.sleep(.01)
 
 
 def unique_object(pairs):
@@ -42,7 +62,7 @@ def read_payload():
     payload = source.read(size + 1)
     require(len(payload) == size and hashlib.sha256(payload).hexdigest().encode() == digest[:-1])
     data = json.loads(payload, object_pairs_hook=unique_object)
-    require(isinstance(data, dict) and set(data) == {"version", "pfx", "password"})
+    require(isinstance(data, dict) and set(data) in ({"version", "pfx", "password"}, {"version", "pfx", "password", "public"}))
     require(type(data["version"]) is int and data["version"] == 1)
     require(isinstance(data["password"], str) and 0 < len(data["password"]) <= 1024)
     require("\x00" not in data["password"] and isinstance(data["pfx"], str))
@@ -92,7 +112,7 @@ def open_root(uid, create):
 
 def check_contents(root, uid):
     for name in os.listdir(root):
-        require(name in ("active.json", "config.json", "active.pfx", ".lock") or re.fullmatch(r"\.transfer-[0-9a-f]{32}\.tmp", name) is not None)
+        require(name in ("active.json", "config.json", "active.pfx", ".lock", "bootstrap.py", "public.pem") or re.fullmatch(r"(?:\.transfer-[0-9a-f]{32}\.tmp|node-[0-9a-f]{64}\.(?:pem|source))", name) is not None)
         ordinary_file(os.stat(name, dir_fd=root, follow_symlinks=False), uid)
 
 
@@ -114,6 +134,15 @@ def settings(config):
             "ASPNETCORE_Kestrel__Certificates__Default__Password": config["password"]}
 
 
+def is_agent(args):
+    names = [os.path.basename(arg) for arg in args[:2]]
+    names = [name[:-4] if name.endswith(".exe") else name for name in names]
+    known = ("hc", "herdr-core", "copilot", "opencode", "pi", "claude")
+    if names and names[0] in known:
+        return True
+    return len(args) > 1 and names[0] in ("node", "bun") and (names[1] in known or any(part in args[1].split("/") for part in ("claude-code", "copilot", "pi-coding-agent", "opencode-ai")))
+
+
 def parents_current(config, uid):
     expected = settings(config)
     for pid in os.listdir("/proc"):
@@ -125,23 +154,76 @@ def parents_current(config, uid):
                 continue
             with open(process + "/cmdline", "rb") as source:
                 args = [os.fsdecode(arg) for arg in source.read(65536).split(b"\0") if arg]
-            # Inspect executable/entrypoint only, never arbitrary prompt arguments.
-            names = [os.path.basename(arg) for arg in args[:2]]
-            # Some Linux tool packages retain the compiled executable's .exe suffix.
-            names = [name[:-4] if name.endswith(".exe") else name for name in names]
-            known = ("hc", "herdr-core", "copilot", "opencode", "pi", "claude")
-            agent = bool(names) and names[0] in known
-            if len(args) > 1 and os.path.basename(args[0]) in ("node", "bun"):
-                agent = names[1] in known or any(part in args[1].split("/") for part in ("claude-code", "copilot", "pi-coding-agent", "opencode-ai"))
-            if not agent:
+            if not is_agent(args):
                 continue
             with open(process + "/environ", "rb") as source:
                 environment = dict(os.fsdecode(value).split("=", 1) for value in source.read(1024 * 1024).split(b"\0") if b"=" in value)
             if any(environment.get(key) != value for key, value in expected.items()):
                 return False
-        except FileNotFoundError:
+            extra = environment.get("NODE_EXTRA_CA_CERTS", "")
+            if re.fullmatch(r"/tmp/abox-https-" + str(uid) + r"/node-[0-9a-f]{64}\.pem", extra) is None:
+                return False
+        except (FileNotFoundError, ProcessLookupError):
             continue
+        except PermissionError:
+            return None
     return True
+
+
+def write_atomic(root, name, payload):
+    temporary = ".transfer-" + secrets.token_hex(16) + ".tmp"
+    output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=root)
+    try:
+        with os.fdopen(output, "wb") as destination:
+            destination.write(payload)
+            destination.flush()
+            os.fsync(destination.fileno())
+        os.replace(temporary, name, src_dir_fd=root, dst_dir_fd=root)
+        os.fsync(root)
+    finally:
+        if temporary in os.listdir(root):
+            os.unlink(temporary, dir_fd=root)
+
+
+def node_bundle(root, uid):
+    original = os.environ.get("NODE_EXTRA_CA_CERTS", "")
+    prefix = "/tmp/abox-https-" + str(uid) + "/"
+    own = original.startswith(prefix)
+    if own:
+        require(re.fullmatch(r"node-[0-9a-f]{64}\.pem", original[len(prefix):]) is not None)
+        path = original[:-4] + ".source"
+    else:
+        path = original
+    content = b""
+    if path:
+        # Caller trust inputs may be system/corporate CA symlinks. Follow them
+        # only as this unprivileged user; abox-owned sources remain no-follow.
+        fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | (os.O_NOFOLLOW if own else 0))
+        with os.fdopen(fd, "rb") as source:
+            info = os.fstat(source.fileno())
+            if own:
+                ordinary_file(info, uid)
+            require(stat.S_ISREG(info.st_mode) and info.st_size <= 1024 * 1024)
+            content = source.read(1024 * 1024 + 1)
+            require(len(content) <= 1024 * 1024)
+    if content:
+        # Validate in memory, without changing or reserializing caller roots.
+        ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT).load_verify_locations(cadata=content.decode("ascii"))
+    name = "node-" + hashlib.sha256(content).hexdigest()
+    if own:
+        require(path == prefix + name + ".source")
+    if name + ".source" not in os.listdir(root):
+        # Bound distinct user trust configurations, never evict a running Node's
+        # trust file or silently replace a user's independently selected CA roots.
+        require(sum(entry.endswith(".source") for entry in os.listdir(root)) < 16)
+        write_atomic(root, name + ".source", content)
+    public = os.open("public.pem", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root)
+    with os.fdopen(public, "rb") as source:
+        ordinary_file(os.fstat(source.fileno()), uid)
+        leaf = source.read(16385)
+        require(0 < len(leaf) <= 16384)
+    write_atomic(root, name + ".pem", content + b"\n" + leaf)
+    return name + ".pem"
 
 
 def bootstrap(uid):
@@ -149,39 +231,44 @@ def bootstrap(uid):
     root = open_root(uid, False)
     require(root is not None)
     try:
-        check_contents(root, uid)
-        config = read_config(root, uid)
-        ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
-        # Recovery is explicit and opt-in; never restart a user's core ourselves.
-        recovery = sys.argv[2:] in (["hc", "server", "restart", "--fresh"], ["hc", "server", "stop"], ["hc", "server", "start"], ["opencode", "service", "stop"])
-        if not recovery and not parents_current(config, uid):
-            sys.stderr.write("abox HTTPS: stale Herdr/agent parent; exit old agents. Save work, then explicitly initialize hc with 'abox run shell -- hc server restart --fresh' if supported, otherwise deliberately stop and start hc via abox. No restart was performed.\n")
-            return 42
-        environment = dict(os.environ)
-        environment.update(settings(config))
+        lock = os.open(".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=root)
+        try:
+            ordinary_file(os.fstat(lock), uid)
+            acquire_lock(lock)
+            check_contents(root, uid)
+            config = read_config(root, uid)
+            ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
+            current = parents_current(config, uid)
+            recovery = sys.argv[2:] in (["hc", "server", "restart", "--fresh"], ["hc", "server", "stop"], ["hc", "server", "start"], ["opencode", "service", "stop"])
+            if current is not True:
+                sys.stderr.write("abox HTTPS: " + ("stale Herdr/agent parent" if current is False else "cannot inspect existing agent process environment (/proc permissions)") + "; existing agents are NOT confirmed configured. Save/exit and ordinary transport remain available. Explicitly initialize fresh parents through abox; no restart was performed.\n")
+                if is_agent(sys.argv[2:]) and not recovery:
+                    return 42 if current is False else 43
+            try:
+                node = node_bundle(root, uid)
+            except (OSError, ValueError):
+                sys.stderr.write("abox HTTPS: Node trust is NOT configured. Check NODE_EXTRA_CA_CERTS (readable regular PEM file, at most 1 MiB; maximum 16 distinct trust inputs). Preserve/fix the caller input or inspect unused owned node pairs, then retry 'abox ports'. Ordinary/recovery commands retain the caller's original Node setting and protected Kestrel configuration.\n")
+                if is_agent(sys.argv[2:]) and not recovery:
+                    return 78
+                node = "-"
+            print(config["password"] + " " + node)
+        finally:
+            os.close(lock)
     finally:
         os.close(root)
-    try:
-        os.execvpe(sys.argv[2], sys.argv[2:], environment)
-    except FileNotFoundError:
-        sys.stderr.write("abox: command not found.\n")
-        return 127
-    except OSError:
-        sys.stderr.write("abox: command could not be executed.\n")
-        return 126
 
 
 def run():
     require(sys.platform == "linux" and sys.version_info >= (3, 8))
     uid = os.geteuid()
     require(uid != 0)
-    if len(sys.argv) >= 2 and sys.argv[1] == "exec":
+    os.umask(0o077)
+    if len(sys.argv) >= 2 and sys.argv[1] == "environment":
         return bootstrap(uid)
     require(len(sys.argv) == 3)
     mode, transfer = sys.argv[1:]
     require(mode in ("stage", "activate", "prepare", "status", "cleanup") and re.fullmatch(r"[0-9a-f]{32}", transfer) is not None)
     payload = read_payload() if mode in ("stage", "activate") else None
-    os.umask(0o077)
     root = open_root(uid, mode in ("stage", "activate"))
     if root is None:
         require(mode in ("prepare", "cleanup"))
@@ -193,8 +280,7 @@ def run():
         lock = os.open(".lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600, dir_fd=root)
         try:
             ordinary_file(os.fstat(lock), uid)
-            # Do not let a dead/malicious holder hang cancellation recovery.
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            acquire_lock(lock)
             check_contents(root, uid)
             if mode == "prepare":
                 print(read_config(root, uid)["password"] if "config.json" in os.listdir(root) else secrets.token_hex(32))
@@ -202,7 +288,12 @@ def run():
             if mode == "status":
                 config = read_config(root, uid)
                 ordinary_file(os.stat("active.pfx", dir_fd=root, follow_symlinks=False), uid)
-                return 0 if parents_current(config, uid) else 42
+                try:
+                    node_bundle(root, uid)
+                except (OSError, ValueError):
+                    return 44
+                current = parents_current(config, uid)
+                return 0 if current is True else 42 if current is False else 43
             if mode == "cleanup":
                 if temporary in os.listdir(root):
                     os.unlink(temporary, dir_fd=root)
@@ -217,6 +308,7 @@ def run():
                 data = json.loads(payload)
                 require(re.fullmatch(r"[0-9a-f]{64}", data["password"]) is not None)
                 config = {"path": "/tmp/abox-https-" + str(uid) + "/active.pfx", "password": data["password"]}
+                require(isinstance(data.get("public"), str) and len(data["public"]) <= 16384)
                 if "config.json" in os.listdir(root):
                     require(read_config(root, uid) == config)
                 else:
@@ -229,6 +321,16 @@ def run():
                         os.fsync(destination.fileno())
                     os.replace(temporary, "config.json", src_dir_fd=root, dst_dir_fd=root)
                     os.fsync(root)
+                write_atomic(root, "public.pem", data["public"].encode("ascii"))
+                installed = None
+                if "bootstrap.py" in os.listdir(root):
+                    fd = os.open("bootstrap.py", os.O_RDONLY | os.O_NOFOLLOW, dir_fd=root)
+                    with os.fdopen(fd, "rb") as source:
+                        installed = source.read(131072)
+                # Stable code is not replaced on certificate renewal: a launcher
+                # can validate its inode before acquiring the setup lock.
+                if installed != SOURCE.encode("utf-8"):
+                    write_atomic(root, "bootstrap.py", SOURCE.encode("utf-8"))
                 payload = base64.b64decode(data["pfx"], validate=True)
                 target = "active.pfx"
             output = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY | os.O_NOFOLLOW, 0o600, dir_fd=root)
@@ -254,18 +356,22 @@ def run():
 
 
 def interrupted(signum, frame):
-    raise InterruptedError()
+    raise SystemExit(128 + signum)
 
 
 for event in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
-    signal.signal(event, interrupted)
+    if signal.getsignal(event) != signal.SIG_IGN:
+        signal.signal(event, interrupted)
 
 try:
     result = run()
-except BaseException:
+except RuntimeBusy:
+    sys.stderr.write("abox HTTPS: protected runtime is busy after 3 seconds; retry the operation or 'abox ports'. No complete readiness is claimed.\n")
+    sys.exit(75)
+except Exception:
     # No traceback, JSON, certificate, password or raw exception reaches stderr.
-    if len(sys.argv) > 1 and sys.argv[1] == "exec":
-        sys.stderr.write("abox HTTPS: protected launch configuration is invalid or incomplete. Check runtime ownership/mounts and retry 'abox ports'. No fallback certificate was selected.\n")
+    if len(sys.argv) > 1 and sys.argv[1] == "environment":
+        sys.stderr.write("abox HTTPS: protected launch configuration is invalid or incomplete. Check runtime ownership/mounts; retry 'abox ports'. No trust configuration was discarded.\n")
         sys.exit(78)
     sys.exit(1)
 else:

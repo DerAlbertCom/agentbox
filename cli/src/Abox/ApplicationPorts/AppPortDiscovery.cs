@@ -23,6 +23,8 @@ internal static class AppPortDiscovery
         foreach (var file in ConfigurationFiles(location, location, 0, token))
         {
             var source = Path.GetRelativePath(location, file);
+            var applicableProject = false;
+            var projectTextRead = false;
             try
             {
                 if (
@@ -40,6 +42,28 @@ internal static class AppPortDiscovery
                     throwOnEndOfStream: false,
                     token
                 );
+                if (IsDotnetProject(file))
+                {
+                    using var text = new StreamReader(
+                        new MemoryStream(bytes, 0, count),
+                        detectEncodingFromByteOrderMarks: true
+                    );
+                    var declaration = await text.ReadToEndAsync(token);
+                    projectTextRead = true;
+                    // This is only the conservative error policy, not detection:
+                    // malformed XML explicitly mentioning ASP.NET must not opt out.
+                    applicableProject =
+                        declaration.Contains(
+                            "Microsoft.NET.Sdk.Web",
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                        || declaration.Contains(
+                            "Microsoft.AspNetCore.App",
+                            StringComparison.OrdinalIgnoreCase
+                        );
+                }
+                if (count == bytes.Length && IsDotnetProject(file) && !applicableProject)
+                    continue;
                 if (count == bytes.Length)
                     throw new AboxException(
                         $"Application port discovery file-size limit (1 MiB) exceeded by {JsonSerializer.Serialize(source)}. Reduce the file and retry; no ports were published."
@@ -69,6 +93,16 @@ internal static class AppPortDiscovery
                                 .Any(element =>
                                     element.Name.LocalName == "Sdk"
                                     && IsWebSdk((string?)element.Attribute("Name"))
+                                )
+                            || project
+                                .Descendants()
+                                .Any(element =>
+                                    element.Name.LocalName == "FrameworkReference"
+                                    && string.Equals(
+                                        (string?)element.Attribute("Include"),
+                                        "Microsoft.AspNetCore.App",
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
                                 )
                         );
                     continue;
@@ -105,6 +139,10 @@ internal static class AppPortDiscovery
                             or UnauthorizedAccessException
                 )
             {
+                // Only bytes actually read can establish an unrelated project.
+                // Inaccessible/linked XML must not silently opt out of HTTPS.
+                if (IsDotnetProject(file) && projectTextRead && !applicableProject)
+                    continue;
                 var hint = Path.GetFileName(file) switch
                 {
                     "angular.json" =>
@@ -116,7 +154,7 @@ internal static class AppPortDiscovery
                 };
                 if (IsDotnetProject(file))
                     hint =
-                        "use readable ordinary project XML with an explicit Microsoft.NET.Sdk.Web SDK; project imports and MSBuild are never evaluated";
+                        "use readable ordinary project XML with an explicit Microsoft.NET.Sdk.Web SDK or Microsoft.AspNetCore.App FrameworkReference; project imports and MSBuild are never evaluated";
                 throw new AboxException(
                     $"Cannot discover application ports in {JsonSerializer.Serialize(source)}. Fix file access, JSON structure or port configuration: {hint}. No ports were published."
                 );

@@ -266,14 +266,18 @@ public sealed partial class PortsCommandTests
             );
     }
 
-    [Fact]
-    public async Task MatchingFileLinksAreRejectedWithoutReadingTheTarget()
+    [Theory]
+    [InlineData("Properties/launchSettings.json")]
+    [InlineData("Web.csproj")]
+    [InlineData("Web.fsproj")]
+    [InlineData("Web.vbproj")]
+    public async Task MatchingFileLinksAreRejectedWithoutReadingTheTarget(string relative)
     {
         // Arrange
         using var fixture = new Fixture();
-        var properties = fixture.Root.Directory_("folder/Properties");
+        fixture.Root.Directory_("folder/Properties");
         var target = fixture.Root.File("synthetic-target.json", "must-never-be-read");
-        var path = Path.Combine(properties, "launchSettings.json");
+        var path = Path.Combine(fixture.Location, relative);
         try
         {
             File.CreateSymbolicLink(path, target);
@@ -301,9 +305,68 @@ public sealed partial class PortsCommandTests
         exit.Should().Be(1);
         fixture
             .Console.AllText.Should()
-            .Contain("launchSettings.json")
+            .Contain(Path.GetFileName(relative))
             .And.NotContain("must-never-be-read");
         await fixture.NoPublishing();
+    }
+
+    [Fact]
+    public async Task UnreadableProjectFailsBeforePublishingWithoutSilentlySkippingHttps()
+    {
+        // Arrange
+        using var fixture = new Fixture();
+        var path = fixture.Root.File(
+            "folder/Web.csproj",
+            """<Project Sdk="Microsoft.NET.Sdk.Web"><!-- never-echo-project-content --></Project>"""
+        );
+        fixture.Root.File(
+            "folder/Properties/launchSettings.json",
+            """{"profiles":{"app":{"applicationUrl":"https://localhost:8203"}}}"""
+        );
+        using var locked = OperatingSystem.IsWindows()
+            ? new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.None)
+            : null;
+        if (!OperatingSystem.IsWindows())
+            File.SetUnixFileMode(path, UnixFileMode.None);
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+            {
+                try
+                {
+                    using var readable = File.OpenRead(path);
+                    throw new InvalidOperationException(
+                        Xunit.v3.DynamicSkipToken.Value
+                            + "This user can bypass file read permissions (for example Linux root)."
+                    );
+                }
+                catch (UnauthorizedAccessException) { }
+            }
+
+            // Act
+            var exit = await fixture.Run();
+
+            // Assert
+            exit.Should().Be(1);
+            fixture
+                .Console.AllText.Should()
+                .Contain("Web.csproj")
+                .And.Contain("readable ordinary project XML")
+                .And.NotContain("never-echo-project-content")
+                .And.NotContain("Application ports published");
+            await fixture.NoPublishing();
+            await fixture
+                .Sbx.DidNotReceive()
+                .GetDevelopmentCertificatePasswordAsync(
+                    Arg.Any<string>(),
+                    Arg.Any<CancellationToken>()
+                );
+        }
+        finally
+        {
+            if (!OperatingSystem.IsWindows())
+                File.SetUnixFileMode(path, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+        }
     }
 
     [Fact]

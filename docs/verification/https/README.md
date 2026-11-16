@@ -1,4 +1,11 @@
-# #46 activation verification — 2026-11-16
+# #46 activation verification - 2026-11-16
+
+Current recovery/concurrency fixes and red/green results are recorded in
+[recovery-fixes.md](recovery-fixes.md), following the earlier implementation and
+Debug/Release reruns in [review-fixes.md](review-fixes.md). The record below is historical:
+the new client uses sandbox **system trust**, and ordinary stale-agent transport
+is no longer blocked. The [fresh real-host production gate](production-verification.md)
+remains unexecuted; none of these synthetic results closes that gate.
 
 ## Scope and result
 

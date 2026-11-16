@@ -10,6 +10,51 @@ namespace Abox.Tests;
 public sealed class HostDevelopmentCertificateTests
 {
     [Fact]
+    public async Task PrivateStagingFailureRetainsSpecificSafeRecoveryGuidanceBeforeExport()
+    {
+        // Arrange
+        using var root = new CertificateTestDirectory();
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(
+                new ProcessResult(
+                    0,
+                    """
+                    [{"Thumbprint":"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA","Subject":"CN=localhost","Version":6,
+                      "ValidityNotBefore":"2020-01-01T00:00:00Z","ValidityNotAfter":"2090-01-01T00:00:00Z",
+                      "IsHttpsDevelopmentCertificate":true,"IsExportable":true,"TrustLevel":"Full",
+                      "X509SubjectAlternativeNameExtension":["localhost"]}]
+                    """,
+                    "private child diagnostic"
+                )
+            );
+        var exporter = new HostDevelopmentCertificate(
+            runner,
+            new TestConsole(),
+            Path.Combine(root.Path, "missing-private-parent"),
+            [new("tool", 6)]
+        );
+
+        // Act
+        var action = () => exporter.ExportAsync(new string('a', 64), CancellationToken.None);
+
+        // Assert
+        var failure = (await action.Should().ThrowAsync<AboxException>()).Which;
+        failure
+            .Message.Should()
+            .Contain("private certificate staging")
+            .And.Contain("temporary directory")
+            .And.NotContain("private child diagnostic");
+        await runner
+            .DidNotReceive()
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request => request.Arguments.Contains("--export-path")),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
     public async Task InstalledSdkDiscoveryReadsTheToolFormatWithoutRunningItsExportOrLoadingItsAssembly()
     {
         // Arrange
