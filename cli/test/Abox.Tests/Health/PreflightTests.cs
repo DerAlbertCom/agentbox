@@ -26,6 +26,7 @@ public sealed class PreflightTests
         ready.Should().BeFalse();
         _console.AllText.Should().Contain("not on PATH");
         _console.AllText.Should().Contain("sbx");
+        sbx.ReceivedCalls().Should().BeEmpty();
     }
 
     [Fact]
@@ -45,6 +46,10 @@ public sealed class PreflightTests
         // Assert
         ready.Should().BeFalse();
         _console.AllText.Should().Contain("too old");
+        sbx.ReceivedCalls()
+            .Select(call => call.GetMethodInfo().Name)
+            .Should()
+            .Equal("GetVersionAsync");
     }
 
     [Fact]
@@ -71,6 +76,7 @@ public sealed class PreflightTests
         // Assert
         ready.Should().BeFalse();
         _console.AllText.Should().Contain("start the daemon");
+        await sbx.DidNotReceive().SignInAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -96,5 +102,6 @@ public sealed class PreflightTests
 
         // Assert
         ready.Should().BeTrue();
+        await sbx.DidNotReceive().SignInAsync(Arg.Any<CancellationToken>());
     }
 }
