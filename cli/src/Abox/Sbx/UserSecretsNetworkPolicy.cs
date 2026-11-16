@@ -15,57 +15,75 @@ internal static class UserSecretsNetworkPolicy
             var scope = Text(rule, "scope");
             if (scope != "sandbox:" + sandbox)
                 continue;
-            var name = Text(rule, "name");
-            var appliesTo = Text(rule, "applies_to");
-            var type = Text(rule, "resource_type");
-            var decision = Text(rule, "decision");
-            var origin = Text(rule, "origin");
-            var layer = Text(rule, "layer");
-            var status = Text(rule, "status");
-            var editable = rule.GetProperty("editable").GetBoolean();
-            var sandboxId = Text(rule, "sandbox_id");
-            var provenance = rule.GetProperty("provenance");
-            var createdVia = Text(provenance, "created_via");
-            var actions = Strings(rule, "actions");
-            var resources = Strings(rule, "resources");
-            if (
-                appliesTo != scope
-                || sandboxId != sandbox
-                || type != "network"
-                || decision != "allow"
-                || origin != "scoped"
-                || layer != "local"
-                || status != "active"
-                || !actions.Contains("net:connect:tcp")
-            )
+            var declaration = new SandboxNetworkRule(rule);
+            if (!declaration.IsActiveTcpAllowFor(sandbox))
                 continue;
-            var provisioned =
-                name == "kit:" + sandbox
-                && !editable
-                && createdVia == "provisioned"
-                && Text(provenance, "source") == "sandboxes";
-            var added =
-                editable
-                && createdVia == "added"
-                && name == Text(rule, "id")
-                && Guid.TryParseExact(name, "D", out _)
-                && Guid.TryParseExact(Text(rule, "policy_id"), "D", out _)
-                && provenance.EnumerateObject().Count() == 1
-                && KnownAddedRuleFields(rule)
-                && actions.Length == 1
-                && resources.Length > 0
-                && resources.All(resource => LocalhostPort(resource) is not null);
-            if (!provisioned && !added)
+            if (!declaration.IsKitProvisioned(sandbox) && !declaration.IsPersistentLocal())
                 continue;
-            foreach (var resource in resources)
+            foreach (var resource in declaration.Resources)
                 if (LocalhostPort(resource) is { } port)
                     ports.Add(port);
         }
         return ports.ToArray();
     }
 
-    // The observed persistent-rule schema has no expiry or conditional constraints.
-    private static bool KnownAddedRuleFields(JsonElement rule) =>
+    // Both supported schemas require complete metadata before classification. In particular,
+    // an inactive or unrelated same-scope rule cannot hide malformed required fields.
+    private sealed class SandboxNetworkRule(JsonElement rule)
+    {
+        private readonly string name = Text(rule, "name");
+        private readonly string appliesTo = Text(rule, "applies_to");
+        private readonly string type = Text(rule, "resource_type");
+        private readonly string decision = Text(rule, "decision");
+        private readonly string origin = Text(rule, "origin");
+        private readonly string layer = Text(rule, "layer");
+        private readonly string status = Text(rule, "status");
+        private readonly bool editable = rule.GetProperty("editable").GetBoolean();
+        private readonly string sandboxId = Text(rule, "sandbox_id");
+        private readonly JsonElement provenance = rule.GetProperty("provenance");
+        private readonly string createdVia = Text(rule.GetProperty("provenance"), "created_via");
+        private readonly string[] actions = Strings(rule, "actions");
+        internal string[] Resources { get; } = Strings(rule, "resources");
+
+        internal bool IsActiveTcpAllowFor(string sandbox)
+        {
+            var exactSandbox = appliesTo == "sandbox:" + sandbox && sandboxId == sandbox;
+            var localAllow = type == "network" && decision == "allow" && origin == "scoped";
+            return exactSandbox && localAllow && IsActiveLocalTcp();
+        }
+
+        private bool IsActiveLocalTcp() =>
+            layer == "local" && status == "active" && actions.Contains("net:connect:tcp");
+
+        internal bool IsKitProvisioned(string sandbox) =>
+            name == "kit:" + sandbox
+            && !editable
+            && createdVia == "provisioned"
+            && Text(provenance, "source") == "sandboxes";
+
+        internal bool IsPersistentLocal()
+        {
+            if (!editable || createdVia != "added")
+                return false;
+            if (!HasPersistentIdentity() || !HasOnlyPersistentFields())
+                return false;
+            // Unlike kit declarations, every resource/action in a local rule must be narrow.
+            return actions.Length == 1
+                && Resources.Length > 0
+                && Resources.All(resource => LocalhostPort(resource) is not null);
+        }
+
+        private bool HasPersistentIdentity() =>
+            name == Text(rule, "id")
+            && Guid.TryParseExact(name, "D", out _)
+            && Guid.TryParseExact(Text(rule, "policy_id"), "D", out _);
+
+        private bool HasOnlyPersistentFields() =>
+            provenance.EnumerateObject().Count() == 1 && KnownPersistentLocalFields(rule);
+    }
+
+    // The observed persistent-local schema has no expiry or conditional constraints.
+    private static bool KnownPersistentLocalFields(JsonElement rule) =>
         rule.EnumerateObject()
             .All(property =>
                 property.Name
