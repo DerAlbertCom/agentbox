@@ -4,7 +4,137 @@ Use this baseline before arranging the Deals HTTPS verification for
 [#46](https://github.com/DerAlbertCom/agentbox/issues/46). It is separate from
 [#43's synthetic publishing verification](../verification/application-ports.md).
 
-## Result and scope
+## Current result — authorized live startup, 2026-11-16 11:42 CET
+
+**The real Deals External API is running in the existing sandbox. Neither
+sandbox-local nor host HTTPS passed certificate-validated HTTP verification.**
+
+The user's explicit follow-up, **“yes, just start it and test,”** supersedes the
+earlier startup gate below. This authorizes normal development-service connections
+and startup effects, including configured SQS, SSM and telemetry. It does not
+establish that startup is write-free or that every dependency is healthy.
+
+### Startup and task ownership
+
+- Rechecked exact sandbox `rwe-ai-sbx-41bc30`: running, no External API process,
+  no listener on sandbox 8203/18203 and no existing mappings before this launch.
+  The three Deals instruction/domain-pointer files matched the host copies by
+  SHA-256; those instructions were read before launch.
+- At `2026-11-16T10:39:39Z`, launched the following argv from
+  `/home/agent/workspace/Deals/backend`, with normal inherited configuration and
+  the unchanged launch profile; normal build/restore was allowed to run:
+
+  ```text
+  dotnet run --project /home/agent/workspace/Deals/backend/src/WebApi.External/WebApi.External.csproj --launch-profile Web
+  ```
+
+- Private log signals confirmed `Application started.` and
+  `Now listening on: https://localhost:8203`. `/proc/net/tcp{,6}` independently
+  confirmed **127.0.0.1:8203 and [::1]:8203**, not a wildcard bind. No compiler
+  error codes or exception type names were found in the captured launch log at
+  the final check. This is not exhaustive dependency-health evidence.
+- Task supervisor PID **43129**, `dotnet run` PID/process group **43130**,
+  apphost PID **43843**. Recorded `/proc` start ticks: **1378797** for 43130,
+  **1390583** for 43843. **API intentionally left running** for subsequent
+  integration verification; no unrelated process was stopped or restarted.
+- Task files are outside app sources, under the application user's private
+  **0700** directory
+  `/home/agent/.local/state/abox-story3-live-20261116T103939Z`:
+  `app.log`, `supervisor.log`, `app.pid`, `supervisor.pid`, `ownership.json`, and
+  `exit.json` if the launch exits. Created files are **0600**. Logs remain private;
+  diagnostics emitted only allowlisted status/public metadata. For later cleanup,
+  verify the recorded PID start ticks and process-group membership before
+  signaling **only task-owned process group 43130**. The supervisor records exit
+  and then terminates; preserve unrelated processes and mappings.
+
+### Exactly one targeted mapping
+
+The current `abox ports` interface has only a location selector, not a
+project/port filter. Running it against `D:/dev/rwe` would discover unrelated
+applications, so that broad command was not run. After an empty runtime inventory
+and a free host-port check, used only the supported argv sequence from
+`SbxClient.ApplicationPorts.cs` for this single authorized mapping:
+
+```text
+sbx exec rwe-ai-sbx-41bc30 true
+sbx ports rwe-ai-sbx-41bc30 --json
+sbx ports rwe-ai-sbx-41bc30 --publish 127.0.0.1:18203:8203/tcp4 --json
+sbx ports rwe-ai-sbx-41bc30 --json
+```
+
+Fresh inventory confirmed exactly **127.0.0.1:18203 -> 8203/tcp4**. Windows listener
+inspection confirmed only `127.0.0.1:18203`, with runtime-owned PID 66712. This is
+the task's only mapping mutation and is retained for follow-up verification.
+No relay/fallback was installed in this real sandbox; #43's implementer is working
+independently in a disposable sandbox. Do not stop the runtime-owned host listener
+as app cleanup; any later removal must target only this exact mapping.
+
+### Validated HTTPS checks and public served identity
+
+Repeated bounded `HEAD /` checks used the request form below, no credentials,
+redirects, response bodies, alternate CA bundle, curlrc or validation bypass:
+
+```text
+curl -q --noproxy '*' --proto '=https' --connect-timeout 3 --max-time 5 --head --silent --output <NUL-or-/dev/null> --write-out '%{http_code}' <URL>
+```
+
+| Client / URL | Observed result around 11:42 CET |
+|---|---|
+| Sandbox `https://localhost:8203/` | curl **60**, HTTP **000**: certificate validation failed; TLS server reached, no validated HTTP response |
+| Windows host `https://localhost:18203/` | curl **35**, HTTP **000**: TLS connection failed, no validated HTTP response |
+
+Independent sandbox `ssl.create_default_context()` with
+`server_hostname='localhost'` failed verification with code **18**, self-signed
+certificate. A dedicated public-certificate diagnostic also retained validation:
+
+```text
+openssl s_client -connect localhost:8203 -servername localhost -showcerts -verify_return_error -verify_hostname localhost
+```
+
+With empty stdin and privately captured output, it exited **1**, reporting
+self-signed verification error **18**. Its returned public certificate was parsed
+in memory with `openssl x509 -noout` for identity only; no certificate file or key
+was exported/copied. Served certificate:
+
+- Subject/issuer **CN=localhost**; SHA-1 thumbprint
+  **CA669D34D0FA19407DFD5788F3A639AA759A6953** (the sandbox certificate previously
+  inventoried below, not the host certificate).
+- Valid **2026-11-12T07:15:51Z–2027-11-12T07:15:51Z**; SAN includes
+  **DNS:localhost**, **127.0.0.1**, **::1** and development hostnames.
+- The SAN/validity metadata is not a successful chain/hostname-validation test;
+  the strict handshake failed trust validation.
+
+On Windows, an independent `TcpClient` connected to `localhost:18203`, followed
+by a default-validation `SslStream.AuthenticateAsClientAsync('localhost')`.
+TCP connected; TLS failed with `IOException` / `SocketException`, with **no peer
+certificate available**. Thus host failure is consistent with the previously
+proven native publishing limitation for sandbox-loopback-only listeners, not
+evidence of host certificate rejection or host trust success.
+
+### Remaining gates and verification scope
+
+The startup gate is cleared and actual listening/TLS identity is now observed.
+Host reachability still needs #43's loopback-compatible fallback. HTTPS #46 still
+needs its separately approved secure host-certificate transport/runtime setup:
+no certificate export/copy, trust change, persistent environment/bootstrap change,
+app bind override, app-source/config edit, dependency-service change or sandbox
+lifecycle operation was performed here. Deals tracked-change count was **0** after
+startup. The worker and business endpoints were not started/called.
+
+Only this note changes in the integration repository. No implementation tests
+were rerun for this live-verification/documentation task; the normal API launch
+built sufficiently to start. Git whitespace checking applies to the note. No
+browser trust, independent Linux-host verification, HTTPS provisioning success,
+or Story #3/#46 completion is claimed. Both issues remain open; their full bodies
+and empty comment arrays were reread.
+
+## Historical baseline — before explicit startup approval
+
+**Everything below describes the earlier 11:30 CET baseline**, not current
+process/mapping state or a continuing request for startup permission. Its startup
+gate and next-step instructions are superseded by the authorized live run above.
+
+### Earlier result and scope
 
 **2026-11-16, Windows host: no live Deals HTTP or HTTPS success.** All six
 bounded requests below returned curl exit **7** (connection failed), HTTP status
