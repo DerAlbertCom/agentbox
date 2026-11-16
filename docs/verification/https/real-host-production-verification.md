@@ -15,7 +15,146 @@ desktop, independent Linux host, real-host renewal and exact **18203** productio
 acceptance are separate gates. Passing the ordinary production path does not clear
 the independent review findings on the older candidate.
 
-## Latest recovery-fix candidate: `4f5719e09e8946a311c93e0cc77a20bbd20052bc`
+## Latest PEM/bootstrap candidate: `5b40b570aff9fb76b9c6379e55569eef83dc2df9`
+
+The verifier normally merged **exactly** `5b40b570aff9fb76b9c6379e55569eef83dc2df9`
+from `feature/app-ports-46-pem-fixes` into its existing verification branch. This
+was a fast-forward from evidence commit `8fa8e035570e3b88f2b54d3ccb66ceaab81ec519`;
+all older results below remain historical, not relabelled. The new implementation
+is **`fdd1916b1b538f84cd35795ff5b6dfd29b179df3`**. No integration branch/worktree
+was written, no product edit was made, and no existing runtime was reused.
+
+Fresh matching Release CLI/helper builds had **zero warnings/errors**. The
+actual CLI reported `1.0.0+5b40b570aff9fb76b9c6379e55569eef83dc2df9`:
+
+| Release artifact | SHA-256 |
+|---|---|
+| `abox.dll` | `F9212B501289380D188CB75C95665C539EFD0F52E784543E6EC6CEFCA3F1C5C8` |
+| `ActivationProbe.dll` | `92731035D14DEEC17D68C7BAE904F2A67545960201A3272F1558449D59188F90` |
+
+### Fresh actual real-host run — 13:59:01Z–14:01:03Z
+
+```text
+Workspace: D:\dev\rwe\agentbox-worktrees\app-ports-46-review-fixes\.abox\abox-issue46-activation-production-12d3c4b1
+Sandbox:   abox-issue46-activation-production-12d3c4b1-abox-34A1B
+```
+
+This target was created by this candidate's Release `prepare-production` helper,
+using the same cached approved template **685acd19ffe7** / sbx **0.51.0**. Host
+**18443** was checked free, including a temporary loopback bind; the production
+default **8443 → 18443**, offset **10000**, was used without freeing any listener.
+Windows **10.0.26200**, PowerShell **7.6.10**, build SDK **11.0.100**, host target
+runtime **10.0.15**, installed export tool SDK **10.0.404** / dev-certs **10.0.15**
+were unchanged. Sandbox UID **1000**, SDKs **10.0.404 / 11.0.100** (default 11),
+Python **3.13.18**, OpenSSL **3.5.5**, Node **v24.22.2** supplied the prerequisites;
+nothing was installed.
+
+Fresh preflight found no prior abox/manual HTTPS runtime/trust, canonical Kestrel
+settings, host public leaf or localhost subject. The original system/Node input
+again had **256** public certificates / **458886 bytes**, with Node and
+`SSL_CERT_FILE` already selecting the canonical system bundle, not a test root.
+Original local proxy/corporate CA sources were inventoried, not replaced.
+
+Immediately before each full `ports`, fresh read-only installed dev-certs metadata
+and public-store correlation required the same sole, date-valid, exportable,
+format-6 **Full**-trust host identity with private-key association and localhost
+SAN: SHA-1 **`8E84EA4F2F4EC8548DAF359CCB1179008251C714`**, full DER SHA-256
+**`6A53FFA474740955141D2A0162D5D686A5B27851EF4FF62ED71F4EE465CE26FC`**.
+Actual production `HostDevelopmentCertificate` CLI-only export, protected staging,
+root/public-only trust and non-root activation supplied setup. No synthetic export,
+manual PFX/configuration, profile environment or extra trust supplied this pass.
+
+| Gate on exact `5b40b57` candidate | Result |
+|---|---|
+| Actual separate Release `abox ports --location ...` | **PASS**, exit 0 **before** the unchanged certificate-unaware fixture was started |
+| Subsequent actual `abox run shell -- ... dotnet run --no-launch-profile --urls https://0.0.0.0:8443` | **PASS**, production file-backed exec bootstrap supplied defaults after setup exited |
+| Host default curl TLS / exact marker at `https://localhost:18443/` | **PASS**, exact `abox-production-verifier` marker, no insecure flags |
+| Host default chain/hostname and exact authorized leaf | **PASS**, callback-free `SslStream`, exact SHA-1 and complete DER SHA-256 |
+| Fresh sandbox default system-store TLS at `https://localhost:8443/` | **PASS**, Python default context, `CERT_REQUIRED`, hostname checking, exact DER and marker through production `run shell` |
+| Fresh Node default TLS through production `run shell` | **PASS**, **v24.22.2**, authorized socket, exact raw peer DER and marker; protected production Node bundle selected, no callback or test-only trust override |
+| Original CA preservation | **PASS**, every original system/Node public root retained; protected source exactly matched the actual updated canonical bundle bytes; merged bundle **258** PEM entries, as explained in the older detailed record |
+| Repeat actual full `ports` | **PASS**, separate exit 0, stable private path/password/config without exposing values or private hashes; same **7** runtime names, one active PFX and one current root-owned public trust source |
+| Protected state | **PASS**, UID 1000 0700 runtime directory, ordinary single-link 0600 files; root-owned 0755 trust directory / ordinary single-link 0644 exact-leaf CRT |
+| Export cleanup | **PASS**, no added product private-staging directory after either full setup; approved owner-only staging-parent ACL revalidated before execution |
+| App/sandbox/workspace cleanup | **PASS**, verified PID/start-tick/argv-bound pidfd stop; helper fresh inventory confirmed exact sandbox absence and workspace removal; independently rechecked afterward |
+| Host trust/key identity | **PASS**, unchanged CurrentUser/LocalMachine public DER and private-key-association inventories, including absent-store markers; exact eligible metadata rechecked after cleanup |
+| Working manual Deals | **PASS preservation**, no sandbox exec/mutation or 18203 changes; callback-free exact-leaf TLS and Swagger default-TLS **HEAD 200** before and after |
+
+There was **no failed production invocation or manual workaround** in this run.
+As before, sandbox TLS clients produced only public success artifacts after their
+assertions; empty captured TTY stdout was not treated as proof.
+
+### Actual bootstrap-only production CLI refresh
+
+After the successful full setup, app/TLS checks and repeat, the separate actual
+production command was run against this genuine activation:
+
+```powershell
+dotnet $abox ports --location $workspace --refresh-https-bootstrap
+```
+
+**PASS, exit 0.** The success text explicitly said readiness was **not verified**;
+no readiness was inferred from it. Before/after in-memory comparisons observed:
+
+- Only `bootstrap.py` was atomically replaced: its inode changed and verified
+  source hash remained the same. Every other runtime file, including encrypted
+  PFX/config, retained its content and relevant inode/mtime/ctime/mode/ownership
+  metadata. Private contents/hashes were not printed or preserved in evidence.
+- The exact public trust source and canonical system bundle retained their hashes,
+  inode/timestamps/modes/ownership; unrelated local sources and the actual
+  `SbxClient` binding inventory were unchanged.
+- A scoped `FileSystemWatcher` on the product's explicitly selected staging parent
+  observed **zero** `abox-certificate-*` directory creation/deletion/rename events
+  and **zero watcher errors**, with no before/after residue. Together with the
+  unchanged activation, this found **no export/staging side effect**. This is
+  bounded filesystem observation, not an OS-wide process/syscall trace; the
+  composed automated tests separately assert absence of host export/root-trust/
+  port-operation calls.
+- Host callback-free exact-leaf TLS and a **fresh** default-TLS Node client passed
+  afterward. This was an idempotent current-reader refresh, **not** a newly claimed
+  live cross-version/corrupt-reader upgrade scenario; that remains separately
+  covered by the guarded synthetic tests.
+
+### Supplemental UTF-8 caller-CA check — not another full CLI export flow
+
+Only inside this owned disposable, a public caller bundle was made by prepending
+`# Überprüfung — öffentliche CA roots` plus newline to its already-existing public
+canonical system bundle. No host CA or system trust file was edited. Via
+`SbxClient.CertificateProbeExecAsync`, that file was selected **before** running
+the exact embedded production exec shell and its hash-checked installed reader;
+this verification-only seam was needed to supply the caller environment before
+bootstrap, rather than overriding Node's variable afterward.
+
+**PASS:** actual Node default TLS validated the authorized leaf and marker, using
+the protected merged bundle produced by that reader. The `.source` bytes exactly
+equalled the complete original UTF-8 input; merged bytes equalled that input,
+newline and current public leaf, without reserialization. There were exactly
+**9** protected runtime files / **2** Node variants, still one private PFX/config
+and unchanged system public trust. This supplements the full production CLI
+default-input run; it is not mislabelled as another full CLI setup or an agent UI.
+
+### Fresh checks and remaining gates
+
+- Release solution/helper builds: **zero warnings/errors**.
+- Full direct Release xUnit suite: **1994 total, 1973 passed, 21 explicit skips,
+  zero failures/errors**. The guarded composed-CLI Linux upgrade case is a Windows
+  skip, not a claimed native pass.
+- Guarded isolated receiver runner: **38 passed**, no skips/failures; actual mounted
+  runtime/public-trust rejection also passed. Synthetic identities and fresh
+  network-disabled/no-host-mount Docker containers remain separate from this
+  real-host flow and from independent Linux-host sbx evidence.
+- CSharpier: **246** CLI/helper files checked; `git diff --check` passed. No Debug
+  artifacts were rebuilt. Only public Markdown evidence/procedure status is
+  committed by this verifier; no product edits, private output or host settings.
+- **Still missing:** production browser UI observation (no browser UI tool in the
+  available tool catalog), actual Copilot shell-tool/no-inference authenticated
+  seam, Herdr desktop connection (`abox` again absent from host PATH), independent
+  Linux host, authorized real-host renewal and exact **18203** production fixture.
+  The user's manual Deals browser observation is not this production instance.
+  No billed prompt, authentication, user-session restart, global install, host
+  renewal, push, issue/PR mutation or integration Git write was performed.
+
+## Earlier recovery-fix candidate: `4f5719e09e8946a311c93e0cc77a20bbd20052bc`
 
 After the pinned run had finished and its evidence was committed as `9ed3aa0`,
 the verifier **normally merged** integration
