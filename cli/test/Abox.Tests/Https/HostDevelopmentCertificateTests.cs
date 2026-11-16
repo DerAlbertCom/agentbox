@@ -1,5 +1,8 @@
+using System.Runtime.Versioning;
+using System.Security.AccessControl;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
 using System.Text.Json;
 using Abox.Https;
 using Abox.Infrastructure;
@@ -296,7 +299,7 @@ public sealed class HostDevelopmentCertificateTests
                 calls.Add(child);
                 if (child.Arguments.Contains("--export-path"))
                 {
-                    child.OutputPolicy.Should().Be(ProcessOutputPolicy.Sensitive);
+                    AssertPrivateExportDestination(child);
                     File.WriteAllBytes(
                         child.Arguments[
                             Array.IndexOf(child.Arguments.ToArray(), "--export-path") + 1
@@ -340,6 +343,44 @@ public sealed class HostDevelopmentCertificateTests
                 call.Environment!["DOTNET_GENERATE_ASPNET_CERTIFICATE"] == "false"
             );
         Directory.GetFileSystemEntries(root.Path).Should().BeEmpty();
+    }
+
+    private static void AssertPrivateExportDestination(ProcessRequest child)
+    {
+        child.OutputPolicy.Should().Be(ProcessOutputPolicy.Sensitive);
+        var path = child.Arguments[Array.IndexOf(child.Arguments.ToArray(), "--export-path") + 1];
+        var directory = Path.GetDirectoryName(path)!;
+        Directory.GetFileSystemEntries(directory).Should().BeEmpty();
+        foreach (var name in new[] { "TMPDIR", "TMP", "TEMP" })
+            child.Environment![name].Should().Be(directory);
+        File.GetAttributes(directory).Should().NotHaveFlag(FileAttributes.ReparsePoint);
+        if (!OperatingSystem.IsWindows())
+        {
+            File.GetUnixFileMode(directory)
+                .Should()
+                .Be(UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+            return;
+        }
+        AssertPrivateWindowsDirectory(directory);
+    }
+
+    [SupportedOSPlatform("windows")]
+    private static void AssertPrivateWindowsDirectory(string directory)
+    {
+        var acl = new DirectoryInfo(directory).GetAccessControl();
+        var user = WindowsIdentity.GetCurrent().User!;
+        acl.AreAccessRulesProtected.Should().BeTrue();
+        acl.GetOwner(typeof(SecurityIdentifier)).Should().Be(user);
+        var rule = acl.GetAccessRules(true, true, typeof(SecurityIdentifier))
+            .Cast<FileSystemAccessRule>()
+            .Should()
+            .ContainSingle()
+            .Which;
+        rule.IdentityReference.Should().Be(user);
+        rule.AccessControlType.Should().Be(AccessControlType.Allow);
+        rule.FileSystemRights.Should().Be(FileSystemRights.FullControl);
+        rule.InheritanceFlags.Should()
+            .Be(InheritanceFlags.ContainerInherit | InheritanceFlags.ObjectInherit);
     }
 
     [Theory]
