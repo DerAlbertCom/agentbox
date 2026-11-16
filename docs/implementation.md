@@ -649,8 +649,10 @@ provenance below describes existing runtime metadata, not a kit lookup.
   authorities, SQL Server comma-port fields (optional `tcp:`), and separate
   Host/Server + Port database fields. Standard URL scheme defaults and the
   PostgreSQL Host default 5432 are eligible only when that same host port is mapped.
-  The internal `EndpointAdaptation.Oracle.cs` implementation handles Easy
-  Connect/Plus and structural descriptors, including quoted `Data Source` values.
+  The internal `OracleEndpointScanner` handles Oracle dispatch and outer fields;
+  `OracleSourceValue` maps quoted `Data Source` values back to original spans.
+  Specialized descriptor syntax/address and Easy Connect/options collaborators
+  interpret the supported forms without rebuilding them.
   It maps parsed host spans back to the original text, preserving credentials, service/SID names,
   options, formatting and compound remote/unmapped destinations. Easy Connect's
   default 1521 is eligible only if mapped; descriptors require explicit ports.

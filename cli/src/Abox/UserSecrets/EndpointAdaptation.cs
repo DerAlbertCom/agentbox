@@ -14,9 +14,9 @@ internal static partial class EndpointAdaptation
             );
         // Preserve dispatch priority. In particular, recognized unchanged PostgreSQL
         // query/compound URLs must not fall through to generic authority rewriting.
-        if (TryRewriteOracle(value, ports, Unsupported, out var oracle))
-            return oracle;
-        var scan = PostgresEndpointScanner.ScanUrl(value, ports);
+        var scan = OracleEndpointScanner.Scan(value, ports);
+        if (scan.Kind == EndpointScanKind.Unrecognized)
+            scan = PostgresEndpointScanner.ScanUrl(value, ports);
         if (scan.Kind == EndpointScanKind.Unrecognized)
             scan = UriEndpointScanner.Scan(value, ports);
         if (scan.Kind == EndpointScanKind.Unrecognized)
