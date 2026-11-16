@@ -6,6 +6,21 @@ namespace Abox.Sbx;
 /// </summary>
 public interface ISbxClient
 {
+    Task<string> GetDevelopmentCertificatePasswordAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+    Task ActivateDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
+        CancellationToken cancellationToken
+    );
+    Task VerifyDevelopmentCertificateActivationAsync(
+        string sandbox,
+        CancellationToken cancellationToken
+    );
+
     /// <summary>The first sbx version abox works with.</summary>
     const string MinimumVersion = "0.51.0";
 
@@ -65,6 +80,14 @@ public interface ISbxClient
         string sandbox,
         string id,
         string json,
+        CancellationToken cancellationToken
+    );
+
+    /// <summary>Stages an already authorized export atomically with its password; does not configure Kestrel or establish host trust.</summary>
+    Task StageDevelopmentCertificateAsync(
+        string sandbox,
+        ReadOnlyMemory<byte> pfx,
+        string password,
         CancellationToken cancellationToken
     );
 

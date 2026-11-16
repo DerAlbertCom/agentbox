@@ -10,6 +10,7 @@ using Abox.Features.Sandbox;
 using Abox.Features.Secrets;
 using Abox.Features.UserSecrets;
 using Abox.Health;
+using Abox.Https;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
@@ -73,6 +74,8 @@ public static class AboxServiceCollection
         services.AddSingleton(UserSecretsHost.Create());
         services.AddSingleton<UserSecretsCopy>();
         services.AddSingleton<AppPorts>();
+        services.AddSingleton<HostDevelopmentCertificate>();
+        services.AddSingleton<DevelopmentHttps>();
         services.AddSingleton<Preflight>();
         services.AddSingleton<SquadResolver>();
         services.AddSingleton<BuildStore>();

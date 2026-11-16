@@ -30,6 +30,17 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
 
     public async Task<int> RunAsync(LauncherContext context, CancellationToken cancellationToken)
     {
+        // A newly initialized pipe cannot repair an already-running remote core.
+        // Cross the shared bootstrap before the desktop can report launch success.
+        if (
+            await context.Sbx.ExecAsync(
+                new Abox.Sbx.SbxExecRequest(context.SandboxName, ["true"]),
+                cancellationToken
+            ) != 0
+        )
+            throw new AboxException(
+                "Herdr was not opened: sandbox HTTPS launch readiness failed. Exit stale agents and explicitly initialize fresh core/service parents through abox after saving work; rerun 'abox ports' for recovery guidance. No core or app was restarted."
+            );
         if (!await MachineExistsAsync(context.SandboxName, cancellationToken))
         {
             await AddMachineAsync(context, cancellationToken);

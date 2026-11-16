@@ -1,10 +1,19 @@
 # Story #3: Deals External API live baseline
 
-Use this baseline before arranging the Deals HTTPS verification for
+Use this historical baseline when tracing the Deals HTTPS verification for
 [#46](https://github.com/DerAlbertCom/agentbox/issues/46). It is separate from
 [#43's synthetic publishing verification](../verification/application-ports.md).
 
-## Current result — reviewed relay applied, 2026-11-16 12:01 CET
+## Latest manual HTTPS and cleanup record
+
+[The later host-copy verifier](story-3-host-certificate-verification.md) completed
+actual CLI export and explicit activation of the exact host certificate, with
+default Windows-host TLS (Swagger HEAD 200) and sandbox TLS (HEAD 404). Its current
+ownership record supersedes **all API cleanup PID/start-tick targets below**; the
+relay and mapping were unchanged. This baseline's earlier untrusted leaf and
+permission denial are historical. Neither record completes production #46.
+
+## Historical result — reviewed relay applied, 2026-11-16 12:01 CET
 
 **Host TCP/TLS now reaches the unchanged Deals External API and receives its
 actual sandbox leaf certificate. Trusted HTTPS still fails, as expected: host

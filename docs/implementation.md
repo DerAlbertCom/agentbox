@@ -718,7 +718,7 @@ documents explicitly authorized local declarations on the existing `D:\dev\rwe`
 sandbox and read-only production port discovery; no real secret copy, connectivity
 or authentication check was performed for that change.
 
-### `abox ports [--location <path>] [--offset <n>]` (#43, #44, #45)
+### `abox ports [--location <path>] [--offset <n>]` (#43, #44, #45, #46)
 
 Resolves the existing sandbox with the shared current-first/legacy resolver and
 passes its actual identity to `ApplicationPorts/AppPorts`. Location precedence is
@@ -731,7 +731,8 @@ validates the complete plan, prints source occurrences and duplicate warnings, t
 asks `SbxClient.EnsureApplicationPortsAsync` to ensure distinct offset mappings.
 Discovery/reporting/application orchestration stays outside the command slice so
 the HTTPS and lifecycle slices can reuse it without importing a command.
-`AppPortDiscovery` owns one bounded filesystem walk/read/JSON policy for both formats;
+`AppPortDiscovery` owns one bounded filesystem walk/read policy for both formats and
+static explicit Web SDK project detection;
 `DotnetLaunchSettings`, `AngularConfiguration` and `AngularStartScript` own format
 parsing. No extension framework or project-tool execution is involved. Angular #44
 includes options and all named serve configurations, and a conservative literal
@@ -789,9 +790,47 @@ authorized host-access policy inventory.
 
 Failures and cancellation explain possible partial state and retry, without claiming
 success or rollback; relays may also remain after interruption. Publishing does not
-run apps or configure HTTPS certificates. Relays end when the sandbox stops; run
+run apps. Relays end when the sandbox stops; run
 `abox ports` after starting it again to restore them (the command itself handles a
 stopped sandbox). See [discovery bounds, runtime evidence and limitations](verification/application-ports.md).
+
+#### Shared development HTTPS setup (#46)
+
+After validated forwarding (or without ports when a Web SDK project is explicit),
+`AppPorts` invokes shared `Https/DevelopmentHttps`. Non-Web/non-.NET folders perform
+no host certificate operation. The host exporter locates an already-installed
+dev-certs DLL with an eligible certificate-format requirement, privately checks
+machine-readable existing identity/trust metadata, exports with a generated
+password into owner-only staging, validates actual ephemeral PFX/key/SAN/dates and
+fresh exact trust metadata, then clears/removes temporary private material. No
+native-store export fallback, automatic alternative identity or host trust change
+is allowed. CLI pre/post checks cannot make concurrent store renewal/deletion
+atomic; see [the explicit CLI race contract](https-development-certificates.md).
+
+`SbxClient` activates unchanged encrypted PFX bytes at an owner-only runtime path
+outside workspace/HOME/build mounts. Protected `config.json` fixes the canonical
+Kestrel path/password for subsequent launches. Stable password/path make renewal
+one atomic PFX replacement rather than mismatched independent file updates.
+Shared `ExecAsync` bootstrap covers shell/direct argv/exec/pipe and newly initialized
+agent/core children after abox exits; it preserves streams, argv, workdir, TTY flags
+and actual child exit status. It is not a shell-profile-only mechanism.
+
+Existing recognizable hc/OpenCode/Copilot/pi/Claude parents with missing/mismatched
+settings block full activation and launch; nothing is automatically restarted.
+Herdr checks readiness before desktop opening. Explicit fresh-parent recovery and
+running-app renewal/restart requirements are documented in the
+[HTTPS contract](https-development-certificates.md). New processes cannot mutate an
+arbitrary old Unix shell's environment, and raw sbx launches bypass this contract.
+
+Production export/activation and synthetic exact-leaf .NET 10/real-local-tool
+verification are present, but #46 acceptance remains incomplete; see
+[the scoped production-path record](verification/https/README.md). Separately,
+[manual Windows verification](agents/story-3-host-certificate-verification.md)
+completed exact host CLI export/copy and explicit Deals activation with default
+host TLS (Swagger HEAD 200) and sandbox TLS (HEAD 404), without changing host trust.
+That does not establish a production real-host `abox ports` run, browser reload,
+Copilot's actual shell tool, the host Herdr desktop or independent Linux-host
+evidence. No #47 automatic create/replace/lifecycle integration is implemented.
 
 ### `abox prune [--full] [--sbx]`
 

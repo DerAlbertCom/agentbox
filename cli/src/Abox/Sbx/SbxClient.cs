@@ -215,6 +215,14 @@ public sealed partial class SbxClient(IProcessRunner runner, AboxPaths paths) : 
         }
 
         arguments.Add(request.Sandbox);
+        arguments.AddRange([
+            "sh",
+            "-c",
+            DevelopmentCertificateExecBootstrap,
+            "abox-https",
+            "python3",
+            DevelopmentCertificateReceiver.Value,
+        ]);
         arguments.AddRange(request.Command);
 
         var result = await runner.RunAsync(

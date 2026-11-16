@@ -743,7 +743,10 @@ public sealed partial class PortsCommandTests
             "other":{"applicationUrl":"http://0.0.0.0:9000"},"iis":{"commandName":"IISExpress"}}}
             """
         );
-        fixture.Root.File("folder/api/api.csproj", "not evaluated or parsed");
+        fixture.Root.File(
+            "folder/api/api.csproj",
+            """<Project><Target Name="NeverEvaluate" BeforeTargets="Build"><Error Text="Project evaluation is forbidden" /></Target></Project>"""
+        );
 
         // Act
         var exit = await fixture.Run();
