@@ -227,9 +227,13 @@ Use `create --local --root <project>` when the sandbox location is outside that 
 ```sh
 cd cli
 dotnet build
-dotnet test
+dotnet test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noColor
 dotnet run --project src/Abox -- build --team sample --root .. --no-verify
 ```
+
+Run the xUnit executable directly to execute the synthetic regression suite.
+See [synthetic CLI tests](docs/verification/synthetic-cli-tests.md) for separate
+discovery/execution commands, isolated output, prerequisites and platform gaps.
 
 ### Checking the tool package locally
 
