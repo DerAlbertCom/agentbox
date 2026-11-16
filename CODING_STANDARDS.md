@@ -59,6 +59,12 @@ class.
 
 - **Single responsibility:** give each module a cohesive responsibility and reason
   to change. Keep related knowledge together; this does not mean tiny classes.
+- **Partial classes:** prefer one cohesive class in one file. Avoid splitting
+  handwritten code across partial classes to manage size or separate responsibilities;
+  needing that split is a signal to reassess the single responsibility principle
+  and extract cohesive collaborators instead. Reserve partial classes for concrete
+  language or tooling requirements, such as source-generated members, and keep the
+  handwritten class cohesive.
 - **Open/closed:** where real variation exists, support it through adapters at a
   deliberate seam rather than spreading conditional logic across callers. Do not
   build speculative extension frameworks for possible future requirements.
