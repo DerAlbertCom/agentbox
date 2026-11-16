@@ -46,7 +46,7 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
             await AddMachineAsync(context, cancellationToken);
         }
 
-        await StartAppAsync(cancellationToken);
+        await StartAppAsync(context.Console, cancellationToken);
 
         var arguments = new List<string>
         {
@@ -127,7 +127,7 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
         }
     }
 
-    private async Task StartAppAsync(CancellationToken cancellationToken)
+    private async Task StartAppAsync(IConsole console, CancellationToken cancellationToken)
     {
         // The released status client can itself wait 35 seconds. Bound the whole
         // discovery/start/readiness exchange, not just the delay between probes.
@@ -135,12 +135,12 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
         deadline.CancelAfter(TimeSpan.FromSeconds(45));
         try
         {
-            if (await AppIsRunningAsync(deadline.Token))
+            if (await AppIsRunningAsync(console, deadline.Token))
                 return;
 
             var result = await runner.RunUntilReadyAsync(
                 new ProcessRequest(AppProgram, [], AttachConsole: true),
-                WaitForAppAsync,
+                token => WaitForAppAsync(console, token),
                 deadline.Token
             );
             if (!result.Succeeded)
@@ -156,13 +156,16 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
         }
     }
 
-    private async Task WaitForAppAsync(CancellationToken cancellationToken)
+    private async Task WaitForAppAsync(IConsole console, CancellationToken cancellationToken)
     {
-        while (!await AppIsRunningAsync(cancellationToken))
+        while (!await AppIsRunningAsync(console, cancellationToken))
             await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
     }
 
-    private async Task<bool> AppIsRunningAsync(CancellationToken cancellationToken)
+    private async Task<bool> AppIsRunningAsync(
+        IConsole console,
+        CancellationToken cancellationToken
+    )
     {
         var result = await runner.RunAsync(
             new ProcessRequest(AppProgram, ["status"]),
@@ -187,7 +190,12 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
             );
         }
 
-        HerdrResponses.RequireHealthyStatus(result.StandardOutput);
+        if (HerdrResponses.ReadConfigurationDiagnosticCount(result.StandardOutput) > 0)
+            // External diagnostics may contain secrets or terminal controls. Report
+            // their presence, never their contents, through the launcher's console.
+            console.WriteError(
+                "Warning: Herdr reports configuration diagnostics. Inspect 'herdr-app status' for details; the responsive window will still be used."
+            );
         return true;
     }
 }

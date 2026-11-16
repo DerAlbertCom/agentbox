@@ -39,18 +39,35 @@ public sealed class HerdrReadinessTests
     {
         // Arrange
         var fixture = new HerdrProtocolFixture();
-        fixture.Statuses.Enqueue(new ProcessResult(0, "{\"errors\":[\"layout broken\"]}", ""));
+        fixture.Statuses.Enqueue(
+            new ProcessResult(
+                0,
+                "{\"errors\":[\"layout broken: synthetic-secret\\u001b[31m\\nforged warning\"]}",
+                ""
+            )
+        );
 
         // Act
-        var action = fixture.LaunchAsync;
+        var result = await fixture.LaunchAsync();
 
         // Assert
-        (await action.Should().ThrowAsync<AboxException>())
-            .Which.Message.Should()
-            .Contain("herdr-app status");
+        result.Should().Be(0);
         fixture
             .Calls.Should()
-            .NotContain(r => r.Arguments.Count == 0 || r.Arguments.Contains("space.new"));
+            .NotContain(r => r.Arguments.Count == 0 || r.Arguments.Contains("add"));
+        fixture.Calls[^1].Arguments.Should().Contain("space.new");
+        var console = (TestConsole)fixture.Context.Console;
+        console
+            .Errors.Should()
+            .ContainSingle()
+            .Which.Should()
+            .Contain("configuration diagnostics")
+            .And.Contain("herdr-app status");
+        console
+            .AllText.Should()
+            .NotContain("synthetic-secret")
+            .And.NotContain("\u001b")
+            .And.NotContain("forged warning");
     }
 
     [Theory]

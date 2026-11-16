@@ -58,6 +58,12 @@ internal sealed class GatedUserSecretsPolicyRunner : IProcessRunner, IDisposable
 
     internal void ReleaseCleanup() => cleanup.TrySetResult();
 
+    public Task<ProcessResult> RunUntilReadyAsync(
+        ProcessRequest request,
+        Func<CancellationToken, Task> confirmReadiness,
+        CancellationToken cancellationToken
+    ) => throw new InvalidOperationException("Policy fixtures must not start a desktop.");
+
     public async Task<ProcessResult> RunAsync(ProcessRequest request, CancellationToken token)
     {
         Requests.Enqueue(request);

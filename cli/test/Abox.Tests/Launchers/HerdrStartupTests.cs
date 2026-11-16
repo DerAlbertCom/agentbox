@@ -83,7 +83,7 @@ public sealed class HerdrStartupTests
 
     [Theory]
     [InlineData("null")]
-    [InlineData("{\"errors\":[\"bad layout\"]}")]
+    [InlineData("{\"errors\":[\"bad layout\",null]}")]
     public async Task InvalidReadinessAfterStartingDoesNotOpenASpace(string response)
     {
         // Arrange

@@ -469,8 +469,10 @@ the workspace with a terminal, or the command after `--`.
 
 Herdr requires exact machine discovery and confirmed desktop readiness before
 opening a space. Failed/malformed discovery is not absence, and malformed or
-error-bearing status is not health. See the [pinned contracts and desktop startup
-ownership](verification/herdr-readiness.md) for the intentional hardening and
+singular-error status is not readiness. Configuration diagnostics in a valid
+`errors` string array warn without blocking a responsive window. See the
+[pinned contracts and desktop startup ownership](verification/herdr-readiness.md)
+for the intentional hardening and
 bounded startup/cancellation behavior.
 
 ### `abox secrets list|set|remove [--team <name>] --squad <name> [--service <name>]`

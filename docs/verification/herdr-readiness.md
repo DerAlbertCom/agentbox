@@ -15,12 +15,18 @@ No desktop, host core, sandbox or installed Herdr state was changed to verify it
   identified app 0.1.16 when evidence was collected on 2026-11-16. Its tag pins
   commit `034f8b85f7e6bb71f8ff55cb4a80c548b2578c0f`.
   [Status construction](https://github.com/herdrdev/herdr-app/blob/034f8b85f7e6bb71f8ff55cb4a80c548b2578c0f/src/window.rs#L3939-L3964)
-  always returns an object with `errors: string[]`. Health requires an empty
-  array and no singular `error`; unrelated display fields are not required here.
+  always returns an object with `errors: string[]`. A valid responsive status
+  requires that shape and no singular `error`; unrelated display fields are not
+  required here. Lines 3941–3946 collect settings/keys/layout/programs `.error`
+  files and mod/layout diagnostics: configuration cleanliness is **not** desktop
+  readiness. A nonempty well-formed array does not block an existing window or
+  kill a newly started responsive desktop. The launcher warns through its existing
+  console without echoing external diagnostic text (which may contain secrets or
+  terminal controls), and points the user to `herdr-app status` for local inspection.
 - The released [control client](https://github.com/herdrdev/herdr-app/blob/034f8b85f7e6bb71f8ff55cb4a80c548b2578c0f/src/control.rs#L73-L126)
   reports a connection failure as exit 2 with stderr beginning
   `herdr-app: no Herdr window at `. Only that result, with empty stdout, enables
-  a bare launch. Other failures, malformed status and reported app errors stop
+  a bare launch. Other failures, malformed status and singular control errors stop
   with inspection/recovery guidance; they do not justify another app launch.
 - Released [main](https://github.com/herdrdev/herdr-app/blob/034f8b85f7e6bb71f8ff55cb4a80c548b2578c0f/src/main.rs#L101-L167)
   raises an existing window and exits, but a fresh bare launch enters a long-lived
@@ -30,7 +36,9 @@ No desktop, host core, sandbox or installed Herdr state was changed to verify it
 
 Normal captured `IProcessRunner.RunAsync` still waits for exit. The necessary
 additional operation, `RunUntilReadyAsync`, starts a desktop and retains ownership
-until a caller-supplied readiness check completes. It observes premature nonzero
+until a caller-supplied readiness check completes. It is a required interface
+member, not a default unsupported fallback; each adapter must implement it
+explicitly. It observes premature nonzero
 exit, cancels and joins its readiness probe, and returns that startup failure.
 On failed readiness or caller cancellation it makes the same bounded best-effort
 process-tree cleanup as ordinary process cancellation. It never signals a process
