@@ -109,6 +109,10 @@ secrets. The adapter does not install a certificate or trust anchor in either ho
 or sandbox certificate stores. Host Windows, Linux system/curl and browser trust
 are separate verification surfaces.
 
+Filesystem checks are not an authorization barrier against a malicious application
+user or root editing its own files/mounts concurrently. The adapter assumes the
+selected sandbox and host exporter are trusted with this private identity.
+
 ## Evidence scope
 
 [The task status and reproduction record](agents/story-3-transfer-status.md) separate

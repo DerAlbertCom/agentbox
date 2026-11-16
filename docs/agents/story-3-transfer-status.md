@@ -75,18 +75,22 @@ Contended writers fail closed for retry; no successful simultaneous-writer claim
 is made. Synthetic Linux execution inside a sandbox on Windows is **not** independent
 Linux-host evidence.
 
-## Automated verification before integration reconciliation
+## Automated verification
 
 - First staging/transport tests failed to compile before their interfaces existed,
   then passed after implementation. A later behavioral red test caught an already-
   canceled call attempting runtime/cleanup work; an entry cancellation check fixes it.
-- Focused private-staging/transport tests: 10 passed before that additional regression.
-- Debug full solution executable suite: **1775 passed, 15 explicit platform skips,
-  zero failures** (1790 total). This run preceded the final cancellation guard and
-  integration merge; rerun the final tree below.
+- Focused private-staging/transport tests: **11 passed, zero skips/failures**.
+- After merging integration `8cca672` at `7561b43`, Debug full solution executable
+  suite: **1821 passed, 15 explicit platform skips, zero failures** (1836 total).
+- A third complete disposable transport probe passed on that merged tree, including
+  all directory/file safety fixtures, pair-atomic renewal/concurrent readers and
+  verified sandbox removal.
 - The repository's `dotnet test` MTP handshake returned exit 5 with zero tests, so
   verification uses the existing direct xUnit executable/DLL runner instead.
 - Debug solution build and synthetic probe build: zero warnings/errors.
+- `dotnet csharpier check cli` (230 files), the three probe files and whitespace
+  checking passed. No Release build/run or independent Linux-host run was performed.
 
 The Windows directory-ACL test checks owner-only protection before its mock export.
 Mock partial PFX exports cover failure/cancellation cleanup; an exclusive-file-lock
