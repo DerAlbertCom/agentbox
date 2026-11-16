@@ -1,7 +1,15 @@
 # Fresh-verifier gate: real-host production flow
 
-**Prepared, not executed by the review-fixes implementer.** The synthetic checks
-are not a substitute for this gate. A fresh verifier needs the user's prior
+**Windows Release production/default-TLS gate executed by a fresh verifier.**
+[The real-host evidence](real-host-production-verification.md) records the exact
+latest tested candidate `4f5719e09e8946a311c93e0cc77a20bbd20052bc` (including
+integration `13a5f40` / recovery fix `cc41935`), strict host/sandbox system/Node TLS,
+repeat safety and confirmed cleanup. **#46 remains incomplete:** browser UI,
+Copilot shell-tool, Herdr desktop, independent Linux host, real-host renewal and
+exact 18203 production proof were not established. The older pinned run is
+recorded separately; a default-path pass does not clear independent review.
+
+Synthetic checks are not a substitute for this gate. A verifier needs the user's prior
 authorization to export the existing host localhost identity into a new disposable
 sandbox. This procedure never uses the manually configured Deals sandbox,
 runner/API/relay, host key export helper or manual trust entries.
