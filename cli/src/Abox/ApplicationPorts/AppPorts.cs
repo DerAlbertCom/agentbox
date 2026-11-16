@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Sbx;
 
@@ -7,17 +8,25 @@ namespace Abox.ApplicationPorts;
 /// <summary>Shared discovery, reporting and runtime publishing for an already selected sandbox.</summary>
 public sealed class AppPorts(ISbxClient sbx, IConsole console)
 {
-    public async Task PublishAsync(
+    public Task PublishAsync(
         string location,
         string sandbox,
         CancellationToken cancellationToken
+    ) => PublishAsync(location, sandbox, FolderConfig.SelectPortOffset(null), cancellationToken);
+
+    public async Task PublishAsync(
+        string location,
+        string sandbox,
+        int offset,
+        CancellationToken cancellationToken
     )
     {
+        FolderConfig.SelectPortOffset(null, offset);
         var occurrences = await DotnetLaunchSettings.DiscoverAsync(location, cancellationToken);
         foreach (var occurrence in occurrences)
-            if (occurrence.Port + 10000 > 65535)
+            if ((long)occurrence.Port + offset is < 1 or > 65535)
                 throw new AboxException(
-                    $"Invalid host port for {JsonSerializer.Serialize(occurrence.SourceFile)}: sandbox port {occurrence.Port} plus offset 10000 exceeds 65535. Fix applicationUrl before publishing; no ports were published."
+                    $"Invalid host port for {JsonSerializer.Serialize(occurrence.SourceFile)}: sandbox port {occurrence.Port} plus offset {offset} must be in 1..65535. Fix the port or offset before publishing; no ports were published."
                 );
         if (occurrences.Count == 0)
         {
@@ -28,7 +37,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
         console.WriteLine("Source file (profile) | Sandbox port | Host port");
         foreach (var occurrence in occurrences)
             console.WriteLine(
-                $"{JsonSerializer.Serialize(occurrence.SourceFile)} ({JsonSerializer.Serialize(occurrence.Profile)}) | {occurrence.Port} | {occurrence.Port + 10000}"
+                $"{JsonSerializer.Serialize(occurrence.SourceFile)} ({JsonSerializer.Serialize(occurrence.Profile)}) | {occurrence.Port} | {occurrence.Port + offset}"
             );
         foreach (
             var duplicate in occurrences
@@ -36,7 +45,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
                 .Where(group => group.Count() > 1)
         )
             console.WriteLine(
-                $"Warning: sandbox port {duplicate.Key} has {duplicate.Count()} occurrences; they share host port {duplicate.Key + 10000}, published once."
+                $"Warning: sandbox port {duplicate.Key} has {duplicate.Count()} occurrences; they share host port {duplicate.Key + offset}, published once."
             );
         try
         {
@@ -45,7 +54,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
                 occurrences
                     .Select(occurrence => new ApplicationPortMapping(
                         occurrence.Port,
-                        occurrence.Port + 10000
+                        occurrence.Port + offset
                     ))
                     .Distinct()
                     .ToArray(),
@@ -55,7 +64,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console)
         catch (Exception exception) when (exception is AboxException or OperationCanceledException)
         {
             console.WriteError(
-                $"Application-port publishing did not complete. Some mappings may remain published and sandbox relays may remain running; no rollback is attempted. Inspect sandbox ports and relay diagnostics, free conflicting ports if needed, then retry 'abox ports --location {JsonSerializer.Serialize(location)}'."
+                $"Application-port publishing did not complete. Some mappings may remain published and sandbox relays may remain running; no rollback is attempted. Inspect sandbox ports and relay diagnostics, free conflicting ports if needed, then retry 'abox ports --location {JsonSerializer.Serialize(location)} --offset {offset}'."
             );
             throw;
         }
