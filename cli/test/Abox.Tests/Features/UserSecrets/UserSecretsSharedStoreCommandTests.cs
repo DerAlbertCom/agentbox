@@ -293,22 +293,21 @@ public sealed class UserSecretsSharedStoreCommandTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
+    [InlineData(false, "Api", "Worker")]
+    [InlineData(false, "Worker", "Api")]
+    [InlineData(true, "Api", "Worker")]
+    [InlineData(true, "Worker", "Api")]
     public async Task CompatibleMergingStillChecksEveryGeneratedOriginalAgainstDenyPolicy(
-        bool force
+        bool force,
+        string localProject,
+        string deniedProject
     )
     {
         // Arrange
         using var cli = new UserSecretsCliHarness(
             new AboxConfig { UserSecretsDenyList = ["127.0.0.2"] }
         );
-        cli.Configure("""{"userSecrets":["first","shared"]}""");
-        cli.Store("first", "{}");
-        Project(cli, "Api", """{"Endpoint":"http://localhost:8004/synthetic-path"}""");
-        Project(cli, "Worker", """{"Endpoint":"http://127.0.0.2:8004/synthetic-path"}""");
-        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
-            .Returns(new[] { 8004 });
+        DenyConsumers(cli, localProject, deniedProject);
 
         // Act
         var exit = await cli.Run(force ? ["--force", "--verbose"] : ["--verbose"]);
@@ -327,10 +326,24 @@ public sealed class UserSecretsSharedStoreCommandTests
             await cli.NoWrites();
             cli.Console.AllText.Should()
                 .Contain("deny list")
-                .And.Contain("Worker.csproj")
+                .And.Contain(deniedProject + ".csproj")
                 .And.Contain("Endpoint");
         }
         cli.Console.AllText.Should().NotContain("synthetic-").And.NotContain("127.0.0.2");
+    }
+
+    private static void DenyConsumers(
+        UserSecretsCliHarness cli,
+        string localProject,
+        string deniedProject
+    )
+    {
+        cli.Configure("""{"userSecrets":["first","shared"]}""");
+        cli.Store("first", "{}");
+        Project(cli, localProject, """{"Endpoint":"http://localhost:8004/synthetic-path"}""");
+        Project(cli, deniedProject, """{"Endpoint":"http://127.0.0.2:8004/synthetic-path"}""");
+        cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
+            .Returns(new[] { 8004 });
     }
 
     private static void Project(UserSecretsCliHarness cli, string name, string? json)
