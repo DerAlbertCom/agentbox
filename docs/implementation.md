@@ -467,6 +467,12 @@ published tag.
 The launchers of this version are `shell` and `herdr-app`. `shell` runs `bash -l` in
 the workspace with a terminal, or the command after `--`.
 
+Herdr requires exact machine discovery and confirmed desktop readiness before
+opening a space. Failed/malformed discovery is not absence, and malformed or
+error-bearing status is not health. See the [pinned contracts and desktop startup
+ownership](verification/herdr-readiness.md) for the intentional hardening and
+bounded startup/cancellation behavior.
+
 ### `abox secrets list|set|remove [--team <name>] --squad <name> [--service <name>]`
 
 The kits of a squad ask for a service with the `credential@1` capability. The `secrets`
