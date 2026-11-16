@@ -562,14 +562,17 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   any writes, even with empty filters, authoritative host values or force.
   See [bounded appsettings discovery](user-secrets-appsettings.md).
 - `CopyAsync(prepared, sandbox, token)` finishes target preparation for all stores
-  before writing. `UserSecretsCopy.Target.cs` discovers authorized host ports and
-  prepares targets, retaining originals for deny/force accounting. Pure internal
+  before writing. `UserSecretsCopy` discovers authorized host ports, constructs
+  every target through pure internal `UserSecretStoreTarget`, then validates every
+  destination before writing. Targets are opaque payload-bearing classes, exposing
+  value-free summaries; `UserSecretOriginalPolicy` retains original-value deny/force
+  accounting for both host selections and generated appsettings. Pure internal
   `EndpointAdaptation` handles URL, SQL Server, PostgreSQL, Oracle and recognized
   split-setting parsing/rewriting using only those ports, resolved effective settings
   and value-free diagnostic context; it performs no discovery, selection or copying.
   Selected host keys block generated replacements. Eligible appsettings-only
   values produce flat effective-key overrides subject to the same deny/filter
-  checks. `UserSecretsCopy.SharedStores.cs` merges generic generated-key candidates
+  checks. `SharedStoreOverrides` merges generic generated-key candidates
   against every consumer's desired effective values, including unchanged consumers.
   Only generated keys can conflict; host precedence and key filters are resolved
   first. Identical required values merge once with deterministic key spelling/order;

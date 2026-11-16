@@ -410,6 +410,68 @@ public sealed class UserSecretsRewriteTests
             .And.NotContain("synthetic-password");
     }
 
+    [Fact]
+    public async Task PreparedProjectOriginalsAreReusedButGeneratedOverridesAndForceAccountingAreNot()
+    {
+        // Arrange
+        using var fixture = new CopyFixture(
+            config: new AboxConfig { UserSecretsDenyList = ["localhost"] }
+        );
+        fixture.UsePorts(8004);
+        fixture.Store("sample", "{}");
+        fixture.Project("sample", """{"Url":"http://localhost:8004/synthetic-original"}""");
+        var prepared = await fixture.PrepareAsync(force: true);
+        fixture.Project("sample", """{"Url":"http://remote.test/synthetic-edited"}""");
+
+        // Act
+        var first = await fixture.CopyPreparedAsync(prepared);
+        var firstPayload = fixture.Written("sample");
+        fixture.DeniedPorts.Add(8004);
+        var second = await fixture.CopyPreparedAsync(prepared);
+
+        // Assert
+        first
+            .Should()
+            .BeEquivalentTo(
+                new UserSecretsReport(
+                    [new UserSecretsStoreReport("sample", 1) { RewrittenKeys = ["Url"] }],
+                    true
+                )
+            );
+        second
+            .Should()
+            .BeEquivalentTo(
+                new UserSecretsReport([new UserSecretsStoreReport("sample", 0)], false)
+            );
+        new[] { firstPayload, fixture.Written("sample") }
+            .Should()
+            .Equal("""{"Url":"http://host.docker.internal:8004/synthetic-original"}""", "{}");
+        string.Join(" ", prepared, first, second).Should().NotContain("synthetic-");
+    }
+
+    [Fact]
+    public async Task LaterAdaptationFailurePreventsEvenEmptyStoreDestinationValidationAndWrites()
+    {
+        // Arrange
+        using var fixture = new CopyFixture();
+        fixture.UsePorts(8004);
+        fixture.Store("empty", "{}");
+        fixture.Store("last", """{"Url":"http://localhost:8004/synthetic"}""");
+        fixture.Project("last", """{"Invalid":"Host=localhost;Port=8004;Port=8004"}""");
+
+        // Act
+        var copy = () => fixture.CopyAsync();
+
+        // Assert
+        var exception = (await copy.Should().ThrowAsync<AboxException>()).Which;
+        exception
+            .Message.Should()
+            .Contain("last")
+            .And.Contain("Invalid")
+            .And.NotContain("synthetic");
+        fixture.Requests.Should().NotContain(request => request.Arguments[0] == "exec");
+    }
+
     private static string VerificationFile(string name) =>
         SyntheticTestResources.File(Path.Combine("Verification", name));
 
@@ -514,6 +576,15 @@ public sealed class UserSecretsRewriteTests
         {
             ids.Add(id);
             root.File($".microsoft/usersecrets/{id}/secrets.json", json);
+        }
+
+        internal void Project(string id, string json)
+        {
+            root.File(
+                $"{id}/App.csproj",
+                $"<Project><PropertyGroup><UserSecretsId>{id}</UserSecretsId></PropertyGroup></Project>"
+            );
+            root.File($"{id}/appsettings.json", json);
         }
 
         internal async Task<PreparedUserSecrets> PrepareAsync(bool force = false)
