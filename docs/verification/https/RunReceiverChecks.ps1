@@ -7,9 +7,8 @@ $files = @{}
 @('cli/src/Abox/Sbx/development_certificate.py',
   'cli/src/Abox/Sbx/development_certificate_trust.py',
   'cli/src/Abox/Sbx/development_certificate_exec.sh',
-  'cli/src/Abox/Sbx/SbxClient.HttpsExec.cs',
   'docs/verification/https/ReceiverChecks.py') | ForEach-Object {
-    if (Test-Path "$root/$_") { $files[(Split-Path $_ -Leaf)] = [IO.File]::ReadAllText("$root/$_") }
+    $files[(Split-Path $_ -Leaf)] = [IO.File]::ReadAllText("$root/$_")
   }
 $loader = 'import json,os,sys; files=json.load(sys.stdin); os.mkdir("/opt/abox-receiver-checks"); os.chdir("/opt/abox-receiver-checks"); [open(k,"w").write(v) for k,v in files.items()]; os.execvp("python3",["python3","ReceiverChecks.py"]+sys.argv[1:])'
 $testArguments = @()

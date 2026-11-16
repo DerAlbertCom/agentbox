@@ -249,7 +249,7 @@ static async Task<int> Host(string template, bool toolHelp = false)
                         "docs/verification/https/ActivationProbe.csproj"
                     ),
                     "-c",
-                    "Debug",
+                    BuildConfiguration(),
                     "-r",
                     "linux-x64",
                     "--self-contained",
@@ -495,8 +495,16 @@ static async Task<int> Host(string template, bool toolHelp = false)
             }
         }
         await StopFixture();
-        var abox = Path.Combine(checkout.FullName, "cli/src/Abox/bin/Debug/net10.0/abox.dll");
-        Require(File.Exists(abox), "build production Debug CLI before verification");
+        var abox = Path.Combine(
+            checkout.FullName,
+            "cli/src/Abox/bin",
+            BuildConfiguration(),
+            "net10.0/abox.dll"
+        );
+        Require(
+            File.Exists(abox),
+            "build matching production CLI configuration before verification"
+        );
         foreach (var route in new[] { "exec", "pipe", "shell" })
         {
             File.Delete(Path.Combine(workspace, "ready"));
@@ -536,7 +544,7 @@ static async Task<int> Host(string template, bool toolHelp = false)
             Console.WriteLine(
                 "PASS actual production abox "
                     + route
-                    + ": post-helper-exit Kestrel exact public DER with strict synthetic-anchor localhost TLS."
+                    + ": post-helper-exit Kestrel exact public DER with strict sandbox system-store localhost TLS (synthetic identity)."
             );
         }
         using (var pipe = new System.Diagnostics.Process())
@@ -698,7 +706,7 @@ static async Task<int> Host(string template, bool toolHelp = false)
             );
             Require(await launch == 0, "actual " + tool + " local tool process");
             Console.WriteLine(
-                $"PASS actual installed {tool} local shell tool: post-helper-exit Kestrel exact public DER with strict synthetic-anchor localhost TLS; no prompt/model call."
+                $"PASS actual installed {tool} local shell tool: post-helper-exit Kestrel exact public DER with strict sandbox system-store localhost TLS (synthetic identity); no prompt/model call."
             );
         }
         Require(
@@ -861,6 +869,15 @@ static void Require(bool condition, string step)
 {
     if (!condition)
         throw new InvalidOperationException("Verification step failed: " + step);
+}
+
+static string BuildConfiguration()
+{
+#if DEBUG
+    return "Debug";
+#else
+    return "Release";
+#endif
 }
 
 sealed class SyntheticExportRunner : IProcessRunner, IDisposable

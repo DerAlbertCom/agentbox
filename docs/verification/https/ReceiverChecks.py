@@ -20,7 +20,6 @@ import os
 from pathlib import Path
 import fcntl
 import pty
-import re
 import shutil
 import signal
 import subprocess
@@ -28,9 +27,8 @@ import sys
 import time
 import unittest
 
-SOURCE = open('development_certificate.py').read()
-SHELL = (open('development_certificate_exec.sh').read() if os.path.exists('development_certificate_exec.sh')
-         else re.search(r'"""\n(.*?)\n\s*"""', open('SbxClient.HttpsExec.cs').read(), re.S)[1])
+SOURCE = Path('development_certificate.py').read_text()
+SHELL = Path('development_certificate_exec.sh').read_text()
 ROOT = '/tmp/abox-https-1000'
 PASSWORD = 'a' * 64
 TRUST_ROOT = '/usr/local/share/ca-certificates/abox-development-https-1000'
@@ -81,9 +79,8 @@ class ReceiverChecks(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
 
     def launch_argv(self, command):
-        # Both versions use the exact production shell, not a reimplementation.
-        args = (['python3', SOURCE] if 'source=$2' in SHELL else [hashlib.sha256(SOURCE.encode()).hexdigest()])
-        return ['sh', '-c', SHELL, 'abox-https', *args, *command]
+        # Exact production shell and installed-source digest, no reimplementation.
+        return ['sh', '-c', SHELL, 'abox-https', hashlib.sha256(SOURCE.encode()).hexdigest(), *command]
 
     def launch(self, command, **kwargs):
         return subprocess.run(self.launch_argv(command), capture_output=True,
@@ -520,6 +517,10 @@ with c.wrap_socket(a,server_side=True) as t: t.recv(1)
         # Assert
         self.assertEqual(1, result.returncode)
         self.assertIn(b'Broken pipe', result.stderr)
+        mask = self.launch(['sh', '-c', 'grep SigIgn /proc/$$/status'], preexec_fn=ignored)
+        ignored_bits = int(mask.stdout.split()[1], 16)
+        self.assertTrue(ignored_bits & (1 << (signal.SIGPIPE - 1)))
+        self.assertTrue(ignored_bits & (1 << (signal.SIGXFSZ - 1)))
 
     def test_native_signal_dispositions_match_the_no_https_path_including_sigxfsz(self):
         # Arrange
