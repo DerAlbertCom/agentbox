@@ -5,9 +5,11 @@ namespace Abox.UserSecrets;
 internal sealed class ConnectionEndpointFields
 {
     internal ConnectionEndpointFields(string value)
+        : this(value, ConnectionStringScanner.Scan(value)) { }
+
+    internal ConnectionEndpointFields(string value, ConnectionStringScan scan)
     {
         Source = value;
-        var scan = ConnectionStringScanner.Scan(value);
         Hosts = scan.Fields.Where(field => HostFields.Contains(field.Key)).ToArray();
         Ports = scan
             .Fields.Where(field => field.Key.Equals("Port", StringComparison.OrdinalIgnoreCase))

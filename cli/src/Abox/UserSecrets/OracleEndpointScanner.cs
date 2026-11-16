@@ -25,6 +25,7 @@ internal static partial class OracleEndpointScanner
     private static EndpointScan ScanFields(string value, HashSet<int> ports)
     {
         var scan = ConnectionStringScanner.Scan(value);
+        var fields = new ConnectionEndpointFields(value, scan);
         var sources = scan.Fields.Where(IsDataSource).ToArray();
         var hosts = new List<EndpointSourceSpan>();
         var recognized = false;
@@ -42,7 +43,7 @@ internal static partial class OracleEndpointScanner
             recognized |= endpoint.Recognized;
             hosts.AddRange(endpoint.Hosts);
         }
-        valid &= scan.CompleteAndUnique && HasSingleHostSource(scan, sources.Length);
+        valid &= sources.Length == 1 && fields.SingleHost && fields.Ports.Length == 0;
         return new OracleHostScan(recognized, valid, hosts).ToEndpointScan();
     }
 
@@ -59,16 +60,13 @@ internal static partial class OracleEndpointScanner
     private static bool IsDataSource(ConnectionField field) =>
         field.Key.Equals("Data Source", StringComparison.OrdinalIgnoreCase);
 
-    private static bool HasSingleHostSource(ConnectionStringScan scan, int sourceCount) =>
-        sourceCount == 1
-        && scan.Fields.Count(field => HostFields.Contains(field.Key)) == 1
-        && !scan.Fields.Any(field => field.Key.Equals("Port", StringComparison.OrdinalIgnoreCase));
-
     private static ConnectionField? IncompleteSource(string value, ConnectionStringScan scan)
     {
         // PartialField is only a prefix through StoppedAt, not a complete value.
         // Retain Oracle's bounded next-field fallback over the original remainder:
         // a malformed delimiter may stop the common scanner before the local host.
+        // The shared contract defines partial spans, not a recovery grammar; using
+        // that prefix here would narrow existing malformed mapped-local recognition.
         // Never search inside credentials, prose, or any other completed field.
         var fields = scan.Fields;
         var position = fields.Count == 0 ? 0 : fields[^1].Start + fields[^1].Length;

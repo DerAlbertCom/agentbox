@@ -46,7 +46,7 @@ internal sealed class UserSecretStoreTarget
             // Selected host originals were checked before runtime access. Every generated
             // appsettings original is checked, even when shared consumers agree.
             foreach (var key in candidate.GeneratedValues.Keys)
-                safetyOverride |= policy.Check(
+                safetyOverride |= policy.EnsureAllowedAndReportForceOverrideUsed(
                     store.Id,
                     key,
                     project.SelectedSettings.Values[key],

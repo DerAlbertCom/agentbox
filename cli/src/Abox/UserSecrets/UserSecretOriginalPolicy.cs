@@ -5,7 +5,13 @@ namespace Abox.UserSecrets;
 /// <summary>Checks originals, never adapted values; contains no secret payloads.</summary>
 internal sealed class UserSecretOriginalPolicy(IReadOnlyList<string> denyList, bool force)
 {
-    internal bool Check(string id, string key, string? value, string? project = null)
+    // Throws for denied originals without force; returns true only for an override actually used.
+    internal bool EnsureAllowedAndReportForceOverrideUsed(
+        string id,
+        string key,
+        string? value,
+        string? project = null
+    )
     {
         if (
             value is null
