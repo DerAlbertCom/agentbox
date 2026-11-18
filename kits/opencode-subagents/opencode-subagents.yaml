@@ -1,0 +1,24 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: OpenCode subagent tiers
+version: "1.0.0"
+requires: [mti-ca-agents]
+args:
+  SUBAGENTS_CONFIG:
+    default: /home/agent/.config/opencode-subagents
+    env: OPENCODE_CONFIG_DIR
+capabilities:
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        OpenCode tiers: primary agents use Opus 5.5, general/reviewer Sonnet 5.5,
+        explore/notes-explorer GPT-6 Luna. Choose named agents deliberately;
+        explicit per-call models override defaults. general may start explore.
+        notes-explorer saves exploration under /tmp/spec-notes; pass paths,
+        not copied notes, to implementers. reviewer is read-only.
+        For implement-spec, implementers merge the integration branch before
+        reporting; land with git merge --ff-only. On failure resume the same
+        implementer to merge the integration tip and retest, not a merger agent.
+        Run code-review once after all tickets land, then one fix pass and only
+        focused checks. Keep orchestration context small using context pointers.

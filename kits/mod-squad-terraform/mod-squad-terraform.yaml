@@ -1,0 +1,41 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: MOD Terraform via tfswitch
+version: "1.0.0"
+args:
+  TF_DEFAULT_VERSION:
+    required: true
+    pattern: '[0-9]+\.[0-9]+\.[0-9]+'
+    env: TF_DEFAULT_VERSION
+  TF_MISE_DISABLED:
+    default: terraform
+    env: MISE_DISABLE_TOOLS
+  TF_ACTIVE_BINARY:
+    default: /home/agent/.local/bin/terraform
+    env: TF_BINARY_PATH
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow: [releases.hashicorp.com, registry.terraform.io]
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: |
+            set -eu
+            src="$(MISE_DISABLE_TOOLS= mise where "terraform@$TF_DEFAULT_VERSION")/terraform"
+            test -x "$src"
+            mkdir -p "$HOME/.terraform.versions" "$HOME/.local/bin"
+            ln -sf "$src" "$HOME/.terraform.versions/terraform_$TF_DEFAULT_VERSION"
+            ln -sf "$HOME/.terraform.versions/terraform_$TF_DEFAULT_VERSION" "$TF_BINARY_PATH"
+          user: "1000"
+          env: [TF_DEFAULT_VERSION, TF_BINARY_PATH, MISE_DISABLE_TOOLS]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Terraform is managed by tfswitch. The initial version is the workload's
+        mise pin (${{ kit.args.TF_DEFAULT_VERSION }}); mise ignores Terraform
+        so tfswitch wins. Run tfswitch in a project or tfswitch <version>.
+        Verify terraform version and which -a terraform; ~/.local/bin/terraform
+        must be the active binary.

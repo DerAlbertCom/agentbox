@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Hook-created worktrees need explicit cleanup; Claude never deletes their branches.
+set -euo pipefail
+input=$(cat)
+cwd=$(jq -er '.cwd | strings | select(length > 0)' <<< "$input")
+directory=$(jq -er '.worktree_path | strings | select(length > 0)' <<< "$input")
+common=$(realpath "$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir)")
+repo=$(basename "$(dirname "$common")")
+name=${directory##*/}
+[[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]]
+[[ "$directory" == "$HOME/worktrees/$repo/$name" && ! -L "$directory" ]]
+[[ $(git -C "$directory" rev-parse --show-toplevel) == "$directory" ]]
+[[ $(realpath "$(git -C "$directory" rev-parse --path-format=absolute --git-common-dir)") == "$common" ]]
+git -C "$cwd" worktree list --porcelain -z | grep -zFx -- "worktree $directory" >/dev/null
+main=$(git -C "$directory" worktree list --porcelain -z | { IFS= read -r -d '' field; printf '%s' "${field#worktree }"; cat >/dev/null; })
+
+# Even an explicit native discard request must not silently delete local files
+# or work not merged into the main checkout. Include ignored files in the guard.
+if [[ -n $(git -C "$directory" status --porcelain --untracked-files=all --ignored) ]] ||
+   ! git -C "$main" merge-base --is-ancestor "$(git -C "$directory" rev-parse HEAD)" HEAD; then
+  printf 'cabox: Keeping %s: local files or unmerged commits need manual cleanup.\n' "$directory" >&2
+  exit 1
+fi
+branch=$(git -C "$directory" symbolic-ref --quiet --short HEAD || true)
+owned=$(git -C "$main" config --local --get "branch.worktree-$name.caboxWorktree" || true)
+git -C "$main" worktree remove -- "$directory"
+if [[ "$branch" == "worktree-$name" && "$owned" == "$directory" ]]; then
+  # -d (never -D) also checks that no other worktree is using the branch.
+  git -C "$main" branch -d -- "$branch" >&2 || printf 'cabox: Branch %s was retained; inspect it before deleting it manually.\n' "$branch" >&2
+fi

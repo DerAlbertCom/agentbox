@@ -1,0 +1,32 @@
+{
+  "hasCompletedOnboarding": true,
+  "mcpServers": {
+    "ado": {
+      "type": "stdio",
+      "command": "mcp-server-azuredevops",
+      "args": [
+        "${ADO_ORGANIZATION}",
+        "--authentication",
+        "pat",
+        "-d",
+        "core",
+        "repositories",
+        "pipelines",
+        "wiki",
+        "work-items",
+        "search"
+      ],
+      "env": {
+        "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_EXT_PAT}"
+      }
+    },
+    "database": {
+      "type": "http",
+      "url": "${MCP_DATABASE_URL}"
+    },
+    "elastic": {
+      "type": "http",
+      "url": "${MCP_ELASTIC_URL}"
+    }
+  }
+}

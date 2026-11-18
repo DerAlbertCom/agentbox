@@ -1,0 +1,55 @@
+#!/bin/bash
+# claude-guard-edits — Claude Code PreToolUse hook (cao-docker-ai-sandbox).
+#
+# Claude Code runs in bypassPermissions inside the sandbox, so nothing prompts.
+# The sandbox workspace is usually a parent folder holding several repos, and
+# Claude is started in one of them. This hook makes Edit, Write and
+# NotebookEdit ask before changing a file outside that repo: the folder Claude
+# was started in, widened to its git root and the repo's linked worktrees.
+# Container-owned paths (home, /tmp,
+# /etc, /usr, /opt, /var, ...) stay prompt-free so installs and tool config
+# keep working; they do not survive a recreate anyway.
+#
+# Only Claude's file tools are covered. Shell commands still write anywhere.
+#
+# Wired up by the PreToolUse hook in a kit's ~/.claude/settings.json.
+
+set -u
+
+IFS=$'\x1f' read -r cwd file < <(jq -r '[
+    (.cwd // ""),
+    (.tool_input.file_path // .tool_input.notebook_path // "")
+] | join("\u001f")')
+
+[ -n "$file" ] || exit 0
+cwd=${cwd:-$PWD}
+case "$file" in /*) ;; *) file="$cwd/$file" ;; esac
+file=$(realpath -m -- "$file")
+
+project=${CLAUDE_PROJECT_DIR:-$cwd}
+project=$(git -C "$project" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$project")
+project=$(realpath -m -- "$project")
+
+case "$file" in
+    "$project" | "$project"/*) exit 0 ;;
+esac
+
+# Linked worktrees of the same repo often sit in sibling folders; they count too.
+while read -r key wt; do
+    [ "$key" = worktree ] || continue
+    wt=$(realpath -m -- "$wt")
+    case "$file" in
+        "$wt" | "$wt"/*) exit 0 ;;
+    esac
+done < <(git -C "$project" worktree list --porcelain 2>/dev/null)
+
+home=$(realpath -m -- "$HOME")
+case "$file" in
+    "$home"/* | /tmp/* | /etc/* | /usr/* | /opt/* | /var/* | /root/* | /srv/* | /run/*) exit 0 ;;
+esac
+
+jq -n --arg reason "$file is outside $project" '{hookSpecificOutput: {
+    hookEventName: "PreToolUse",
+    permissionDecision: "ask",
+    permissionDecisionReason: $reason
+}}'

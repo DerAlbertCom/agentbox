@@ -2,8 +2,8 @@
 
 `host-access-cape` grants runtime network access to the **host-side published TCP
 ports** in `Carmen.Shared/scripts/containers/docker-compose.yaml` (inventory read
-2026-11-15). It does not start services or carry credentials. Every `mti-ca` squad
-inherits it from `cape.abox`.
+2026-11-15), plus Rider MCP. It does not start services or carry credentials.
+CAPE squads inherit it from `cape.abox`; MOD, Predictopus and BAU do not.
 
 | Compose service | Host port | Container port |
 | --- | ---: | ---: |
@@ -16,6 +16,12 @@ inherits it from `cape.abox`.
 | jaeger | 16686 | 16686 |
 | jaeger | 4317 | 4317 |
 | jaeger | 4318 | 4318 |
+| Rider MCP | 65520–65523 | — |
+
+Compared with v2 `cape-localhost-ports`, this retains the existing v3 database-MCP
+port 8005 and restores Rider's ports. The team's base still grants open egress,
+as v2 did; these explicit localhost rules also identify authorized host ports
+for abox's runtime endpoint adaptation. They are not an egress restriction.
 
 ## Connection addresses
 

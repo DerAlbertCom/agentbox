@@ -1,5 +1,7 @@
 # Build output
 bin/
+!kits/**/files/home/.local/bin/
+!kits/**/files/home/.local/bin/**
 obj/
 *.user
 

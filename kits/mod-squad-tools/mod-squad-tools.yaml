@@ -1,0 +1,27 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: MOD AMP MongoDB defaults
+version: "1.0.0"
+args:
+  MONGO_HOST:
+    required: true
+    env: MONGO_HOST
+  MONGO_PORT:
+    required: true
+    pattern: '[0-9]+'
+    env: MONGO_PORT
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow: [fastdl.mongodb.org, 'localhost:${{ kit.args.MONGO_PORT }}']
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Global nx delegates to the workspace version; use npx nx reset if needed.
+        mongosh and mongodump/mongorestore/mongoexport/mongoimport are installed.
+        mongodb-memory-server downloads mongod from fastdl.mongodb.org and binds
+        a random guest loopback port. A host Docker MongoDB must publish
+        ${{ kit.args.MONGO_PORT }}; connect to ${{ kit.args.MONGO_HOST }}:${{ kit.args.MONGO_PORT }}.
+        The ADO npm feed uses the proxy: do not run vsts-npm-auth or save tokens.

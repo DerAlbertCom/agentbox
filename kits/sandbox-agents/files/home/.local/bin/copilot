@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Resolve the actual tool with a scoped guard rather than letting a missing mise
+# tool fall back through PATH into this wrapper. Nested Copilot sessions stay valid.
+if [[ ${CABOX_COPILOT_WRAPPER_ACTIVE:-} == 1 ]]; then
+  printf '%s\n' 'cabox: Copilot wrapper re-entry detected; check the mise tool installation.' >&2
+  exit 1
+fi
+export CABOX_COPILOT_WRAPPER_ACTIVE=1
+if ! cabox_binary=$(/usr/local/bin/mise which copilot) || [[ ! -x "$cabox_binary" || "$cabox_binary" -ef "$0" || "$cabox_binary" -ef "$HOME/.local/bin/copilot" || "$cabox_binary" -ef "$HOME/.local/share/mise/shims/copilot" || "$cabox_binary" -ef /usr/local/share/mise/shims/copilot ]]; then
+  printf '%s\n' 'cabox: Cannot resolve a real Copilot binary through mise; refusing wrapper/shim fallback.' >&2
+  exit 1
+fi
+unset CABOX_COPILOT_WRAPPER_ACTIVE
+# Subcommands and information requests must not receive chat-session options.
+args=("$@")
+config_args=()
+for ((i=0; i<${#args[@]}; i++)); do
+  arg=${args[i]}
+  case "$arg" in
+    # ACP is a protocol server, not an interactive/prompt session: pass it through.
+    --version|-v|--help|-h|--acp) exec "$cabox_binary" "$@" ;;
+    --config-dir)
+      ((i+=1)); config_args+=(--config-dir "${args[i]}") ;;
+    --config-dir=*) config_args+=("$arg") ;;
+    -p|--prompt|-i|--interactive|--model|--reasoning-effort|--context|--auto-tier|--agent|-n|--name|--session-id|-C|--log-dir|--extension-sdk-path|--log-level|--stream|--output-format|--add-dir|--attachment|--disable-mcp-server|--add-github-mcp-toolset|--add-github-mcp-tool|--plugin-dir|--additional-mcp-config|--mcp-github-auth|--max-autopilot-continues|--mode|--dynamic-retrieval|--enable-mcp-server|--max-ai-credits|--usage-output-file)
+      ((i+=1)) ;;
+    --allow-tool|--deny-tool|--available-tools|--excluded-tools|--secret-env-vars|--allow-url|--deny-url)
+      while ((i+1<${#args[@]})) && [[ ${args[i+1]} != -* ]]; do ((i+=1)); done ;;
+    -r|--resume|--connect|--share|--bash-env|--mouse|-w|--worktree)
+      if ((i+1<${#args[@]})) && [[ ${args[i+1]} != -* ]]; then ((i+=1)); fi ;;
+    --*|-*) ;;
+    app|login|logout|help|init|config|update|version|workflow|sessions|memories|plugin|plugins|mcp|skill|instruction|lsp|sandbox|completion)
+      exec "$cabox_binary" "$@" ;;
+    *)
+      printf 'cabox: Unrecognized Copilot command "%s"; generated MCP config was not added.\n' "$arg" >&2
+      exec "$cabox_binary" "$@" ;;
+  esac
+done
+# ~/.copilot is host-persisted, so reapply just this kit-managed setting after
+# state mounts, preserving the user's other settings (including JSONC files).
+"$cabox_binary" "${config_args[@]}" config worktreePathTemplate '~/worktrees/{repo}/{branchSlug}' >/dev/null || exit $?
+extra=()
+if [[ -f "$HOME/.config/cabox/mcp-defaults.json" && -f "$HOME/.config/cabox/copilot-mcp-config.json" ]]; then
+  if disabled=$(node <<'NODE'
+try {
+  const fs = require('node:fs');
+  const defaults = JSON.parse(fs.readFileSync(`${process.env.HOME}/.config/cabox/mcp-defaults.json`, 'utf8')).copilot.disabled;
+  const enabled = new Set((process.env.COPILOT_MCP_ENABLE ?? '').split(',').map(s => s.trim()).filter(Boolean));
+  if (!enabled.has('all')) for (const name of defaults) {
+    if (!enabled.has(name)) console.log(name);
+  }
+} catch (error) {
+  console.error(`cabox: Copilot MCP defaults could not be read: ${error.message}`);
+  process.exitCode = 1;
+}
+NODE
+  ); then
+    extra=(--additional-mcp-config "@$HOME/.config/cabox/copilot-mcp-config.json")
+    while IFS= read -r name; do
+      if [[ -n "$name" ]]; then extra+=(--disable-mcp-server "$name"); fi
+    done <<< "$disabled"
+  else
+    printf '%s\n' 'cabox: Starting Copilot without generated MCP configuration.' >&2
+  fi
+fi
+exec "$cabox_binary" "${extra[@]}" "$@"

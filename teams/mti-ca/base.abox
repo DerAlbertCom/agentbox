@@ -1,0 +1,23 @@
+workload: mti-ca
+kits:
+  - sandbox-agents
+  - git-user
+  - rwe-ghec
+  - azure-devops
+state:
+  - ~/.local/share/opencode
+  - ~/.local/state/opencode
+  - ~/.pi/agent/sessions
+  - ~/.copilot
+  - ~/.claude/projects
+  - ~/.config/codeburn
+  - ~/.local/state/bash
+  - ~/.local/share/powershell/PSReadLine
+secrets:
+  - service: azure-devops
+    inputs:
+      - name: username
+        prompt: Azure DevOps Basic username (enter pat)
+      - name: pat
+        prompt: Azure DevOps PAT
+    encoding: base64

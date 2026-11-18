@@ -1,0 +1,20 @@
+{
+  "claude": {
+    "disabled": [
+      "aws-localhost-gateway",
+      "context7",
+      "ado",
+      "elastic-nprod",
+      "elastic-prod"
+    ]
+  },
+  "copilot": {
+    "disabled": [
+      "aws-localhost-gateway",
+      "context7",
+      "ado",
+      "elastic-nprod",
+      "elastic-prod"
+    ]
+  }
+}

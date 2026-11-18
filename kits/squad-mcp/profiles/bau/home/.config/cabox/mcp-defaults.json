@@ -1,0 +1,16 @@
+{
+  "claude": {
+    "disabled": [
+      "ado",
+      "database",
+      "elastic"
+    ]
+  },
+  "copilot": {
+    "disabled": [
+      "ado",
+      "database",
+      "elastic"
+    ]
+  }
+}

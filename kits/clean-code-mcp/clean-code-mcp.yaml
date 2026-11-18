@@ -1,0 +1,27 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: clean-code-mcp
+version: "1.0.0"
+requires: [mti-ca-jfrog]
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        allow: [rwest.jfrog.io]
+      runtime:
+        allow: [rwest.jfrog.io]
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: bash /home/agent/.local/bin/sbx-clean-code-mcp --install-only || true
+          user: "1000"
+          env: [JFROG_TOKEN, NODE_EXTRA_CA_CERTS]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        clean-code runs locally from the mtiae-cs-nuget-prod feed, sharing
+        JFrog authentication. The latest release installs at creation or first use.
+        After editing code call check_changes with the absolute repo path.
+        Fix a worse verdict and rerun. Before risky edits inspect hotspots and
+        coupled_files; use explain for remediation guidance.

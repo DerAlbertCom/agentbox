@@ -1,0 +1,18 @@
+{
+  "claude": {
+    "disabled": [
+      "clean-code",
+      "ado",
+      "database",
+      "elastic"
+    ]
+  },
+  "copilot": {
+    "disabled": [
+      "clean-code",
+      "ado",
+      "database",
+      "elastic"
+    ]
+  }
+}

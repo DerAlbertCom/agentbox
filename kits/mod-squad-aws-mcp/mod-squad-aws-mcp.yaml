@@ -1,0 +1,22 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: MOD host AWS MCP gateway
+version: "2.0.1"
+capabilities:
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Use aws-localhost-gateway. MCP_GATEWAY_URL is runtime-provided; never
+        print it or gateway tokens. AWS SSO profiles and the SigV4 proxy stay
+        on the host. Discover/attach the single aws-gateway host registration.
+        Every account resource call must explicitly set aws_profile:
+        non-prod-mcp for Nprod (592918213406), staging-mcp for Staging
+        (858595502437), both App_MCP_ReadOnly in eu-central-1.
+        Verify each identity via STS GetCallerIdentity before resource queries.
+        Discover actual tool schemas; list_regions proves connectivity only.
+        The host proxy must not use --read-only: that annotation filter hides
+        resource query tools. IAM determines effective permissions; perform
+        read-only queries and never infer permissions from the role name.
+        If authentication expires ask the user to renew SSO on the host.
+        Do not run aws sso login or install another proxy inside the sandbox.

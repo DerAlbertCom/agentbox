@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+# Starts the clean-code-mcp MCP server (stdio). The newest published release is
+# downloaded from the JFrog NuGet feed when the sandbox is created (or on first
+# use if that failed); the proxy injects the credentials.
+#   sbx-clean-code-mcp                 run the server (installs first if nothing is installed)
+#   sbx-clean-code-mcp --install-only  resolve the newest release, install it and exit
+# CLEAN_CODE_MCP_VERSION=x.y.z pins a version instead of resolving the newest.
+# stdout is reserved for the MCP protocol, so all messages go to stderr.
+#
+# Concurrency: several agent sessions may start this launcher at once. Installing
+# and pruning take an exclusive lock on $ROOT/.lock; a launcher that is about to
+# run a release takes a shared lock to confirm it still exists and refresh its
+# mtime. Releases are staged inside $ROOT and renamed into place, so a half-copied
+# release is never visible, and only releases untouched for 14 days are pruned.
+
+set -euo pipefail
+
+FEED_REPO="mtiae-cs-nuget-prod"
+BASE="https://rwest.jfrog.io/artifactory"
+ROOT="${CLEAN_CODE_MCP_HOME:-$HOME/.local/share/clean-code-mcp}"
+LOCK_FILE="$ROOT/.lock"
+LOCK_WAIT_SECONDS=180
+PRUNE_AFTER_DAYS=14
+DOWNLOAD_ERROR=""
+
+# Prints the newest stable version listed in the feed's NuGet registration index.
+newest_published_version() {
+    curl -sSfL --retry 2 "$BASE/api/nuget/v3/$FEED_REPO/registration/clean-code-mcp/index.json" 2>/dev/null |
+        node -e '
+const { execFileSync } = require("node:child_process");
+const get = (u) => JSON.parse(execFileSync("curl", ["-sSfL", "--retry", "2", u], { encoding: "utf8" }));
+const index = JSON.parse(require("node:fs").readFileSync(0, "utf8"));
+const versions = [];
+for (const page of index.items || []) {
+  const items = (page.items ? page : get(page["@id"])).items || [];
+  for (const item of items) versions.push(item.catalogEntry.version);
+}
+const parts = (v) => v.split(".").map((n) => parseInt(n, 10) || 0);
+const stable = versions.filter((v) => !v.includes("-"));
+stable.sort((a, b) => {
+  const x = parts(a), y = parts(b);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
+  return 0;
+});
+if (!stable.length) process.exit(1);
+console.log(stable[stable.length - 1]);
+' 2>/dev/null
+}
+
+installed_versions() {
+    local d
+    for d in "$ROOT"/*/; do
+        if [[ -f "${d}tools/server.mjs" ]]; then basename "$d"; fi
+    done | sort -V
+}
+
+# with_lock <-s|-x> <command> [args...]: runs the command in a subshell holding a
+# shared (-s) or exclusive (-x) lock on $LOCK_FILE. Without flock it runs unlocked.
+with_lock() {
+    local mode=$1
+    shift
+    mkdir -p "$ROOT"
+    if ! command -v flock >/dev/null 2>&1; then
+        ( "$@" )
+        return
+    fi
+    (
+        exec 9>"$LOCK_FILE"
+        if ! flock "$mode" -w "$LOCK_WAIT_SECONDS" 9; then
+            echo "clean-code-mcp: could not acquire $LOCK_FILE within ${LOCK_WAIT_SECONDS}s" >&2
+            exit 75
+        fi
+        "$@"
+    )
+}
+
+download() {
+    local tmp=$1 version=$2 url code
+    # The virtual feed includes the local repository packages are published to, and is the repository the jfrog secret can read.
+    url="$BASE/$FEED_REPO/clean-code-mcp.$version.nupkg"
+    code=$(curl -sSL --retry 2 -o "$tmp/pkg.zip" -w '%{http_code}' "$url" 2>"$tmp/curl.err") || true
+    if [[ "$code" == 200 ]] && unzip -tq "$tmp/pkg.zip" >/dev/null 2>&1; then
+        return 0
+    fi
+    if [[ "$code" == 200 ]]; then
+        DOWNLOAD_ERROR="$url returned HTTP 200 but the file is not a valid package"
+    else
+        DOWNLOAD_ERROR="$url returned HTTP ${code:-000} $(head -c 200 "$tmp/curl.err" | tr '\n' ' ')"
+    fi
+    return 1
+}
+
+fail_hint() {
+    echo "HTTP 401/403: the jfrog secret is missing or cannot read the $FEED_REPO feed (Set-AgentSandboxSecrets.ps1 -Squad <Squad> -Only jfrog, then recreate the sandbox). HTTP 404: that version is not published. HTTP 000: no network or proxy problem." >&2
+}
+
+# Removes releases (and abandoned staging folders) that nobody has used for a while.
+prune_old() {
+    local keep=$1
+    find "$ROOT" -mindepth 1 -maxdepth 1 -type d ! -name "$keep" -mtime "+$PRUNE_AFTER_DAYS" -exec rm -rf {} +
+}
+
+# install_locked <version>: runs under the exclusive lock.
+install_locked() {
+    local version=$1 dir tmp
+    dir="$ROOT/$version"
+    # Another launcher may have finished while we waited for the lock.
+    if [[ -f "$dir/tools/server.mjs" ]]; then
+        return 0
+    fi
+    # The subshell that runs this function exits after it returns, when a local
+    # variable is already gone, so the trap uses a global staging variable.
+    STAGING_DIR=$(mktemp -d "$ROOT/.install.XXXXXX")
+    tmp=$STAGING_DIR
+    trap 'rm -rf "${STAGING_DIR:-}"' EXIT
+    if ! download "$tmp" "$version"; then
+        echo "clean-code-mcp $version could not be downloaded: $DOWNLOAD_ERROR" >&2
+        fail_hint
+        return 1
+    fi
+    unzip -q "$tmp/pkg.zip" 'tools/*' -d "$tmp/x"
+    rm -rf "$dir"
+    mv "$tmp/x" "$dir"
+    prune_old "$version"
+    echo "clean-code-mcp $version installed in $dir" >&2
+}
+
+# install_release <version>: no lock and no network when the release is present.
+install_release() {
+    local version=$1
+    if [[ -f "$ROOT/$version/tools/server.mjs" ]]; then
+        return 0
+    fi
+    with_lock -x install_locked "$version"
+}
+
+# touch_release <version>: runs under a shared lock, so prune_old cannot run
+# meanwhile. A fresh mtime then protects the release from pruning.
+touch_release() {
+    if [[ -f "$ROOT/$1/tools/server.mjs" ]]; then touch "$ROOT/$1"; else return 1; fi
+}
+
+use_release() {
+    with_lock -s touch_release "$1"
+}
+
+resolve_version() {
+    if [[ -n "${CLEAN_CODE_MCP_VERSION:-}" ]]; then
+        if [[ ! "$CLEAN_CODE_MCP_VERSION" =~ ^[0-9][0-9A-Za-z.+-]*$ ]]; then
+            echo "CLEAN_CODE_MCP_VERSION must look like 1.2.3, got: $CLEAN_CODE_MCP_VERSION" >&2
+            return 1
+        fi
+        echo "$CLEAN_CODE_MCP_VERSION"
+        return 0
+    fi
+    local version
+    if version=$(newest_published_version) && [[ -n "$version" ]]; then
+        echo "$version"
+        return 0
+    fi
+    echo "Could not determine the newest clean-code-mcp version from the $FEED_REPO feed." >&2
+    fail_hint
+    return 1
+}
+
+if [[ "${1:-}" == "--install-only" ]]; then
+    if ! version=$(resolve_version); then
+        # Offline or feed unavailable: an existing install is good enough.
+        if [[ -n "$(installed_versions | tail -1)" ]]; then exit 0; fi
+        exit 1
+    fi
+    install_release "$version"
+    exit 0
+fi
+
+if [[ -n "${CLEAN_CODE_MCP_VERSION:-}" ]]; then
+    # A pin wins over whatever is installed: switch or roll back to it, installing it if needed.
+    version=$(resolve_version) || exit 1
+else
+    version=$(installed_versions | tail -1)
+    if [[ -z "$version" ]]; then
+        version=$(resolve_version) || exit 1
+    fi
+fi
+
+# A release can disappear between choosing it and using it (pruned by another
+# launcher), so confirm it under the shared lock and retry the install if needed.
+for attempt in 1 2 3; do
+    install_release "$version" || exit 1
+    if use_release "$version"; then
+        break
+    fi
+    if [[ "$attempt" == 3 ]]; then
+        echo "clean-code-mcp $version keeps disappearing from $ROOT" >&2
+        exit 1
+    fi
+done
+
+command -v node >/dev/null 2>&1 || { echo "node is required to run clean-code-mcp" >&2; exit 1; }
+exec node "$ROOT/$version/tools/server.mjs" "$@"

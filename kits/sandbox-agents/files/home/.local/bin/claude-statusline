@@ -1,0 +1,56 @@
+#!/bin/bash
+# claude-statusline — Claude Code status line (cao-docker-ai-sandbox).
+#
+# Claude Code pipes session JSON to this script on every update and shows the
+# first line it prints. Shows the working directory relative to the folder
+# holding the workspace, the model, and the context size in k. The context
+# size is coloured by the smart zone: green below 100k tokens, yellow below
+# 150k, red above. Absolute thresholds, because answer quality drops with the
+# token count, not with the share of the window used. The k value rounds down
+# so a displayed 100k is never green.
+#
+# Wired up by the statusLine entry in a kit's ~/.claude/settings.json.
+
+set -u
+
+# Unit separator, not tab: read collapses runs of whitespace IFS, which would
+# shift every field after an empty one.
+IFS=$'\x1f' read -r cwd project model tokens < <(jq -r '[
+    (.workspace.current_dir // .cwd // ""),
+    (.workspace.project_dir // ""),
+    (.model.display_name // .model.id // "?"),
+    (if .context_window.current_usage == null then -1 else
+        [.context_window.current_usage
+            | .input_tokens, .cache_creation_input_tokens, .cache_read_input_tokens
+            | . // 0] | add end)
+] | map(tostring) | join("\u001f")')
+
+cwd=${cwd:-$PWD}
+model=${model:-?}
+
+# Workspace-relative, workspace name first. A Herdr pane opened on a sub-path
+# exports WORKSPACE_DIR as that sub-path, so prefer the enclosing git root.
+workspace=${WORKSPACE_DIR:-${project:-$cwd}}
+workspace=$(git -C "$workspace" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$workspace")
+case "$cwd" in
+    "$workspace" | "$workspace"/*) dir="${workspace##*/}${cwd#"$workspace"}" ;;
+    "$HOME") dir='~' ;;
+    "$HOME"/*) dir="~/${cwd#"$HOME"/}" ;;
+    *) dir=$cwd ;;
+esac
+
+# current_usage is null before the first API call and right after /compact;
+# unreadable input lands here too rather than in the red band.
+[[ $tokens =~ ^[0-9]+$ ]] || tokens=-1
+if [ "$tokens" -lt 0 ]; then
+    colour='2;32'; tokens=0
+elif [ "$tokens" -lt 100000 ]; then
+    colour='32'
+elif [ "$tokens" -lt 150000 ]; then
+    colour='33'
+else
+    colour='31'
+fi
+
+printf ' %s │ \U000f06a9 %s │ \e[%sm● %dk\e[0m\n' \
+    "$dir" "$model" "$colour" $(( tokens / 1000 ))

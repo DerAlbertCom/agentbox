@@ -1,0 +1,53 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: RWE GHEC Copilot providers
+version: "1.0.0"
+requires: [mti-ca-agents]
+args:
+  GHEC_PUBLIC_GH_TOKEN:
+    default: ""
+    enum: [""]
+    env: GH_TOKEN
+  GHEC_PUBLIC_GITHUB_TOKEN:
+    default: ""
+    enum: [""]
+    env: GITHUB_TOKEN
+  GHEC_HOST:
+    default: rwe.ghe.com
+    enum: [rwe.ghe.com]
+    env: GH_HOST
+  GHEC_OPENCODE_CONFIG:
+    default: /home/agent/.config/opencode/team.json
+    env: OPENCODE_CONFIG
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        allow: [rwe.ghe.com, api.rwe.ghe.com, uploads.rwe.ghe.com, copilot-api.rwe.ghe.com]
+      runtime:
+        allow: [rwe.ghe.com, api.rwe.ghe.com, uploads.rwe.ghe.com, copilot-api.rwe.ghe.com, "*.githubcopilot.com"]
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: |
+            set -eu
+            case "${RWE_GHE_TOKEN:-}" in
+              gho_*) ;;
+              *) echo 'Configure the four-host RWE_GHE_TOKEN binding; see teams/mti-ca/README.md.' >&2; exit 1 ;;
+            esac
+            test -z "${GH_TOKEN:-}" && test -z "${GITHUB_TOKEN:-}"
+            gh config set --host rwe.ghe.com oauth_token "$RWE_GHE_TOKEN"
+            gh auth setup-git
+            git config --global credential.https://rwe.ghe.com.helper '!gh auth git-credential'
+          user: "1000"
+          env: [RWE_GHE_TOKEN, GH_TOKEN, GITHUB_TOKEN, GH_HOST]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        GitHub is rwe.ghe.com. gh, OpenCode, pi and Claude use the tenant's
+        proxy-managed RWE_GHE_TOKEN placeholder. Public GitHub is anonymous.
+        Claude uses Copilot's native Anthropic endpoint: do not run /login.
+        Claude models are claude-opus-5-5, claude-sonnet-5-5 and claude-haiku-4-5;
+        WebSearch is unavailable. The standalone Copilot CLI is the exception:
+        it requires its own /login and keeps its OAuth state inside the sandbox.
