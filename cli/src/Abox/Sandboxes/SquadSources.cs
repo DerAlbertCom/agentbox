@@ -8,12 +8,7 @@ using Abox.Sbx;
 namespace Abox.Sandboxes;
 
 /// <summary>A squad identity resolved before validating the sandbox location.</summary>
-public sealed record SquadSelection(
-    string Team,
-    string Squad,
-    string Tag,
-    string? Reference = null
-);
+public sealed record SquadSelection(SquadBuildIdentity Identity, string? Reference = null);
 
 /// <summary>The source-specific inputs to the shared sandbox creation steps.</summary>
 public sealed record PreparedSquad(
@@ -21,7 +16,7 @@ public sealed record PreparedSquad(
     string KitSource,
     IReadOnlyList<string> Mixins,
     IReadOnlyDictionary<string, string> Arguments,
-    string PullPolicy,
+    PullPolicy PullPolicy,
     string? DockerContext = null,
     string? KitReference = null
 );
@@ -49,7 +44,7 @@ public sealed class LocalSquadSource(BuildStore store, LocalWorkloadImages image
             ?? throw new AboxException(
                 $"There is no squad '{squad}' in team '{request.Team.Name}'."
             );
-        return new SquadSelection(request.Team.Name, squad, request.Tag);
+        return new SquadSelection(new SquadBuildIdentity(request.Team.Name, squad, request.Tag));
     }
 
     public async Task<PreparedSquad> LoadAsync(
@@ -57,16 +52,17 @@ public sealed class LocalSquadSource(BuildStore store, LocalWorkloadImages image
         CancellationToken cancellationToken
     )
     {
+        var identity = selection.Identity;
         var manifest =
-            store.Load(selection.Team, selection.Squad, selection.Tag)
+            store.Load(identity)
             ?? throw new AboxException(
-                $"There is no local build of '{selection.Squad}' with the tag '{selection.Tag}'. "
-                    + $"Prepare it first: abox build --team {selection.Team} --tag {selection.Tag}"
+                $"There is no local build of '{identity.Squad}' with the tag '{identity.Tag}'. "
+                    + $"Prepare it first: abox build --team {identity.Team} --tag {identity.Tag}"
             );
         var image =
             manifest.LocalWorkload
             ?? throw new AboxException(
-                $"This manifest has no prebuilt local workload (metadata-only or legacy build). Run 'abox build --team {selection.Team} --tag {selection.Tag}' without --metadata-only before using --local. Create will not build the workload from sources."
+                $"This manifest has no prebuilt local workload (metadata-only or legacy build). Run 'abox build --team {identity.Team} --tag {identity.Tag}' without --metadata-only before using --local. Create will not build the workload from sources."
             );
         await images.EnsureAvailableAsync(image, cancellationToken);
         var arguments = KitArguments(manifest.Kits);
@@ -78,7 +74,7 @@ public sealed class LocalSquadSource(BuildStore store, LocalWorkloadImages image
             image.RuntimeKitDirectory,
             mixins,
             arguments,
-            PullPolicy: "never",
+            PullPolicy: PullPolicy.Never,
             DockerContext: image.DockerContext
         );
     }
@@ -130,13 +126,9 @@ public sealed class RemoteSquadSource(
             ?? throw new AboxException(
                 "Remote create requires --squad <name>; published squad discovery is not supported."
             );
-        var reference = RegistryImageName.OfSquad(
-            config.PullRepository,
-            request.Team.Name,
-            squad,
-            request.Tag
-        );
-        return new SquadSelection(request.Team.Name, squad, request.Tag, reference);
+        var identity = new SquadBuildIdentity(request.Team.Name, squad, request.Tag);
+        var reference = RegistryImageName.OfSquad(config.PullRepository, identity);
+        return new SquadSelection(identity, reference);
     }
 
     public async Task<PreparedSquad> LoadAsync(
@@ -150,9 +142,7 @@ public sealed class RemoteSquadSource(
         );
         var remote = await published.LoadAsync(
             selection.Reference!,
-            selection.Team,
-            selection.Squad,
-            selection.Tag,
+            selection.Identity,
             cancellationToken
         );
         return new PreparedSquad(
@@ -160,7 +150,7 @@ public sealed class RemoteSquadSource(
             remote.Reference,
             [],
             new Dictionary<string, string>(StringComparer.Ordinal),
-            PullPolicy: "always",
+            PullPolicy: PullPolicy.Always,
             KitReference: remote.Reference
         );
     }

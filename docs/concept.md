@@ -1,5 +1,10 @@
 # agentbox (`abox`)
 
+This document records the original concept, including proposals that have not
+shipped. Where it differs from current behavior, [implementation.md](implementation.md)
+and the command's `--help` output supersede it. See [authoring.md](authoring.md)
+for the supported configuration contract.
+
 In this repository we develop `abox`, an AI agent sandbox built on Docker Sandboxes (the product; its CLI is `sbx`, https://docs.docker.com/ai/sandboxes/). Each folder gets its own sandbox. Inside it, four agents (GitHub Copilot, OpenCode, pi, Claude Code) are configured against GitHub Copilot on GitHub Enterprise Cloud with data residency.
 
 Users run only `abox`, which calls `sbx` for them. The one exception is the one-time install of `sbx` (see Preflight).
@@ -13,20 +18,21 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 - **Workload**: a `.workload` file. Builds the squad's v3 workload kit: the base image, the mise tools, and the scripts.
 - **Base image**: the image built from a workload. Maintainers build it; users get it through their squad's layers.
 - **Kit**: a v3 kit, either a workload (full root filesystem) or a mixin (layers added on top). Used for team and squad customization, agent configuration, and auth. Spec: https://github.com/docker/sandbox-kit-spec
-- **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, and `state`.
+- **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, `state`, and `secrets`.
 - **Sandbox**: one per folder.
 - **Workspace**: the folder's files inside the sandbox, at the runtime-provided `WORKSPACE_DIR`.
 - **State**: host directories that persist when a sandbox is replaced.
+- **Secrets**: service declarations for host-side kit/proxy credentials; distinct from the runtime .NET store-copying command `user-secrets`.
 - **Launcher**: what `abox run` starts: a shell, or a desktop app on the host that works with the sandbox.
 
 ## Roles and commands
 
-Maintainers (team members who build base images) use `build` and `publish`. Everyone else uses `create`, `run`, `prune`, and `secrets`. `sbx` runs behind these commands; users never call it.
+Maintainers (team members who build base images) use `build` and `publish`. Everyone else uses `create`, `run`, `prune`, `secrets`, `user-secrets`, and `ports`. `sbx` runs behind the sandbox commands; users never need to call it.
 
 Exit codes: 0 on success, 1 on an `abox` error, 130 on cancellation. `run` passes through the exit code of the shell or command it starts.
 
-- **`abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag> | --local]`**
-  - Both `create` and `run` resolve `--location`, then the user config `defaultLocation`, then the current folder. The team name defaults to `defaultTeam`. Only `--local` resolves team sources from the `teams` folder at the location or its parents; `--root` selects a separate source project. Without `--squad`, local create asks which squad of the team to use, when there is more than one; remote create requires it.
+- **`abox create --team <name> [--squad <name>] [--location <path>] [--root <dir>] [--tag <tag>] [--local] [--yes]`**
+  - `create`, `run`, `user-secrets` and `ports` resolve `--location`, then the user config `defaultLocation`, then the current folder. The team name defaults to `defaultTeam`. Only `--local` resolves team sources from the `teams` folder at the location or its parents; `--root` selects a separate source project. Without `--squad`, local create asks which squad of the team to use, when there is more than one; remote create requires it. `--tag` can be combined with `--local` to select a local build tag.
   - Creates the sandbox from the squad's kit set in JFrog, under `rwest.jfrog.io/<pullRepository>`. The user setting `pullRepository` defaults to `mtiae-docker-release` and is independent of the workload's publish repository. The default tag is `latest`, pulled with `--pull always`, because sbx's default for kit sets is `missing`, which never refreshes a tag. `--tag` selects another tag. `--local` uses a prebuilt local workload image and its runtime kits with `--pull never`. Remote create needs no source repository or local build metadata: state and MCP settings come from the published set's bundled `squad.json`. Personal `.abox` kit customizations currently require `--local`.
   - A sandbox that already exists for the location is replaced after confirmation. The confirmation lists what will be lost. State directories are kept: the sandbox name does not change, so their host paths do not change either.
   - An existing sandbox keeps the image it was created from. A newer `latest` reaches only sandboxes created after it (inferred; verify).
@@ -34,20 +40,24 @@ Exit codes: 0 on success, 1 on an `abox` error, 130 on cancellation. `run` passe
   - Starts the sandbox if it is stopped. Never creates a sandbox: if none exists, prints the `abox create` command to run.
   - `shell` works offline. Other launchers list their needs under Launchers.
   - If JFrog has a newer `latest`, asks whether to replace the sandbox now. Skipped offline. *(proposed placement)*
-- **`abox build --team <names>`** resolves each team's folder under `teams` (from now on) and builds the kit set of every squad of it that no other squad of the team names as its `base`: one workload and the mixins reached through the chain. Rejects duplicate kit repositories and file collisions between kits. Layers are shared, not repacked, so squads with common kits share blobs.
-- **`abox publish --team <name>`** pushes the kit set to `rwest.jfrog.io/<publishRepository>` (selected by the squad's resolved `.workload`) under `agentbox-rwest-<team>/<squad>:<tag>`, `latest` by default, with the resolved squad config. Every squad keeps the same name when others are added. Publication uses the v3 BuildKit frontend through Docker Buildx; its registry credentials stay in Docker's host credential store. Only builds explicitly excluding personal `.abox` configuration can be published.
+- **`abox build --team <names> [--root <dir>]`** resolves each team's folder under `teams` (from now on) and builds the kit set of every squad of it that no other squad of the team names as its `base`: one workload and the mixins reached through the chain. Rejects duplicate kit repositories; checking file collisions between kits is not built yet. Layers are shared, not repacked, so squads with common kits share blobs.
+- **`abox publish --team <name> [--root <dir>]`** pushes the kit set to `rwest.jfrog.io/<publishRepository>` (selected by the squad's resolved `.workload`) under `agentbox-rwest-<team>/<squad>:<tag>`, `latest` by default, with the resolved squad config. Every squad keeps the same name when others are added. Publication uses the v3 BuildKit frontend through Docker Buildx; its registry credentials stay in Docker's host credential store. Only builds explicitly excluding personal `.abox` configuration can be published.
 - **`abox prune [--full] [--sbx]`** removes the template images of sbx that stopped being used: it keeps the newest assembled kit set and the kit sources it is built from, and removes the older sets and the kit sources nothing uses. `--full` reaches for everything sbx holds: what a sandbox uses, sbx refuses and keeps. `--sbx` stops the running sandboxes first. Never touches secrets, or images of other repositories, nor anything an image of unknown age or id holds. *(proposed: also keep anything a stopped sandbox uses; also prune the local builds of the build store)*
-- **`abox secrets`** manages host-side secrets for kits, through `sbx secret` behind the scenes. *(proposed subcommands: `set`, `list`, `remove`)*
+- **`abox secrets list|set|remove [--team <name>] --squad <name> [--root <dir>]`** manages host-side secrets for local kits, through `sbx secret` behind the scenes. `set` and `remove` accept repeatable `--service <name>`.
+- **`abox user-secrets [--location <path>] [--force]`** copies explicitly selected local .NET user-secret stores into an existing sandbox. See [the safety contract](../README.md#copying-net-user-secrets).
+- **`abox ports [--location <path>] [--offset <n>] [--refresh-https-bootstrap]`** configures discovered application forwarding and development HTTPS, or explicitly refreshes only the protected HTTPS bootstrap reader. See [implementation.md](implementation.md#shared-development-https-setup-46).
 
 ## Preflight
 
-Every command except `--help`, `--version` and `publish` runs these checks first.
-`publish` uses Docker/Buildx instead and does not require sbx. `abox` never installs
-anything itself. *(proposed)*
+Every command except `--help`, `--version`, `publish`, metadata-only builds and the
+hidden `exec` and `pipe` entry points runs these checks before sandbox work.
+`user-secrets` validates host input before runtime preflight. `publish` uses
+Docker/Buildx instead and does not require sbx; metadata-only builds require
+neither. `abox` never installs anything itself.
 
 1. **Installed:** `sbx` must be on `PATH` (`sbx.exe` on Windows). If not, print the install steps for the current OS (below) and exit with an error.
 2. **Version:** `sbx version --json` must be 0.51.0 or later. An older version gets an upgrade hint.
-3. **Health and sign-in:** abox runs `sbx diagnose --format json` (about 0.5 s here). A failing check stops the command and prints its `hint`. If the `Authentication` check fails, abox starts the browser sign-in and checks again. *(proposed)*
+3. **Health and sign-in:** abox runs `sbx diagnose --json` (about 0.5 s here). A failing check stops the command and prints its `hint`. If the `Authentication` check fails, abox starts the browser sign-in and checks again.
 
 Install steps, from https://docs.docker.com/ai/sandboxes/install/. sbx needs neither Docker Desktop nor Docker Engine.
 
@@ -135,6 +145,7 @@ References never include a file extension. The teams of a project live in a fold
 - `parameters`: named values. Kits receive them in the form the Docker Sandbox kit spec expects. MCP declarations can use them too. Fixed when the set is published (inferred from the kit-set docs; verify).
 - `mcp`: neutral MCP configuration. Each server is provided to every agent in the sandbox, in that agent's config format.
 - `state`: sandbox directories to persist. See State.
+- `secrets`: declarations for host-side kit/proxy credentials. See [the authoring guide](authoring.md#secrets).
 
 A `base` chain combines declarations and never overrides them. Across the whole chain, every kit, every MCP declaration, every parameter name, and every state entry must be unique. Kits are compared by repository name, so two tags of one repository are duplicates, as sbx also rejects them. A parameter is declared once but can be used by any number of kits and MCP declarations. Duplicates are validation errors, checked whenever a chain is resolved (build, create). The error names the duplicate and the files that declare it *(proposed)*. A kit or MCP declaration that uses an undeclared parameter is also an error *(proposed)*. A child can add, but cannot replace or remove what its base declares.
 
@@ -231,8 +242,8 @@ Same rule for every XDG directory: use the variable if it is set, otherwise the 
 
 - `cli/` is a .NET 10 console app using System.CommandLine. It builds one executable, `abox`, for Windows, Linux, and macOS. Tests go in `cli/test`.
 - One wrapper class makes every `sbx` call, so flags and version checks live in one place. Arguments come from the table below and are passed as argument lists, never as shell strings.
-- Each launcher is one class implementing one launcher interface, in `cli/src/Launchers/`.
-- Two internal helpers are not user commands: `exec` (run a command in a sandbox, starting it if stopped) and `pipe` (hidden; used by `hc`).
+- Each launcher is one class implementing one launcher interface, in `cli/src/Abox/Launchers/`.
+- Two hidden internal helpers are not user commands: `exec` (run a command in a sandbox, starting it if stopped) and `pipe` (used by `hc`).
 
 ### `sbx` mapping (internal)
 
@@ -243,9 +254,16 @@ Same rule for every XDG directory: use the variable if it is set, otherwise the 
 | `exec`, `pipe`, `run` | `sbx exec [-i] [-t] [-u <user>] [-w <dir>] <sandbox> <command>`; starts a stopped sandbox |
 | `orca` port | `sbx ports <sandbox> --publish 127.0.0.1::22` |
 | `secrets` | `sbx secret` (set, ls, rm) |
-| preflight | `sbx version`; `sbx diagnose --format json`; `sbx login` when Authentication fails |
+| preflight | `sbx version --json`; `sbx diagnose --json`; `sbx login` when Authentication fails |
 
 Never call `sbx prune` (it removes every stopped sandbox on the machine) or `sbx reset`.
+
+## What is not built yet
+
+- Detecting file collisions between different kits. Resolution rejects duplicate
+  kit repositories, not overlapping files within otherwise distinct kits.
+- See [the current implementation's list](implementation.md#what-is-not-built-yet)
+  for the other remaining work.
 
 ## Verify before building
 

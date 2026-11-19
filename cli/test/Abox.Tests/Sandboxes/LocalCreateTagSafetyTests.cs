@@ -2,6 +2,7 @@ using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using Abox.Sandboxes;
 using Abox.Sbx;
 using Abox.UserSecrets;
@@ -39,16 +40,14 @@ public sealed class LocalCreateTagSafetyTests
             new LocalWorkloadImages(programs, new OciRegistry(runner), console),
             console
         );
-        var creator = new SandboxCreator(
+        var creator = TestServiceGraphs.Creator(
             new SandboxRecordStore(paths),
             paths,
-            SandboxTest.Resolver(sbx),
             sbx,
             console,
             source,
             new RemoteSquadSource(config, sbx, published),
-            new UserSecretsCopy(config, new UserSecretsHost(null, null), sbx),
-            SandboxTest.Ports(sbx, console)
+            new UserSecretsCopy(config, new UserSecretsHost(null, null), sbx)
         );
         var request = new SandboxCreationRequest(
             new SquadResolver.ResolvedTeam("sample", root.Path, ["ac", "bd"]),
@@ -94,7 +93,7 @@ public sealed class LocalCreateTagSafetyTests
             "load" => async () =>
             {
                 await source.LoadAsync(
-                    new SquadSelection("sample", "ac", request.Tag),
+                    new SquadSelection(new SquadBuildIdentity("sample", "ac", request.Tag)),
                     CancellationToken.None
                 );
             },

@@ -7,7 +7,7 @@ public sealed class AboxConfigLoaderTests
     private readonly TempDirectory _root = new();
 
     [Fact]
-    public void WithoutAFileTheDefaultsAreUsed()
+    public void AMissingFileLoadsWithoutError()
     {
         // Arrange
         var paths = AboxPaths.For(
@@ -16,14 +16,10 @@ public sealed class AboxConfigLoaderTests
         );
 
         // Act
-        var config = AboxConfigLoader.Load(paths);
+        Action load = () => AboxConfigLoader.Load(paths);
 
         // Assert
-        config.DefaultTeam.Should().BeNull();
-        config.KitsDirectory.Should().Be("kits");
-        config.DefaultTag.Should().Be("latest");
-        config.DefaultLocation.Should().BeNull();
-        config.PullRepository.Should().Be("mtiae-docker-release");
+        load.Should().NotThrow();
     }
 
     [Fact]

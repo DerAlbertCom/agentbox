@@ -14,9 +14,7 @@ public interface IPublishedSquadSource
 {
     Task<PublishedSquad> LoadAsync(
         string reference,
-        string team,
-        string squad,
-        string tag,
+        SquadBuildIdentity identity,
         CancellationToken cancellationToken
     );
 }
@@ -30,9 +28,7 @@ public sealed class PublishedSquadSource(
 {
     public async Task<PublishedSquad> LoadAsync(
         string reference,
-        string team,
-        string squad,
-        string tag,
+        SquadBuildIdentity identity,
         CancellationToken cancellationToken
     )
     {
@@ -44,12 +40,7 @@ public sealed class PublishedSquadSource(
         using var temporary = new TemporaryDirectory("abox-pull-", "download", console);
         try
         {
-            return await ReadPinnedAsync(
-                reference,
-                new PublishedRuntimeMetadata.Identity(team, squad, tag),
-                temporary.Path,
-                cancellationToken
-            );
+            return await ReadPinnedAsync(reference, identity, temporary.Path, cancellationToken);
         }
         catch (Exception exception)
             when (exception
@@ -65,7 +56,7 @@ public sealed class PublishedSquadSource(
             )
         {
             throw new AboxException(
-                $"The published set '{reference}' has missing, incompatible or invalid bundled squad metadata. Ask a maintainer to rebuild with 'abox build --team {team} --tag {tag} --no-personal' and republish this tag with the current abox. No local metadata fallback is used; the existing sandbox was not replaced.",
+                $"The published set '{reference}' has missing, incompatible or invalid bundled squad metadata. Ask a maintainer to rebuild with 'abox build --team {identity.Team} --tag {identity.Tag} --no-personal' and republish this tag with the current abox. No local metadata fallback is used; the existing sandbox was not replaced.",
                 exception
             );
         }
@@ -73,7 +64,7 @@ public sealed class PublishedSquadSource(
 
     private async Task<PublishedSquad> ReadPinnedAsync(
         string reference,
-        PublishedRuntimeMetadata.Identity identity,
+        SquadBuildIdentity identity,
         string directory,
         CancellationToken cancellationToken
     )
@@ -87,14 +78,19 @@ public sealed class PublishedSquadSource(
         );
         var pinned = OciRegistry.Pin(reference, digest);
         var descriptor = Descriptor(manifest, "workload");
-        var config = ConfigurationReference(descriptor, identity.Team, identity.Squad);
+        var config = ConfigurationReference(descriptor, identity);
         Descriptor(
             (await ResolveManifestAsync(config, architecture, cancellationToken)).Manifest,
             "mixin"
         );
-        await RunAsync(["pull", "--platform", "linux/" + architecture, config], cancellationToken);
+        await registry.PullAsync(
+            config,
+            "linux/" + architecture,
+            OperationFailure("pull"),
+            cancellationToken
+        );
         var archive = Path.Combine(directory, "config.tar");
-        await RunAsync(["image", "save", "--output", archive, config], cancellationToken);
+        await registry.SaveAsync(config, archive, OperationFailure("image"), cancellationToken);
         var metadata = PublishedRuntimeMetadata.Read(
             PublishedConfigArchive.Read(archive),
             identity,
@@ -103,9 +99,12 @@ public sealed class PublishedSquadSource(
         return new PublishedSquad(pinned, metadata);
     }
 
-    private static string ConfigurationReference(JsonElement descriptor, string team, string squad)
+    private static string ConfigurationReference(
+        JsonElement descriptor,
+        SquadBuildIdentity identity
+    )
     {
-        var suffix = "/" + RegistryImageName.SquadRepository(team, squad) + "/components/config@";
+        var suffix = "/" + identity.Repository + "/components/config@";
         var configs = descriptor
             .GetProperty("kits")
             .EnumerateArray()
@@ -145,21 +144,20 @@ public sealed class PublishedSquadSource(
             digest = OciRegistry.Digest(reference[(reference.LastIndexOf('@') + 1)..]);
         else
         {
-            var resolved = CheckResult(
-                await registry.InspectAsync(reference, false, null, cancellationToken),
-                "buildx"
+            var resolved = await registry.InspectAsync(
+                new OciImage(reference),
+                false,
+                OperationFailure("buildx"),
+                cancellationToken
             );
             using var identity = JsonDocument.Parse(resolved.StandardOutput);
             digest = OciRegistry.Digest(identity.RootElement.GetProperty("digest").GetString());
         }
-        var result = CheckResult(
-            await registry.InspectAsync(
-                OciRegistry.Repository(reference) + "@" + digest,
-                true,
-                null,
-                cancellationToken
-            ),
-            "buildx"
+        var result = await registry.InspectAsync(
+            new OciImage(OciRegistry.Repository(reference) + "@" + digest),
+            true,
+            OperationFailure("buildx"),
+            cancellationToken
         );
         var root = OciRegistry.ParseManifest(result.StandardOutput);
         if (!root.TryGetProperty("manifests", out var manifests))
@@ -187,18 +185,11 @@ public sealed class PublishedSquadSource(
     private static JsonElement Descriptor(JsonElement manifest, string kind) =>
         OciRegistry.Descriptor(manifest, kind, "Expected a processed v3 kit descriptor.");
 
-    private async Task<ProcessResult> RunAsync(
-        IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken
-    ) => CheckResult(await registry.RunAsync(arguments, false, cancellationToken), arguments[0]);
-
-    private static ProcessResult CheckResult(ProcessResult result, string command)
-    {
-        // Docker handles credentials; metadata reads must never echo their output.
-        if (!result.Succeeded)
-            throw new AboxException(
-                $"Cannot read the published squad metadata (docker {command}, exit code {result.ExitCode}). Check the published tag and Docker/Buildx, and run 'docker login {RegistryImageName.Registry}' with read access to the set and its bundled components. For an older artifact, ask a maintainer to republish it with current abox. The existing sandbox was not replaced."
-            );
-        return result;
-    }
+    // Docker handles credentials; metadata reads must never echo their output.
+    private static OciFailure OperationFailure(string command) =>
+        new(
+            exitCode =>
+                $"Cannot read the published squad metadata (docker {command}, exit code {exitCode}). Check the published tag and Docker/Buildx, and run 'docker login {RegistryImageName.Registry}' with read access to the set and its bundled components. For an older artifact, ask a maintainer to republish it with current abox. The existing sandbox was not replaced.",
+            IncludeOutput: false
+        );
 }

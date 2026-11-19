@@ -1,5 +1,5 @@
-using System.Globalization;
 using System.Text.Json;
+using Abox.Naming;
 
 namespace Abox.Sbx;
 
@@ -106,14 +106,8 @@ internal static class UserSecretsNetworkPolicy
 
     private static int? LocalhostPort(string resource) =>
         resource.StartsWith("localhost:", StringComparison.Ordinal)
-        && int.TryParse(
-            resource.AsSpan(10),
-            NumberStyles.None,
-            CultureInfo.InvariantCulture,
-            out var port
-        )
-        && port is >= 1 and <= 65535
-            ? port
+        && TcpPort.TryParse(resource.AsSpan(10), out var port)
+            ? port.Value
             : null;
 
     internal static bool IsAllowed(JsonElement root, string sandbox, string target)

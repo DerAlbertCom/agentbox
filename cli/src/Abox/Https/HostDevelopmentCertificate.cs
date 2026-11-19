@@ -54,12 +54,11 @@ public sealed class HostDevelopmentCertificate(IProcessRunner runner, IConsole c
                 token
             );
         }
-        catch (AboxException exception)
-            when (exception.Message == ProtectedTemporaryDirectory.PreparationFailureMessage)
+        catch (PrivateStagingException)
         {
             // Only our fixed staging diagnostic is safe to retain. Arbitrary
             // runner exceptions must still be sanitized by the catch below.
-            throw new AboxException(ProtectedTemporaryDirectory.PreparationFailureMessage);
+            throw;
         }
         catch (Exception)
         {

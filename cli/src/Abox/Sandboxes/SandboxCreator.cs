@@ -131,7 +131,7 @@ public sealed class SandboxCreator(
             new SandboxRecord
             {
                 Team = request.Team.Name,
-                Squad = selection.Squad,
+                Squad = selection.Identity.Squad,
                 Tag = request.Tag,
                 BuildCreatedAt = manifest.CreatedAt,
                 CreatedAt = DateTimeOffset.Now,
@@ -277,6 +277,8 @@ public sealed class SandboxCreator(
             return [];
         }
 
+        foreach (var server in manifest.Mcp)
+            new McpDeclaration(server.Name, server.Url).Validate($"squad {manifest.Squad}");
         var registered = (await sbx.ListMcpServersAsync(cancellationToken)).ToHashSet(
             StringComparer.Ordinal
         );

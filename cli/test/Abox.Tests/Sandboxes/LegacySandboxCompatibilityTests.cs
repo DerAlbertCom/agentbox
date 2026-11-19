@@ -28,7 +28,7 @@ public sealed class LegacySandboxCompatibilityTests
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var legacy = LegacyFolderFixture(cli.Location);
         cli.Configure("""{"userSecrets":[]}""");
-        cli.Services.AddSingleton(PublishedSquadTest.Source());
+        cli.Services.AddSingleton(PublishedSquadFactory.Source());
         var failureName = legacyLookup ? legacy : cli.Name;
         Exception error = cancelled
             ? new OperationCanceledException()
@@ -167,10 +167,10 @@ public sealed class LegacySandboxCompatibilityTests
                 RootDirectory = cli.Root.Path,
                 Reference = "agentbox-rwest-sample:latest",
                 CreatedAt = DateTimeOffset.UtcNow,
-                LocalWorkload = LocalWorkloadTest.Artifact(cli.Root),
+                LocalWorkload = LocalWorkloadFactory.Artifact(cli.Root),
             }
         );
-        cli.Services.AddSingleton<IProcessRunner>(LocalWorkloadTest.Runner());
+        cli.Services.AddSingleton<IProcessRunner>(LocalWorkloadFactory.Runner());
         cli.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
         cli.Console.Answer = consent;
         if (consent)
@@ -242,7 +242,7 @@ public sealed class LegacySandboxCompatibilityTests
         // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var name = LegacyFolderFixture(cli.Location);
-        cli.Services.AddSingleton(PublishedSquadTest.Source());
+        cli.Services.AddSingleton(PublishedSquadFactory.Source());
         cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", null));
         cli.Sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())

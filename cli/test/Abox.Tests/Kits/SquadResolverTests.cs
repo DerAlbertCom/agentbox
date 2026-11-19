@@ -12,7 +12,7 @@ public sealed class SquadResolverTests : IDisposable
 
     public SquadResolverTests()
     {
-        _root.Directory_("kits/pi-config");
+        _root.CreateDirectory("kits/pi-config");
         _root.File(
             "teams/sample/mti-ca-dotnet.workload",
             "template: docker.io/sbx/shell-docker-image\n"
@@ -98,7 +98,7 @@ public sealed class SquadResolverTests : IDisposable
     public void ATeamFolderWithoutSquadsIsAnError()
     {
         // Arrange
-        _root.Directory_("teams/sample");
+        _root.CreateDirectory("teams/sample");
 
         // Act
         var action = () => _resolver.ResolveTeam(_root.Path, "sample");
@@ -191,7 +191,7 @@ public sealed class SquadResolverTests : IDisposable
               - other-kit
             """
         );
-        _root.Directory_("kits/other-kit");
+        _root.CreateDirectory("kits/other-kit");
 
         // Act
         var squad = _resolver.Resolve(_root.Path, "sample", "ac", []);
@@ -201,15 +201,19 @@ public sealed class SquadResolverTests : IDisposable
         squad.ConfigFiles.Should().HaveCount(2);
     }
 
-    [Fact]
-    public void ACycleIsAnError()
+    [Theory]
+    [InlineData("teams/sample", "a", "")]
+    [InlineData("personal", "ac", "")]
+    [InlineData("personal", "ac", "./")]
+    public void ACycleIsAnError(string directory, string squad, string referencePrefix)
     {
         // Arrange
-        _root.File("teams/sample/a.abox", "base: b\n");
-        _root.File("teams/sample/b.abox", "base: a\n");
+        _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
+        var a = _root.File($"{directory}/a.abox", $"base: {referencePrefix}b\n");
+        var b = _root.File($"{directory}/b.abox", $"base: {referencePrefix}a\n");
 
         // Act
-        var action = () => _resolver.Resolve(_root.Path, "sample", "a", []);
+        var action = () => _resolver.Resolve(_root.Path, "sample", squad, [a, b]);
 
         // Assert
         action.Should().Throw<AboxException>().WithMessage("*cycle*");
@@ -420,7 +424,7 @@ public sealed class SquadResolverTests : IDisposable
     {
         // Arrange
         _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
-        var folder = _root.Directory_("projects/one");
+        var folder = _root.CreateDirectory("projects/one");
 
         // Act
         var squad = _resolver.Resolve(folder, "sample", "ac", []);
@@ -463,7 +467,7 @@ public sealed class SquadResolverTests : IDisposable
               - personal-kit
             """
         );
-        _root.Directory_("kits/personal-kit");
+        _root.CreateDirectory("kits/personal-kit");
 
         // Act
         var squad = _resolver.Resolve(_root.Path, "sample", "ac", [personal]);

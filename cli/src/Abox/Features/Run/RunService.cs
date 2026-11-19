@@ -92,9 +92,7 @@ public sealed class RunService(
             location,
             sandbox.Name,
             await WorkspaceOfAsync(sandbox.Name, location, cancellationToken),
-            request.Argv,
-            sbx,
-            console
+            request.Argv
         );
 
         return await launcher.RunAsync(context, cancellationToken);
@@ -140,7 +138,7 @@ public sealed class RunService(
         BuildManifest? manifest;
         try
         {
-            manifest = store.Load(record.Team, record.Squad, record.Tag);
+            manifest = store.Load(new SquadBuildIdentity(record.Team, record.Squad, record.Tag));
         }
         catch (AboxException exception)
         {

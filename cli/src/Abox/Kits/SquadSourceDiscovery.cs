@@ -73,7 +73,7 @@ internal sealed class SquadSourceDiscovery(AboxConfig config)
     internal IReadOnlyList<AboxFile> LoadProjectChain(string teamDirectory, string squadName) =>
         LoadChain(new ConfigRoot(teamDirectory, squadName), FindBaseConfigurationFile);
 
-    internal IReadOnlyList<AboxFile> LoadPersonalChain(string file) =>
+    private static IReadOnlyList<AboxFile> LoadPersonalChain(string file) =>
         LoadChain(
             new ConfigRoot(
                 Path.GetDirectoryName(file) ?? ".",
@@ -81,6 +81,17 @@ internal sealed class SquadSourceDiscovery(AboxConfig config)
             ),
             FindPersonalBase
         );
+
+    internal IReadOnlyList<IReadOnlyList<AboxFile>> LoadPersonalChains(IReadOnlyList<string> files)
+    {
+        // Validate every chain before filtering, including cycles with no leaf configuration.
+        var chains = files.Select(LoadPersonalChain).ToList();
+        var bases = chains
+            .SelectMany(chain => chain.SkipLast(1))
+            .Select(file => file.Path)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return chains.Where(chain => !bases.Contains(chain[^1].Path)).ToList();
+    }
 
     private static IReadOnlyList<AboxFile> LoadChain(
         ConfigRoot root,
@@ -97,6 +108,7 @@ internal sealed class SquadSourceDiscovery(AboxConfig config)
 
         while (true)
         {
+            path = Path.GetFullPath(path);
             if (!visited.Add(path))
             {
                 throw new AboxException(
@@ -121,7 +133,7 @@ internal sealed class SquadSourceDiscovery(AboxConfig config)
     private static string FindPersonalBase(string directory, string name)
     {
         // Personal base lookup deliberately uses the exact filename, without parent search.
-        var path = Path.Combine(directory, name + ".abox");
+        var path = Path.GetFullPath(Path.Combine(directory, name + ".abox"));
         return File.Exists(path)
             ? path
             : throw new AboxException($"There is no configuration '{name}.abox' in '{directory}'.");

@@ -2,14 +2,13 @@ namespace Abox.Kits;
 
 /// <summary>
 /// A squad with its whole configuration chain resolved: one workload, its kits, its
-/// parameters, its MCP servers and its state.
+/// MCP servers and its state.
 /// </summary>
 public sealed class ResolvedSquad(
     string name,
     string rootDirectory,
     WorkloadFile workload,
     IReadOnlyList<KitSource> kits,
-    IReadOnlyDictionary<string, string> parameters,
     IReadOnlyList<McpDeclaration> mcp,
     IReadOnlyList<StateEntry> state,
     IReadOnlyList<string> configFiles,
@@ -27,9 +26,6 @@ public sealed class ResolvedSquad(
 
     /// <summary>The kits of the squad.</summary>
     public IReadOnlyList<KitSource> Kits { get; } = kits;
-
-    /// <summary>The named values the squad declares.</summary>
-    public IReadOnlyDictionary<string, string> Parameters { get; } = parameters;
 
     /// <summary>The MCP servers of the squad.</summary>
     public IReadOnlyList<McpDeclaration> Mcp { get; } = mcp;

@@ -5,12 +5,13 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class LocalWorkloadImagesTests : IDisposable
+public sealed class LocalWorkloadImagesTests : IDisposable
 {
-    private readonly TempDirectory _root = new();
-    private readonly IProcessRunner _runner = LocalWorkloadTest.Runner();
+    private readonly LocalWorkloadImagesFixture _fixture = new();
+    private TempDirectory _root => _fixture.Root;
+    private IProcessRunner _runner => _fixture.Runner;
 
-    public void Dispose() => _root.Dispose();
+    public void Dispose() => _fixture.Dispose();
 
     [Fact]
     public async Task BuildProducesARealUniqueLocalImageAndAThinV3Kit()
@@ -24,7 +25,7 @@ public sealed partial class LocalWorkloadImagesTests : IDisposable
         // Assert
         image.Reference.Should().StartWith("docker.io/library/abox-workload:");
         image.Reference.Should().NotBe(next.Reference);
-        image.ImageId.Should().Be(LocalWorkloadTest.ImageId);
+        image.ImageId.Should().Be(LocalWorkloadFactory.ImageId);
         image.DockerContext.Should().Be("test-context");
         File.ReadAllText(Path.Combine(image.RuntimeKitDirectory, "workload.dockerfile"))
             .Should()
@@ -56,7 +57,9 @@ public sealed partial class LocalWorkloadImagesTests : IDisposable
         _runner.ClearReceivedCalls();
 
         // Act
-        await LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
+        await LocalWorkloadFactory
+            .Images(_runner)
+            .EnsureAvailableAsync(image, CancellationToken.None);
 
         // Assert
         await _runner.Received(2).RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
@@ -78,7 +81,9 @@ public sealed partial class LocalWorkloadImagesTests : IDisposable
         _runner.ClearReceivedCalls();
 
         // Act
-        await LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
+        await LocalWorkloadFactory
+            .Images(_runner)
+            .EnsureAvailableAsync(image, CancellationToken.None);
 
         // Assert
         await _runner
@@ -145,7 +150,9 @@ public sealed partial class LocalWorkloadImagesTests : IDisposable
 
         // Act
         var action = () =>
-            LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
+            LocalWorkloadFactory
+                .Images(_runner)
+                .EnsureAvailableAsync(image, CancellationToken.None);
 
         // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*abox build*again*");
@@ -164,7 +171,9 @@ public sealed partial class LocalWorkloadImagesTests : IDisposable
 
         // Act
         var action = () =>
-            LocalWorkloadTest.Images(_runner).EnsureAvailableAsync(image, CancellationToken.None);
+            LocalWorkloadFactory
+                .Images(_runner)
+                .EnsureAvailableAsync(image, CancellationToken.None);
 
         // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
@@ -235,19 +244,58 @@ public sealed partial class LocalWorkloadImagesTests : IDisposable
         Directory.Exists(Path.Combine(_root.Path, "one")).Should().BeFalse();
     }
 
-    private Task<LocalWorkloadImage> BuildAsync(string runtime)
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MissingDockerStopsLocalBuildAndAvailabilityChecksBeforeReadingSources(
+        bool checkAvailability
+    )
     {
-        _root.File(
-            "source/workload.yaml",
-            "# syntax=docker/sandbox-kit:3\nschemaVersion: \"3\"\nkind: workload\n"
+        // Arrange
+        var programs = Substitute.For<IHostPrograms>();
+        var images = new LocalWorkloadImages(programs, new OciRegistry(_runner), new TestConsole());
+
+        // Act
+        Func<Task> action = checkAvailability
+            ? () => images.EnsureAvailableAsync(new LocalWorkloadImage(), CancellationToken.None)
+            : () => images.BuildAsync("missing-source", "missing-runtime", CancellationToken.None);
+
+        // Assert
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+            "Local workload images need Docker with Buildx on PATH. Install Docker and run 'abox build' again."
         );
-        _root.File("source/workload.dockerfile", "FROM example.com/base:1\nRUN install-tools\n");
-        return LocalWorkloadTest
-            .Images(_runner)
-            .BuildAsync(
-                Path.Combine(_root.Path, "source"),
-                Path.Combine(_root.Path, runtime),
-                CancellationToken.None
+        await _runner
+            .DidNotReceive()
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task MissingBuildxStopsLocalBuildBeforeContextSelection()
+    {
+        // Arrange
+        _runner
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request => request.Arguments.Contains("version")),
+                Arg.Any<CancellationToken>()
+            )
+            .Returns(new ProcessResult(17, "", "synthetic buildx failure"));
+
+        // Act
+        var action = () => BuildAsync("runtime");
+
+        // Assert
+        (await action.Should().ThrowAsync<AboxException>()).WithMessage(
+            "*Local workload image operation failed*exit 17*No source-build fallback*synthetic buildx failure*"
+        );
+        await _runner
+            .DidNotReceive()
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.Contains("context") || request.Arguments.Contains("--load")
+                ),
+                Arg.Any<CancellationToken>()
             );
     }
+
+    private Task<LocalWorkloadImage> BuildAsync(string runtime) => _fixture.BuildAsync(runtime);
 }

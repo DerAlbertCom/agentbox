@@ -34,19 +34,13 @@ public sealed class SecretsServiceTests
         _sbx.SetSecretAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
         _sbx.SetCustomSecretAsync(
-                Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
                 Arg.Any<string>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(new SbxOutcome(0, string.Empty));
-        _sbx.RemoveSecretAsync(
-                Arg.Any<string>(),
-                Arg.Any<string?>(),
-                Arg.Any<string?>(),
-                Arg.Any<CancellationToken>()
-            )
+        _sbx.RemoveSecretAsync(Arg.Any<SecretDeclaration>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
 
         _root.File("teams/sample/ac.abox", "workload: mti-ca-dotnet\n");
@@ -254,7 +248,6 @@ public sealed class SecretsServiceTests
         // Assert
         await _sbx.Received(1)
             .SetCustomSecretAsync(
-                "elastic",
                 "api.elastic.co",
                 "ELASTIC_API_KEY",
                 "the-key",
@@ -285,7 +278,6 @@ public sealed class SecretsServiceTests
             .SetSecretAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .SetCustomSecretAsync(
-                Arg.Any<string>(),
                 Arg.Any<string?>(),
                 Arg.Any<string?>(),
                 Arg.Any<string>(),
@@ -345,7 +337,10 @@ public sealed class SecretsServiceTests
         // Assert
         exitCode.Should().Be(0);
         await _sbx.Received(1)
-            .RemoveSecretAsync("github", null, null, Arg.Any<CancellationToken>());
+            .RemoveSecretAsync(
+                Arg.Is<SecretDeclaration>(secret => secret.Service == "github" && !secret.IsCustom),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
@@ -365,13 +360,23 @@ public sealed class SecretsServiceTests
                 env: ELASTIC_API_KEY
             """
         );
+        var (service, runner) = CreateRuntimeService();
 
         // Act
-        await _service.RemoveAsync(Request(), CancellationToken.None);
+        var exitCode = await service.RemoveAsync(Request(), CancellationToken.None);
 
         // Assert
-        await _sbx.Received(1)
-            .RemoveSecretAsync("elastic", "api.elastic.co", null, Arg.Any<CancellationToken>());
+        exitCode.Should().Be(0);
+        await runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments.SequenceEqual(
+                        new[] { "secret", "rm", "--host", "api.elastic.co", "--force" }
+                    )
+                ),
+                Arg.Any<CancellationToken>()
+            );
     }
 
     [Fact]
@@ -383,18 +388,7 @@ public sealed class SecretsServiceTests
             "workload: mti-ca-dotnet\nsecrets: [{service: elastic, env: ELASTIC_API_KEY}]\n"
         );
         _console.Answers.Add("the-key");
-        var runner = Substitute.For<IProcessRunner>();
-        runner
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProcessResult(0, "", ""));
-        var service = new SecretsService(
-            _resolver,
-            new PersonalConfigurations(
-                AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path)
-            ),
-            new SbxClient(runner, AboxPaths.For(_root.Path, _root.Path)),
-            _console
-        );
+        var (service, runner) = CreateRuntimeService();
 
         // Act
         var setExitCode = await service.SetAsync(Request(), CancellationToken.None);
@@ -457,11 +451,27 @@ public sealed class SecretsServiceTests
         _console.AllText.Should().Contain("stored").And.NotContain("not set");
     }
 
+    private (SecretsService Service, IProcessRunner Runner) CreateRuntimeService()
+    {
+        var runner = Substitute.For<IProcessRunner>();
+        runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, "", ""));
+        var paths = AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path);
+        var service = new SecretsService(
+            _resolver,
+            new PersonalConfigurations(paths),
+            new SbxClient(runner, paths),
+            _console
+        );
+        return (service, runner);
+    }
+
     private SecretsRequest Request() => new("sample", "ac", _root.Path, []);
 
     private void WriteKitWithService(string service)
     {
-        _root.Directory_("kits/pi-config");
+        _root.CreateDirectory("kits/pi-config");
         _root.File(
             "kits/pi-config/pi-config.yaml",
             $"""

@@ -51,28 +51,11 @@ public sealed class KitDescriptor
                 continue;
             }
 
-            var apiKey = config?.GetEntry("apiKey");
-            var inject = apiKey?.GetEntries("inject") ?? [];
-
-            services.Add(
-                new KitService(
-                    service,
-                    ReadPhases(config),
-                    apiKey?.GetString("name"),
-                    inject
-                        .Select(rule => rule.GetString("domain"))
-                        .Where(domain => !string.IsNullOrWhiteSpace(domain))
-                        .Select(domain => domain!)
-                        .ToList()
-                )
-            );
+            services.Add(new KitService(service));
         }
 
         return new KitDescriptor(path, services);
     }
-
-    private static IReadOnlyList<string> ReadPhases(YamlEntry? config) =>
-        config?.GetStrings("phase") ?? [];
 
     private static string? FindDescriptor(string kitDirectory)
     {

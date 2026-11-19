@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Abox.Configuration;
 using Abox.LocalState;
+using Abox.Naming;
 
 namespace Abox.Tests;
 
@@ -24,7 +25,7 @@ public sealed class TeamBuildStoreTests
         var legacy = root.File("builds/ac/latest/build.json", original);
 
         // Act
-        var old = store.Load("sample", "ac", "latest")!;
+        var old = store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         store.Save(
             new BuildManifest
             {
@@ -34,8 +35,8 @@ public sealed class TeamBuildStoreTests
                 Template = "new-template",
             }
         );
-        var current = store.Load("SAMPLE", "AC", "latest")!;
-        var unrelated = () => store.Load("other", "ac", "latest");
+        var current = store.Load(new SquadBuildIdentity("SAMPLE", "AC", "latest"))!;
+        var unrelated = () => store.Load(new SquadBuildIdentity("other", "ac", "latest"));
 
         // Assert
         old.Template.Should().Be("legacy-template");
@@ -68,7 +69,7 @@ public sealed class TeamBuildStoreTests
         );
 
         // Act
-        var load = () => store.Load("sample", "ac", "latest");
+        var load = () => store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         load.Should()
@@ -96,7 +97,7 @@ public sealed class TeamBuildStoreTests
         );
 
         // Act
-        var load = () => store.Load("sample", "ac", "latest");
+        var load = () => store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         load.Should()
@@ -121,7 +122,7 @@ public sealed class TeamBuildStoreTests
         var qualifiedPath = root.File("builds/sample/ac/latest/build.json", qualified);
 
         // Act
-        var load = () => store.Load("sample", "ac", "latest");
+        var load = () => store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         load.Should()
@@ -145,7 +146,7 @@ public sealed class TeamBuildStoreTests
         );
 
         // Act
-        var load = () => store.Load("sample", "ac", "latest");
+        var load = () => store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         load.Should()
@@ -178,7 +179,7 @@ public sealed class TeamBuildStoreTests
         var legacy = root.File("builds/ac/latest/build.json", original);
 
         // Act
-        var load = () => store.Load("sample", "ac", "latest");
+        var load = () => store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         load.Should()

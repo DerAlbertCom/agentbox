@@ -36,8 +36,8 @@ public sealed class BuildSourcesTests
 
     private static BuildManifest ExecutableWorkload(TempDirectory root)
     {
-        var source = root.Directory_("workload");
-        var empty = root.Directory_("workload/empty");
+        var source = root.CreateDirectory("workload");
+        var empty = root.CreateDirectory("workload/empty");
         var script = root.File("workload/install.sh", "#!/bin/sh\nexit 0\n");
         if (!OperatingSystem.IsWindows())
         {

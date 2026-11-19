@@ -50,7 +50,7 @@ internal sealed class CreateRecoveryHints(
         {
             var manifest = string.IsNullOrWhiteSpace(record.Team)
                 ? store.LoadLegacy(squad, tag)
-                : store.Load(record.Team, squad, tag);
+                : store.Load(new SquadBuildIdentity(record.Team, squad, tag));
             return new(manifest, null);
         }
         catch (AboxException exception)

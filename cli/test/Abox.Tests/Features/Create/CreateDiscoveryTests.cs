@@ -43,7 +43,7 @@ public sealed class CreateDiscoveryTests
                     && request
                         .Mixins.Select(Path.GetFullPath)
                         .SequenceEqual(new[] { project.ProjectKit, project.PersonalKit })
-                    && request.PullPolicy == "never"
+                    && request.PullPolicy == PullPolicy.Never
                 ),
                 Arg.Any<CancellationToken>()
             );

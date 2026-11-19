@@ -41,15 +41,5 @@ public sealed class SandboxRecordStore(AboxPaths paths)
         File.WriteAllText(PathFor(sandbox), JsonSerializer.Serialize(record));
     }
 
-    /// <summary>Forgets a sandbox.</summary>
-    public void Remove(string sandbox)
-    {
-        var path = PathFor(sandbox);
-        if (File.Exists(path))
-        {
-            File.Delete(path);
-        }
-    }
-
     private string PathFor(string sandbox) => Path.Combine(RecordsDirectory, sandbox + ".json");
 }

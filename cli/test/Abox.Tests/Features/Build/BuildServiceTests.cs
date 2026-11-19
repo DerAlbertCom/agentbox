@@ -3,49 +3,22 @@ using Abox.Features.Build;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class BuildServiceTests
+public sealed class BuildServiceTests
 {
-    private readonly TempDirectory _root = new();
-    private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
-    private readonly IProcessRunner _runner = LocalWorkloadTest.Runner();
-    private readonly TestConsole _console = new();
-    private readonly BuildStore _store;
-    private readonly SquadResolver _resolver = new(new AboxConfig());
-    private readonly BuildService _service;
-
-    public BuildServiceTests()
-    {
-        var paths = AboxPaths.For(
-            Path.Combine(_root.Path, "config"),
-            Path.Combine(_root.Path, "state")
-        );
-        _store = new BuildStore(paths);
-        _root.File("teams/sample/ac.abox", "workload: sample\n");
-        _root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
-        _root.File("config/personal.abox", "kits: [private]\n");
-        _root.File("kits/private/private.yaml", "schemaVersion: \"3\"\nkind: mixin\n");
-        _sbx.InspectKitAsync(
-                Arg.Any<string>(),
-                Arg.Any<CancellationToken>(),
-                Arg.Any<IReadOnlyDictionary<string, string>>()
-            )
-            .Returns(new SbxOutcome(0, ""));
-        _service = new BuildService(
-            _resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
-            new PersonalConfigurations(paths),
-            _store,
-            LocalWorkloadTest.Images(_runner),
-            _sbx,
-            _console
-        );
-    }
+    private readonly BuildServiceFixture _fixture = new();
+    private TempDirectory _root => _fixture.Root;
+    private ISbxClient _sbx => _fixture.Sbx;
+    private IProcessRunner _runner => _fixture.Runner;
+    private TestConsole _console => _fixture.Console;
+    private BuildStore _store => _fixture.Store;
+    private SquadResolver _resolver => _fixture.Resolver;
+    private BuildService _service => _fixture.Service;
 
     [Fact]
     public async Task EachBuildKeepsTheRepositoryOfItsInheritedWorkload()
@@ -68,10 +41,13 @@ public sealed partial class BuildServiceTests
 
         // Assert
         _store
-            .Load("sample", "ac", "latest")!
+            .Load(new SquadBuildIdentity("sample", "ac", "latest"))!
             .PublishRepository.Should()
             .Be("shared-images-local");
-        _store.Load("sample", "bd", "latest")!.PublishRepository.Should().Be("sample-images-local");
+        _store
+            .Load(new SquadBuildIdentity("sample", "bd", "latest"))!
+            .PublishRepository.Should()
+            .Be("sample-images-local");
     }
 
     [Fact]
@@ -89,7 +65,10 @@ public sealed partial class BuildServiceTests
         _root.File("teams/sample/sample.workload", "publishRepository: other-images-local\n");
 
         // Act
-        var check = () => BuildSources.EnsureUnchanged(_store.Load("sample", "ac", "latest")!);
+        var check = () =>
+            BuildSources.EnsureUnchanged(
+                _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!
+            );
 
         // Assert
         check.Should().Throw<AboxException>().WithMessage("*sources changed*--no-personal*");
@@ -109,7 +88,7 @@ public sealed partial class BuildServiceTests
         );
 
         // Assert
-        var manifest = _store.Load("sample", "ac", "latest")!;
+        var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         manifest.IncludesPersonalConfigurations.Should().BeFalse();
         manifest.Kits.Should().BeEmpty();
         manifest.ConfigFiles.Should().NotContain(file => file.Contains("personal.abox"));
@@ -130,8 +109,8 @@ public sealed partial class BuildServiceTests
             CancellationToken.None
         );
         // Assert
-        var manifest = _store.Load("sample", "ac", "latest")!;
-        var snapshot = BuildSources.Snapshot(manifest, _root.Directory_("snapshot"));
+        var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
+        var snapshot = BuildSources.Snapshot(manifest, _root.CreateDirectory("snapshot"));
         var asset = Path.Combine("certificates", "rwe_inspection_certificate_chain.pem");
         File.ReadAllBytes(Path.Combine(snapshot[manifest.WorkloadKitDirectory], asset))
             .Should()
@@ -153,7 +132,7 @@ public sealed partial class BuildServiceTests
         await _service.BuildAsync(Request(), CancellationToken.None);
 
         // Assert
-        var manifest = _store.Load("sample", "ac", "latest")!;
+        var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         manifest.IncludesPersonalConfigurations.Should().BeTrue();
         manifest.Kits.Should().ContainSingle().Which.Name.Should().Be("private");
         manifest.SourceHashes.Should().BeEmpty();
@@ -167,27 +146,17 @@ public sealed partial class BuildServiceTests
         // Arrange
         _root.File("teams/sample/ac.abox", "workload: sample\nkits: [private]\n");
         File.Delete(Path.Combine(_root.Path, "config", "personal.abox"));
-        var target = _root.Directory_("shared");
+        var target = _root.CreateDirectory("shared");
         _root.File("shared/payload.txt", "linked kit payload");
         var link = Path.Combine(_root.Path, "kits", "private", "linked");
         try
         {
-            if (OperatingSystem.IsWindows())
+            var result = await DirectoryLinks.CreateAsync(link, target);
+            if (result is not null && !result.Succeeded)
             {
-                var result = await new ProcessRunner().RunAsync(
-                    new ProcessRequest("cmd", ["/c", "mklink", "/J", link, target]),
-                    CancellationToken.None
+                throw new LinkUnavailableException(
+                    $"Directory junctions are not available: {result.StandardError}"
                 );
-                if (!result.Succeeded)
-                {
-                    throw new LinkUnavailableException(
-                        $"Directory junctions are not available: {result.StandardError}"
-                    );
-                }
-            }
-            else
-            {
-                Directory.CreateSymbolicLink(link, target);
             }
         }
         catch (Exception exception)
@@ -213,7 +182,10 @@ public sealed partial class BuildServiceTests
 
             // Assert
             exitCode.Should().Be(0);
-            _store.Load("sample", "ac", "latest")!.SourceHashes.Should().BeEmpty();
+            _store
+                .Load(new SquadBuildIdentity("sample", "ac", "latest"))!
+                .SourceHashes.Should()
+                .BeEmpty();
             await _sbx.Received(1)
                 .InspectKitAsync(
                     Path.Combine(_root.Path, "kits", "private"),
@@ -230,7 +202,7 @@ public sealed partial class BuildServiceTests
             (await action.Should().ThrowAsync<AboxException>()).WithMessage(
                 "*symbolic link or reparse point*"
             );
-            _store.Load("sample", "ac", "latest").Should().BeNull();
+            _store.Load(new SquadBuildIdentity("sample", "ac", "latest")).Should().BeNull();
         }
     }
 
@@ -248,7 +220,7 @@ public sealed partial class BuildServiceTests
             {
                 File.AppendAllText(
                     Path.Combine(
-                        _store.DirectoryFor("sample", "ac", "latest"),
+                        _store.DirectoryFor(new SquadBuildIdentity("sample", "ac", "latest")),
                         "workload",
                         "workload.yaml"
                     ),
@@ -269,7 +241,7 @@ public sealed partial class BuildServiceTests
 
         // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*sources changed*");
-        _store.Load("sample", "ac", "latest").Should().BeNull();
+        _store.Load(new SquadBuildIdentity("sample", "ac", "latest")).Should().BeNull();
     }
 
     private BuildRequest Request() =>
@@ -283,9 +255,9 @@ public sealed partial class BuildServiceTests
         await _service.BuildAsync(Request() with { Verify = false }, CancellationToken.None);
 
         // Assert
-        var manifest = _store.Load("sample", "ac", "latest")!;
+        var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         manifest.LocalWorkload.Should().NotBeNull();
-        manifest.LocalWorkload!.ImageId.Should().Be(LocalWorkloadTest.ImageId);
+        manifest.LocalWorkload!.ImageId.Should().Be(LocalWorkloadFactory.ImageId);
         manifest.LocalWorkload.RuntimeKitDirectory.Should().NotBe(manifest.WorkloadKitDirectory);
         await _runner
             .Received(1)
@@ -310,7 +282,7 @@ public sealed partial class BuildServiceTests
     {
         // Arrange
         await _service.BuildAsync(Request(), CancellationToken.None);
-        var image = _store.Load("sample", "ac", "latest")!.LocalWorkload!;
+        var image = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!.LocalWorkload!;
         var recipePath = Path.Combine(image.RuntimeKitDirectory, "workload.dockerfile");
         var previousRecipe = File.ReadAllText(recipePath);
         if (changeInputs)
@@ -331,9 +303,12 @@ public sealed partial class BuildServiceTests
 
         // Assert
         exitCode.Should().Be(0);
-        _store.Load("sample", "ac", "latest")!.LocalWorkload.Should().BeNull();
         _store
-            .Load("sample", "ac", "latest")!
+            .Load(new SquadBuildIdentity("sample", "ac", "latest"))!
+            .LocalWorkload.Should()
+            .BeNull();
+        _store
+            .Load(new SquadBuildIdentity("sample", "ac", "latest"))!
             .Template.Should()
             .Be(changeInputs ? "example.com/other:2" : "example.com/base:1");
         File.ReadAllText(recipePath).Should().Be(previousRecipe);

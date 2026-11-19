@@ -1,3 +1,4 @@
+using Abox.Naming;
 using static Abox.UserSecrets.EndpointSyntax;
 
 namespace Abox.UserSecrets;
@@ -16,8 +17,9 @@ internal static class UriEndpointScanner
         int port;
         if (match.Groups["port"].Success)
         {
-            if (!TryParseEndpointPort(match.Groups["port"].Value, out port))
+            if (!TcpPort.TryParse(match.Groups["port"].Value, out var explicitPort))
                 return EndpointScan.Unchanged;
+            port = explicitPort.Value;
         }
         else if (Uri.TryCreate(value[..match.Length], UriKind.Absolute, out var authority))
             port = authority.Port;

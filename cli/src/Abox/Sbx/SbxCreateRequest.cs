@@ -18,6 +18,6 @@ public sealed record SbxCreateRequest(
     IReadOnlyDictionary<string, string> KitArguments,
     IReadOnlyList<SbxMount> Mounts,
     IReadOnlyList<string> StaticMcpServers,
-    string PullPolicy = "never",
+    PullPolicy PullPolicy = PullPolicy.Never,
     string? HostDockerContext = null
 );

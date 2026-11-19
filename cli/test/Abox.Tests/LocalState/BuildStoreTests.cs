@@ -1,5 +1,6 @@
 using Abox.Configuration;
 using Abox.LocalState;
+using Abox.Naming;
 
 namespace Abox.Tests;
 
@@ -21,7 +22,7 @@ public sealed class BuildStoreTests
         );
 
         // Act
-        var manifest = store.Load("sample", "ac", "latest");
+        var manifest = store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         manifest.Should().NotBeNull();
@@ -37,7 +38,7 @@ public sealed class BuildStoreTests
         var store = Store(root);
 
         // Act
-        var manifest = store.Load("sample", "ac", "latest");
+        var manifest = store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         manifest.Should().BeNull();
@@ -49,12 +50,12 @@ public sealed class BuildStoreTests
         // Arrange
         using var root = new TempDirectory();
         var store = Store(root);
-        var directory = store.DirectoryFor("sample", "ac", "latest");
+        var directory = store.DirectoryFor(new SquadBuildIdentity("sample", "ac", "latest"));
         Directory.CreateDirectory(directory);
         File.WriteAllText(Path.Combine(directory, "build.json"), "not json");
 
         // Act
-        var action = () => store.Load("sample", "ac", "latest");
+        var action = () => store.Load(new SquadBuildIdentity("sample", "ac", "latest"));
 
         // Assert
         action.Should().Throw<AboxException>().WithMessage("*not readable*");
@@ -69,7 +70,7 @@ public sealed class BuildStoreTests
         store.Save(ManifestWithKitsAndState());
 
         // Act
-        var manifest = store.Load("sample", "ac", "latest")!;
+        var manifest = store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
 
         // Assert
         manifest.WorkloadKitDirectory.Should().Be("/kits/workload");

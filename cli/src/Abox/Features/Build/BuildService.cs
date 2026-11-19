@@ -69,7 +69,9 @@ public sealed class BuildService(
             squadName,
             personalFiles
         );
-        var buildDirectory = store.DirectoryFor(team.Name, squad.Name, request.Tag);
+        var buildDirectory = store.DirectoryFor(
+            new SquadBuildIdentity(team.Name, squad.Name, request.Tag)
+        );
 
         var workloadDirectory = Path.Combine(buildDirectory, WorkloadKitGenerator.KitName);
         workloadGenerator.Generate(squad.Workload, workloadDirectory);

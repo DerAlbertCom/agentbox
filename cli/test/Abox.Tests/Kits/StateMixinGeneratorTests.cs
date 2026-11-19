@@ -1,4 +1,6 @@
+using Abox.Infrastructure;
 using Abox.Kits;
+using static Abox.Tests.TestText;
 
 namespace Abox.Tests;
 
@@ -15,6 +17,13 @@ public sealed class StateMixinGeneratorTests
         {
             StateEntry.Parse("~/.config/opencode/state"),
             StateEntry.Parse("~/.local/state/shell"),
+            StateEntry.Parse("~/a #b/é雪'😀"),
+            StateEntry.Parse("~/[cache]/{data}/&sessions/!history"),
+            // Scalar escaping is independent of the portable-path validation exercised above.
+            new StateEntry(
+                "/quote\"/slash\\/\0\t\n\r\u001f\u007f\u0085\u009f\u2028\u2029\uFEFF",
+                "unused"
+            ),
         };
 
         // Act
@@ -22,10 +31,14 @@ public sealed class StateMixinGeneratorTests
 
         // Assert
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "state", "state.yaml"));
-        descriptor.Should().NotContain("\r");
-        CountOccurrences(descriptor, "com.docker.sandbox/host-mount@1").Should().Be(2);
-        descriptor.Should().Contain("path: /home/agent/.config/opencode/state");
-        descriptor.Should().Contain("path: /home/agent/.local/state/shell");
+        descriptor.Should().NotContain("\r").And.Contain("path: \"").And.NotContain("\\uD83D");
+        CountOccurrences(descriptor, "com.docker.sandbox/host-mount@1").Should().Be(entries.Length);
+        YamlReader
+            .Parse(descriptor, "generated state")
+            .GetEntries("capabilities")
+            .Select(capability => capability.GetEntry("config")!.GetString("path"))
+            .Should()
+            .Equal(entries.Select(entry => entry.SandboxPath));
     }
 
     [Fact]
@@ -39,18 +52,5 @@ public sealed class StateMixinGeneratorTests
         // Assert
         var descriptor = File.ReadAllText(Path.Combine(_root.Path, "state", "state.yaml"));
         descriptor.Should().NotContain("host-mount@1");
-    }
-
-    private static int CountOccurrences(string text, string value)
-    {
-        var count = 0;
-        var index = text.IndexOf(value, StringComparison.Ordinal);
-        while (index >= 0)
-        {
-            count++;
-            index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal);
-        }
-
-        return count;
     }
 }

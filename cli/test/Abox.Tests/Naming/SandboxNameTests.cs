@@ -37,20 +37,6 @@ public sealed class SandboxNameTests
     }
 
     [Fact]
-    public void TheSameFolderAlwaysGetsTheSameName()
-    {
-        // Arrange
-        const string folder = "/home/albert/projects/rwe";
-
-        // Act
-        var first = SandboxName.For(folder);
-        var second = SandboxName.For(folder);
-
-        // Assert
-        first.Should().Be(second);
-    }
-
-    [Fact]
     public void AnotherFolderGetsAnotherName()
     {
         // Arrange

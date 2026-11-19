@@ -1,3 +1,5 @@
+using Abox.Naming;
+
 namespace Abox.Configuration;
 
 /// <summary>
@@ -27,8 +29,13 @@ public sealed class AboxPaths
     public string BuildsDirectory => Path.Combine(StateDirectory, "builds");
 
     /// <summary>The directory of one local build.</summary>
-    public string BuildDirectory(string team, string squad, string tag) =>
-        Path.Combine(BuildsDirectory, team.ToLowerInvariant(), squad.ToLowerInvariant(), tag);
+    public string BuildDirectory(SquadBuildIdentity identity) =>
+        Path.Combine(
+            BuildsDirectory,
+            identity.Team.ToLowerInvariant(),
+            identity.Squad.ToLowerInvariant(),
+            identity.Tag
+        );
 
     /// <summary>
     /// Resolves the directories for the current user: XDG variables when they are set to an

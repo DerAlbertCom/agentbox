@@ -118,8 +118,8 @@ public sealed class CreateCommandTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
-                    && request.PullPolicy == "always"
+                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                    && request.PullPolicy == PullPolicy.Always
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -141,7 +141,7 @@ public sealed class CreateCommandTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource == Path.Combine(_root.Path, "runtime", "workload")
-                    && request.PullPolicy == "never"
+                    && request.PullPolicy == PullPolicy.Never
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -226,7 +226,7 @@ public sealed class CreateCommandTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                    == $"rwest.jfrog.io/team-docker-release/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
+                    == $"rwest.jfrog.io/team-docker-release/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -292,7 +292,7 @@ public sealed class CreateCommandTests
                 Tag = "release",
                 Reference = "agentbox-rwest-sample:release",
                 WorkloadKitDirectory = "/kits/workload",
-                LocalWorkload = LocalWorkloadTest.Artifact(_root),
+                LocalWorkload = LocalWorkloadFactory.Artifact(_root),
             }
         );
         var programs = ReadyRuntime();
@@ -301,16 +301,14 @@ public sealed class CreateCommandTests
             new Preflight(_console, _sbx, programs),
             new Lazy<SquadResolver>(() => new SquadResolver(config)),
             new Lazy<SandboxCreator>(() =>
-                new SandboxCreator(
+                TestServiceGraphs.Creator(
                     new SandboxRecordStore(paths),
                     paths,
-                    SandboxTest.Resolver(_sbx),
                     _sbx,
                     _console,
-                    new LocalSquadSource(store, LocalWorkloadTest.Images(), _console),
-                    new RemoteSquadSource(config, _sbx, PublishedSquadTest.Source()),
-                    new UserSecretsCopy(config, new UserSecretsHost(null, null), _sbx),
-                    SandboxTest.Ports(_sbx, _console)
+                    new LocalSquadSource(store, LocalWorkloadFactory.Images(), _console),
+                    new RemoteSquadSource(config, _sbx, PublishedSquadFactory.Source()),
+                    new UserSecretsCopy(config, new UserSecretsHost(null, null), _sbx)
                 )
             ),
             _console
@@ -328,6 +326,3 @@ public sealed class CreateCommandTests
         return programs;
     }
 }
-
-[CollectionDefinition("Create command working directory", DisableParallelization = true)]
-public sealed class CreateCommandWorkingDirectoryCollection;

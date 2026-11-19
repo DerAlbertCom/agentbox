@@ -41,7 +41,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample")
+        cli.LatestWritten("sample")
             .Should()
             .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("CS.Messaging.Deals");
@@ -79,7 +79,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample")
+        cli.LatestWritten("sample")
             .Should()
             .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Worker.csproj");
@@ -146,9 +146,7 @@ public sealed class UserSecretsAppSettingsCommandTests
                         + (association == "implicit-props" ? "props" : "targets"),
                     "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup><Target Name=\"SyntheticPrivateId\"><Error Text=\"Do not run\" /></Target></Project>"
                 );
-            var originals = Directory
-                .EnumerateFiles(cli.Location, "*", SearchOption.AllDirectories)
-                .ToDictionary(path => path, File.ReadAllText);
+            var originals = FileSnapshots.CaptureText(cli.Location);
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
                 .Returns(new[] { 8004 });
             var processes = Substitute.For<IProcessRunner>();
@@ -167,17 +165,16 @@ public sealed class UserSecretsAppSettingsCommandTests
                 .And.NotContain("/generated")
                 .And.NotContain("/authoritative");
             if (authoritative)
-                Written(cli, "sample")
+                cli.LatestWritten("sample")
                     .Should()
                     .Be("""{"Endpoint":"http://host.docker.internal:8004/authoritative"}""");
             else
-                Written(cli, "sample")
+                cli.LatestWritten("sample")
                     .Should()
                     .Be(
                         """{"Copied":"synthetic-only","Endpoint":"http://host.docker.internal:8004/generated?token=synthetic-token"}"""
                     );
-            foreach (var (path, original) in originals)
-                File.ReadAllText(path).Should().Be(original);
+            FileSnapshots.AssertUnchanged(originals);
             processes.ReceivedCalls().Should().BeEmpty();
         }
     }
@@ -197,7 +194,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample").Should().Be("{}");
+        cli.LatestWritten("sample").Should().Be("{}");
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Api.csproj");
     }
 
@@ -289,7 +286,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Linked.csproj");
-        Written(cli, "sample")
+        cli.LatestWritten("sample")
             .Should()
             .Be(
                 generate
@@ -318,7 +315,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        var payload = Written(cli, "sample");
+        var payload = cli.LatestWritten("sample");
         payload
             .Should()
             .Be("""{"Api":{"Key":"synthetic-only"},"Api":"http://host.docker.internal:5000"}""");
@@ -370,7 +367,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample")
+        cli.LatestWritten("sample")
             .Should()
             .Be("""{"Endpoint":"http://host.docker.internal:8004/path"}""");
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("Other.csproj");
@@ -432,7 +429,7 @@ public sealed class UserSecretsAppSettingsCommandTests
             .NotContain("Warning:")
             .And.NotContain("Broken.csproj")
             .And.NotContain("SyntheticPrivateId");
-        Written(cli, "sample")
+        cli.LatestWritten("sample")
             .Should()
             .Be(
                 generate
@@ -485,21 +482,18 @@ public sealed class UserSecretsAppSettingsCommandTests
         );
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 5432 });
-        var originals = Directory
-            .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
-            .ToDictionary(path => path, File.ReadAllBytes);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
         // Act
         var exit = await cli.Run("--verbose");
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        using var written = JsonDocument.Parse(cli.LatestWritten("sample"));
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written.RootElement.GetProperty("Copied").GetString().Should().Be(endpoint);
         cli.Console.AllText.Should().NotContain("unsupported");
-        foreach (var (path, original) in originals)
-            File.ReadAllBytes(path).Should().Equal(original);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -527,7 +521,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample").Should().Be("""{"Copied":"synthetic-only"}""");
+        cli.LatestWritten("sample").Should().Be("""{"Copied":"synthetic-only"}""");
         cli.Console.AllText.Should()
             .NotContain("Warning:")
             .And.NotContain("Api.csproj")
@@ -564,7 +558,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         // Assert
         exit.Should().Be(lowercase ? 0 : 1, cli.Console.AllText);
         if (lowercase)
-            Written(cli, "sample")
+            cli.LatestWritten("sample")
                 .Should()
                 .Be("""{"Endpoints:0:Url":"http://host.docker.internal:8004/path"}""");
         else
@@ -650,7 +644,9 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         copyExit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample").Should().Be("""{"Url":"http://host.docker.internal:8004/copied"}""");
+        cli.LatestWritten("sample")
+            .Should()
+            .Be("""{"Url":"http://host.docker.internal:8004/copied"}""");
     }
 
     [Theory]
@@ -710,7 +706,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         firstExit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample").Should().Contain("Telemetry").And.Contain("LocalStack");
+        cli.LatestWritten("sample").Should().Contain("Telemetry").And.Contain("LocalStack");
 
         // Arrange
         cli.Root.File(
@@ -723,7 +719,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         refreshExit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample")
+        cli.LatestWritten("sample")
             .Should()
             .Be(
                 """{"Copied":"synthetic-only","LocalStack":"http://host.docker.internal:8006/current"}"""
@@ -773,7 +769,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        using var written = JsonDocument.Parse(cli.LatestWritten("sample"));
         written.RootElement.EnumerateObject().Should().HaveCount(3);
         written
             .RootElement.GetProperty("Copy:WorkerApi")
@@ -795,7 +791,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         // Arrange
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
-        var target = cli.Root.Directory_("folder/src/Api");
+        var target = cli.Root.CreateDirectory("folder/src/Api");
         cli.Root.File(
             "folder/src/Api/Api.csproj",
             "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
@@ -817,7 +813,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
             // Assert
             exit.Should().Be(0, cli.Console.AllText);
-            Written(cli, "sample")
+            cli.LatestWritten("sample")
                 .Should()
                 .Be("""{"Url":"http://host.docker.internal:8004/path"}""");
         }
@@ -901,9 +897,7 @@ public sealed class UserSecretsAppSettingsCommandTests
                 cli.Store("sample", JsonSerializer.Serialize(new { Endpoint = endpoint }));
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
                 .Returns(new[] { 80, 8004, 5432 });
-            var originals = Directory
-                .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
-                .ToDictionary(path => path, File.ReadAllBytes);
+            var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
             // Act
             var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
@@ -922,8 +916,7 @@ public sealed class UserSecretsAppSettingsCommandTests
                 .And.NotContain("remote.test");
             if (generated)
                 cli.Console.AllText.Should().Contain("Api.csproj");
-            foreach (var (path, original) in originals)
-                File.ReadAllBytes(path).Should().Equal(original);
+            FileSnapshots.AssertUnchanged(originals);
         }
     }
 
@@ -964,7 +957,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         exit.Should().Be(force ? 0 : 1, cli.Console.AllText);
         if (force)
         {
-            Written(cli, "sample").Should().Contain("host.docker.internal");
+            cli.LatestWritten("sample").Should().Contain("host.docker.internal");
             cli.Console.AllText.Should().Contain("Safety override");
         }
         else
@@ -1038,7 +1031,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        using var written = JsonDocument.Parse(cli.LatestWritten("sample"));
         written.RootElement.GetProperty("Generated").GetString().Should().Be(expected);
         written.RootElement.GetProperty("Copied").GetString().Should().Be(expected);
         cli.Console.AllText.Should()
@@ -1139,7 +1132,7 @@ public sealed class UserSecretsAppSettingsCommandTests
         using var cli = new UserSecretsCliHarness();
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", "{}");
-        var target = cli.Root.Directory_("outside");
+        var target = cli.Root.CreateDirectory("outside");
         cli.Root.File(
             "outside/Bad.csproj",
             "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
@@ -1167,7 +1160,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
             // Assert
             exit.Should().Be(0, cli.Console.AllText);
-            Written(cli, "sample").Should().Be("{}");
+            cli.LatestWritten("sample").Should().Be("{}");
         }
         finally
         {
@@ -1226,7 +1219,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "sample")
+        cli.LatestWritten("sample")
             .Should()
             .Contain("host.docker.internal")
             .And.NotContain("unselected");
@@ -1269,7 +1262,7 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        using var written = JsonDocument.Parse(cli.LatestWritten("sample"));
         written.RootElement.EnumerateObject().Should().HaveCount(expectedCount);
         if (expectedCount > 0)
             written
@@ -1312,7 +1305,7 @@ public sealed class UserSecretsAppSettingsCommandTests
             "folder/src/Api/appsettings.json",
             """{"Telemetry":{"Endpoint":"http://localhost:4317/synthetic-private?token=synthetic-token"},"WorkerApi":"http://localhost:5000/api","Remote":"http://remote.test:4317"}"""
         );
-        var originals = new[] { project, settings }.ToDictionary(path => path, File.ReadAllText);
+        var originals = FileSnapshots.CaptureText(new[] { project, settings });
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 4317 });
         var processes = Substitute.For<IProcessRunner>();
@@ -1323,15 +1316,14 @@ public sealed class UserSecretsAppSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "sample"));
+        using var written = JsonDocument.Parse(cli.LatestWritten("sample"));
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written
             .RootElement.GetProperty("Telemetry:Endpoint")
             .GetString()
             .Should()
             .Be("http://host.docker.internal:4317/synthetic-private?token=synthetic-token");
-        foreach (var (path, original) in originals)
-            File.ReadAllText(path).Should().Be(original);
+        FileSnapshots.AssertUnchanged(originals);
         processes
             .ReceivedCalls()
             .Should()
@@ -1341,29 +1333,12 @@ public sealed class UserSecretsAppSettingsCommandTests
             .And.NotContain("synthetic-token");
     }
 
-    private static string Written(UserSecretsCliHarness cli, string id) =>
-        (string)
-            cli
-                .Sbx.ReceivedCalls()
-                .Last(call =>
-                    call.GetMethodInfo().Name == nameof(ISbxClient.WriteUserSecretsAsync)
-                    && (string)call.GetArguments()[1]! == id
-                )
-                .GetArguments()[2]!;
-
     private static async Task LinkDirectory(string link, string target)
     {
         link = Path.GetFullPath(link);
         target = Path.GetFullPath(target);
-        if (OperatingSystem.IsWindows())
-        {
-            var result = await new ProcessRunner().RunAsync(
-                new ProcessRequest("cmd", ["/c", "mklink", "/J", link, target]),
-                CancellationToken.None
-            );
+        var result = await DirectoryLinks.CreateAsync(link, target);
+        if (result is not null)
             result.ExitCode.Should().Be(0, result.StandardError);
-        }
-        else
-            Directory.CreateSymbolicLink(link, target);
     }
 }

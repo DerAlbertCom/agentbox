@@ -238,14 +238,11 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
             }
 
             if (request.StandardInput is not null)
-            {
-                await process.StandardInput.WriteAsync(
-                    request.StandardInput.AsMemory(),
+                await WriteInputAsync(
+                    process.StandardInput,
+                    request.StandardInput,
                     cancellationToken
                 );
-                await process.StandardInput.FlushAsync(cancellationToken);
-                process.StandardInput.Close();
-            }
 
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -254,6 +251,34 @@ public sealed class ProcessRunner(ProcessOutput? output = null) : IProcessRunner
             // Cancellation during input or exit must not leave children or their workers running.
             await StopAsync(process);
             throw;
+        }
+    }
+
+    private static async Task WriteInputAsync(
+        StreamWriter input,
+        string value,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            await input.WriteAsync(value.AsMemory(), cancellationToken);
+            await input.FlushAsync(cancellationToken);
+        }
+        catch (IOException)
+        {
+            // A child can reject input early. Drain its output and await its exit normally.
+            cancellationToken.ThrowIfCancellationRequested();
+        }
+
+        try
+        {
+            input.Close();
+        }
+        catch (IOException)
+        {
+            // Closing flushes any buffered input, so it can observe the same broken pipe.
+            cancellationToken.ThrowIfCancellationRequested();
         }
     }
 

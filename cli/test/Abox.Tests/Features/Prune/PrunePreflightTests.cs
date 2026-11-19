@@ -227,22 +227,21 @@ public sealed class PrunePreflightTests
     private sealed class PruneCli : IDisposable
     {
         private readonly TempDirectory _directory = new();
-        private readonly ServiceProvider _provider;
+        private readonly CliTestApplication _application;
 
         public PruneCli(bool interactive = true)
         {
             Scenario = new PreflightScenario(interactive);
             SeedPrunableRuntime();
-            var services = new ServiceCollection().AddAbox(
+            _application = new CliTestApplication(
                 Scenario.Console,
+                AboxPaths.For(_directory.Path, Path.Combine(_directory.Path, "state")),
                 new TrailingArguments()
             );
-            services.AddSingleton(
-                AboxPaths.For(_directory.Path, Path.Combine(_directory.Path, "state"))
-            );
+            var services = _application.Services;
             services.AddSingleton(Scenario.Sbx);
             services.AddSingleton(Scenario.Programs);
-            _provider = services.BuildServiceProvider();
+            _ = _application.Provider;
         }
 
         // A bypass must reach real stop/removal targets, not pass on an empty inventory.
@@ -273,11 +272,11 @@ public sealed class PrunePreflightTests
         }
 
         public PreflightScenario Scenario { get; }
-        public AboxRootCommand Root => _provider.GetRequiredService<AboxRootCommand>();
+        public AboxRootCommand Root => _application.Provider.GetRequiredService<AboxRootCommand>();
 
         public void Dispose()
         {
-            _provider.Dispose();
+            _application.Dispose();
             _directory.Dispose();
         }
     }

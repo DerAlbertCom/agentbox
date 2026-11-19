@@ -14,51 +14,24 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class SandboxCreatorTests
+public sealed class SandboxCreatorTests
 {
+    private static readonly SquadBuildIdentity Identity = new("sample", "ac", "latest");
+
     private SandboxCreator Creator(
         RemoteSquadSource? remote = null,
         LocalWorkloadImages? images = null
-    ) =>
-        new(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, images ?? LocalWorkloadTest.Images(), _console),
-            remote ?? new RemoteSquadSource(new AboxConfig(), _sbx, _published),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx),
-            SandboxTest.Ports(_sbx, _console)
-        );
+    ) => _fixture.Creator(remote, images);
 
-    private readonly TempDirectory _root = new();
-    private readonly TestConsole _console = new();
-    private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
-    private readonly IPublishedSquadSource _published = PublishedSquadTest.Source();
-    private readonly AboxPaths _paths;
-    private readonly BuildStore _store;
-    private readonly SandboxRecordStore _records;
-    private readonly SandboxCreator _service;
-
-    public SandboxCreatorTests()
-    {
-        _paths = AboxPaths.For(
-            Path.Combine(_root.Path, "config"),
-            Path.Combine(_root.Path, "state")
-        );
-        _store = new BuildStore(_paths);
-        _records = new SandboxRecordStore(_paths);
-        _service = Creator();
-
-        _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new SbxOutcome(0, string.Empty));
-        _sbx.RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new SbxOutcome(0, string.Empty));
-        _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>()).Returns((IReadOnlyList<string>)[]);
-        _sbx.AddMcpServerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new SbxOutcome(0, string.Empty));
-    }
+    private readonly SandboxCreatorFixture _fixture = new();
+    private TempDirectory _root => _fixture.Root;
+    private TestConsole _console => _fixture.Console;
+    private ISbxClient _sbx => _fixture.Sbx;
+    private IPublishedSquadSource _published => _fixture.Published;
+    private AboxPaths _paths => _fixture.Paths;
+    private BuildStore _store => _fixture.Store;
+    private SandboxRecordStore _records => _fixture.Records;
+    private SandboxCreator _service => _fixture.Service;
 
     [Fact]
     public async Task ASandboxIsCreatedFromTheLocalBuild()
@@ -78,9 +51,11 @@ public sealed partial class SandboxCreatorTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == _store.Load("sample", "ac", "latest")!.LocalWorkload!.RuntimeKitDirectory
+                        == _store
+                            .Load(new SquadBuildIdentity("sample", "ac", "latest"))!
+                            .LocalWorkload!.RuntimeKitDirectory
                     && request.HostDockerContext == "test-context"
-                    && request.PullPolicy == "never"
+                    && request.PullPolicy == PullPolicy.Never
                     && request.Name == SandboxName.For(_root.Path)
                     && request.Mixins.Contains("/kits/pi-config")
                     && request.Mixins.Contains("/kits/state")
@@ -117,7 +92,7 @@ public sealed partial class SandboxCreatorTests
     {
         // Arrange
         SaveBuild();
-        var manifest = _store.Load("sample", "ac", "latest")!;
+        var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         manifest.Kits.Add(
             new ManifestKit
             {
@@ -170,7 +145,7 @@ public sealed partial class SandboxCreatorTests
             new RemoteSquadSource(
                 new AboxConfig { PullRepository = repository },
                 _sbx,
-                PublishedSquadTest.Source([
+                PublishedSquadFactory.Source([
                     new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
                 ])
             )
@@ -196,8 +171,8 @@ public sealed partial class SandboxCreatorTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
-                    && request.PullPolicy == "always"
+                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                    && request.PullPolicy == PullPolicy.Always
                     && request.HostDockerContext == null
                     && request.Mixins.Count == 0
                     && request.KitArguments.Count == 0
@@ -210,7 +185,7 @@ public sealed partial class SandboxCreatorTests
             .Load(SandboxName.For(_root.Path))!
             .KitReference.Should()
             .Be(
-                $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
+                $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
             );
     }
 
@@ -305,7 +280,7 @@ public sealed partial class SandboxCreatorTests
         exitCode.Should().Be(0);
         await _published
             .Received(1)
-            .LoadAsync(Arg.Any<string>(), "sample", "ac", "latest", Arg.Any<CancellationToken>());
+            .LoadAsync(Arg.Any<string>(), Identity, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -422,7 +397,7 @@ public sealed partial class SandboxCreatorTests
         };
         SaveBuild(mcp);
         var service = Creator(
-            new RemoteSquadSource(new AboxConfig(), _sbx, PublishedSquadTest.Source(mcp))
+            new RemoteSquadSource(new AboxConfig(), _sbx, PublishedSquadFactory.Source(mcp))
         );
         _console.Answer = false;
         var name = SandboxName.For(_root.Path);
@@ -471,20 +446,31 @@ public sealed partial class SandboxCreatorTests
         Directory.Exists(Path.Combine(_paths.StateDirectory, name)).Should().BeFalse();
     }
 
-    [Fact]
-    public async Task AllMcpRegistrationsAreValidatedReadOnlyBeforeAskingForReplacement()
+    [Theory]
+    [InlineData("missing", null, "*missing*not registered*")]
+    [InlineData("elastic,other", null, "*mcp.name*not valid*")]
+    [InlineData("other", "file:///local", "*mcp.url*not valid*")]
+    [InlineData("other", "https://user:password@example.com/mcp", "*mcp.url*not valid*")]
+    public async Task AllMcpRegistrationsAreValidatedReadOnlyBeforeAskingForReplacement(
+        string name,
+        string? url,
+        string error
+    )
     {
         // Arrange
         SaveBuild([
             new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" },
-            new ManifestMcp { Name = "missing" },
+            new ManifestMcp { Name = name, Url = url },
         ]);
 
         // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
 
         // Assert
-        (await action.Should().ThrowAsync<AboxException>()).WithMessage("*missing*not registered*");
+        (await action.Should().ThrowAsync<AboxException>())
+            .WithMessage(error)
+            .Which.Message.Should()
+            .NotContain("password");
         await _sbx.DidNotReceive()
             .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
@@ -572,22 +558,14 @@ public sealed partial class SandboxCreatorTests
         record.Tag.Should().Be("latest");
     }
 
-    private SandboxCreationRequest Request() =>
-        new(
-            new SquadResolver.ResolvedTeam("sample", "teams/sample", ["ac"]),
-            "ac",
-            _root.Path,
-            "latest",
-            FolderConfig: null,
-            Local: true
-        );
+    private SandboxCreationRequest Request() => _fixture.Request();
 
     [Fact]
     public async Task OldLocalManifestsAreRejectedWithoutTouchingAnExistingSandbox()
     {
         // Arrange
         SaveBuild();
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.LocalWorkload = null;
         _store.Save(build);
 
@@ -609,7 +587,7 @@ public sealed partial class SandboxCreatorTests
     {
         // Arrange
         SaveBuild();
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         File.AppendAllText(
             Path.Combine(build.LocalWorkload!.RuntimeKitDirectory, "workload.dockerfile"),
             "RUN install-again\n"
@@ -632,12 +610,12 @@ public sealed partial class SandboxCreatorTests
     {
         // Arrange
         SaveBuild();
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         Directory.Delete(build.LocalWorkload!.RuntimeKitDirectory, recursive: true);
         build.LocalWorkload = null;
         _store.Save(build);
-        var runner = LocalWorkloadTest.Runner();
-        var service = Creator(images: LocalWorkloadTest.Images(runner));
+        var runner = LocalWorkloadFactory.Runner();
+        var service = Creator(images: LocalWorkloadFactory.Images(runner));
 
         // Act
         var exitCode = await service.CreateAsync(
@@ -657,7 +635,7 @@ public sealed partial class SandboxCreatorTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
+                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                     && request.Mixins.Count == 0
                     && request.KitArguments.Count == 0
                     && request.HostDockerContext == null
@@ -684,10 +662,8 @@ public sealed partial class SandboxCreatorTests
         var runner = Substitute.For<IProcessRunner>();
         var programs = Substitute.For<IHostPrograms>();
         var images = new LocalWorkloadImages(programs, new OciRegistry(runner), _console);
-        var build = new BuildService(
+        var build = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(_paths),
             _store,
             images,
@@ -698,14 +674,14 @@ public sealed partial class SandboxCreatorTests
             new BuildRequest([team], _root.Path, "latest", MetadataOnly: true),
             CancellationToken.None
         );
-        _store.Load("sample", "ac", "latest")!.LocalWorkload.Should().BeNull();
+        _store.Load(Identity)!.LocalWorkload.Should().BeNull();
         _sbx.ListMcpServersAsync(Arg.Any<CancellationToken>())
             .Returns((IReadOnlyList<string>)["elastic"]);
         var service = Creator(
             new RemoteSquadSource(
                 new AboxConfig(),
                 _sbx,
-                PublishedSquadTest.Source([new ManifestMcp { Name = "elastic" }])
+                PublishedSquadFactory.Source([new ManifestMcp { Name = "elastic" }])
             ),
             images
         );
@@ -726,7 +702,7 @@ public sealed partial class SandboxCreatorTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadTest.Digest}"
+                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                     && request.Mixins.Count == 0
                     && request.KitArguments.Count == 0
                     && request.HostDockerContext == null
@@ -785,9 +761,7 @@ public sealed partial class SandboxCreatorTests
         _published
             .LoadAsync(
                 Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
+                Arg.Any<SquadBuildIdentity>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns<PublishedSquad>(_ =>
@@ -835,9 +809,7 @@ public sealed partial class SandboxCreatorTests
             .When(source =>
                 source.LoadAsync(
                     Arg.Any<string>(),
-                    Arg.Any<string>(),
-                    Arg.Any<string>(),
-                    Arg.Any<string>(),
+                    Arg.Any<SquadBuildIdentity>(),
                     Arg.Any<CancellationToken>()
                 )
             )
@@ -912,9 +884,7 @@ public sealed partial class SandboxCreatorTests
         _published
             .LoadAsync(
                 Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
-                Arg.Any<string>(),
+                Arg.Any<SquadBuildIdentity>(),
                 Arg.Any<CancellationToken>()
             )
             .Returns(
@@ -972,37 +942,6 @@ public sealed partial class SandboxCreatorTests
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
-    private void SaveBuild(List<ManifestMcp>? mcp = null, string? reference = null)
-    {
-        _store.Save(
-            new BuildManifest
-            {
-                Squad = "ac",
-                Tag = "latest",
-                Reference = reference ?? ImageName.OfTeam("sample", "latest"),
-                WorkloadKitDirectory = "/kits/workload",
-                LocalWorkload = LocalWorkloadTest.Artifact(_root),
-                StateMixinDirectory = "/kits/state",
-                Kits =
-                [
-                    new ManifestKit
-                    {
-                        Name = "pi-config",
-                        Reference = "/kits/pi-config",
-                        IsLocal = true,
-                        Arguments = new Dictionary<string, string> { ["mode"] = "team" },
-                    },
-                ],
-                State =
-                [
-                    new ManifestState
-                    {
-                        SandboxPath = "/home/agent/.config/opencode/state",
-                        RelativePath = ".config/opencode/state",
-                    },
-                ],
-                Mcp = mcp ?? [],
-            }
-        );
-    }
+    private void SaveBuild(List<ManifestMcp>? mcp = null, string? reference = null) =>
+        _fixture.SaveBuild(mcp, reference);
 }

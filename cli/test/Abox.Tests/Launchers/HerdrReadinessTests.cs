@@ -56,7 +56,7 @@ public sealed class HerdrReadinessTests
             .Calls.Should()
             .NotContain(r => r.Arguments.Count == 0 || r.Arguments.Contains("add"));
         fixture.Calls[^1].Arguments.Should().Contain("space.new");
-        var console = (TestConsole)fixture.Context.Console;
+        var console = fixture.Console;
         console
             .Errors.Should()
             .ContainSingle()

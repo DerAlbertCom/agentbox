@@ -14,63 +14,16 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class RunServiceTests
+public sealed class RunServiceTests
 {
-    private readonly TempDirectory _root = new();
-    private readonly TestConsole _console = new();
-    private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
-    private readonly RunService _service;
-    private readonly AboxPaths _paths;
-    private readonly BuildStore _store;
-    private readonly SandboxRecordStore _records;
-    private readonly SandboxCreator _create;
-    private readonly AboxConfig _config = new() { DefaultTeam = "sample" };
-
-    public RunServiceTests()
-    {
-        var launchers = new LauncherRegistry([
-            new ShellLauncher(),
-            new HerdrAppLauncher(Substitute.For<IProcessRunner>()),
-        ]);
-        var hostPrograms = Substitute.For<IHostPrograms>();
-        hostPrograms.Exists(Arg.Any<string>()).Returns(true);
-        _paths = AboxPaths.For(
-            Path.Combine(_root.Path, "config"),
-            Path.Combine(_root.Path, "state")
-        );
-        _store = new BuildStore(_paths);
-        _records = new SandboxRecordStore(_paths);
-        _create = Creator();
-        _service = new RunService(
-            launchers,
-            _config,
-            new SquadResolver(_config),
-            _store,
-            _records,
-            _create,
-            _sbx,
-            SandboxTest.Resolver(_sbx),
-            hostPrograms,
-            _console
-        );
-
-        _sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(0);
-        _sbx.HasProgramAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(true);
-    }
-
-    private SandboxCreator Creator() =>
-        new(
-            _records,
-            _paths,
-            SandboxTest.Resolver(_sbx),
-            _sbx,
-            _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
-            new RemoteSquadSource(_config, _sbx, PublishedSquadTest.Source()),
-            new UserSecretsCopy(_config, new UserSecretsHost(null, null), _sbx),
-            SandboxTest.Ports(_sbx, _console)
-        );
+    private readonly RunServiceFixture _fixture = new();
+    private TempDirectory _root => _fixture.Root;
+    private TestConsole _console => _fixture.Console;
+    private ISbxClient _sbx => _fixture.Sbx;
+    private RunService _service => _fixture.Service;
+    private BuildStore _store => _fixture.Store;
+    private SandboxRecordStore _records => _fixture.Records;
+    private SandboxCreator _create => _fixture.Create;
 
     [Fact]
     public async Task TheShellRunsInTheWorkspaceOfTheSandbox()
@@ -210,14 +163,14 @@ public sealed partial class RunServiceTests
         );
         var config = new AboxConfig();
         var service = new RunService(
-            new LauncherRegistry([new ShellLauncher()]),
+            new LauncherRegistry([new ShellLauncher(_sbx)]),
             config,
             new SquadResolver(config),
             _store,
             _records,
             _create,
             _sbx,
-            SandboxTest.Resolver(_sbx),
+            SandboxFactory.Resolver(_sbx),
             Substitute.For<IHostPrograms>(),
             _console
         );
@@ -336,14 +289,14 @@ public sealed partial class RunServiceTests
         }
 
         var service = new RunService(
-            new LauncherRegistry([new ShellLauncher()]),
+            new LauncherRegistry([new ShellLauncher(_sbx)]),
             new AboxConfig(),
             new SquadResolver(new AboxConfig()),
             _store,
             _records,
             _create,
             _sbx,
-            SandboxTest.Resolver(_sbx),
+            SandboxFactory.Resolver(_sbx),
             Substitute.For<IHostPrograms>(),
             _console
         );
@@ -412,7 +365,7 @@ public sealed partial class RunServiceTests
                 CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
                 WorkloadKitDirectory = "/kits/workload",
                 Reference = ImageName.OfTeam("sample", "latest"),
-                LocalWorkload = LocalWorkloadTest.Artifact(_root),
+                LocalWorkload = LocalWorkloadFactory.Artifact(_root),
             }
         );
 
@@ -430,7 +383,7 @@ public sealed partial class RunServiceTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource == Path.Combine(_root.Path, "runtime", "workload")
-                    && request.PullPolicy == "never"
+                    && request.PullPolicy == PullPolicy.Never
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -546,7 +499,7 @@ public sealed partial class RunServiceTests
                 CreatedAt = new DateTimeOffset(2026, 2, 1, 0, 0, 0, TimeSpan.Zero),
                 WorkloadKitDirectory = "/kits/workload",
                 Reference = ImageName.OfTeam("sample", "latest"),
-                LocalWorkload = LocalWorkloadTest.Artifact(_root),
+                LocalWorkload = LocalWorkloadFactory.Artifact(_root),
             }
         );
 

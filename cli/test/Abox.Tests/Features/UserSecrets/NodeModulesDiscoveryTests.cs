@@ -21,7 +21,7 @@ public sealed class NodeModulesDiscoveryTests
         Project(cli, "src/Api", """{"Url":"http://localhost:8004/synthetic-private"}""");
         Project(cli, dependency, "not JSON: synthetic-private");
         Authorize(cli);
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureText(cli.Root.Path);
 
         // Act
         var exit = await cli.Run("--verbose", "--force");
@@ -32,7 +32,7 @@ public sealed class NodeModulesDiscoveryTests
             .Should()
             .Be("""{"Url":"http://host.docker.internal:8004/synthetic-private"}""");
         cli.Console.AllText.Should().NotContain("synthetic-private");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public sealed class NodeModulesDiscoveryTests
                 )
             );
         Authorize(cli);
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureText(cli.Root.Path);
 
         // Act
         var exit = await cli.Run("--verbose");
@@ -86,7 +86,7 @@ public sealed class NodeModulesDiscoveryTests
                 property.Value.GetString() == "http://host.docker.internal:8004/synthetic-private"
             );
         cli.Console.AllText.Should().NotContain("synthetic-private");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -120,7 +120,7 @@ public sealed class NodeModulesDiscoveryTests
                 "<Project><PropertyGroup Condition=\"true\"><UserSecretsId>shared</UserSecretsId></PropertyGroup></Project>"
             );
         Authorize(cli);
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureText(cli.Root.Path);
 
         // Act
         var exit = await cli.Run("--verbose", "--force");
@@ -149,7 +149,7 @@ public sealed class NodeModulesDiscoveryTests
                 );
         }
         cli.Console.AllText.Should().NotContain("synthetic-");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Fact]
@@ -165,7 +165,7 @@ public sealed class NodeModulesDiscoveryTests
             """{"Url":"http://localhost:8004/synthetic-private"}"""
         );
         Authorize(cli);
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureText(cli.Root.Path);
 
         // Act
         var exit = await cli.Run("--verbose");
@@ -178,7 +178,7 @@ public sealed class NodeModulesDiscoveryTests
             .And.Contain("appsettings")
             .And.NotContain("OnlyConsumer")
             .And.NotContain("synthetic-private");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -194,14 +194,14 @@ public sealed class NodeModulesDiscoveryTests
             """{"Url":"http://localhost:8004/synthetic-private"}"""
         );
         Project(cli, $"{selectedRoot}/node_modules/Ignored", "not JSON: synthetic-private");
-        var location = cli.Root.Directory_($"folder/{selectedRoot}");
+        var location = cli.Root.CreateDirectory($"folder/{selectedRoot}");
         cli.Root.File($"folder/{selectedRoot}/abox.json", """{"userSecrets":["shared"]}""");
         var name = SandboxName.For(location);
         cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SandboxInfo(name, "running", null));
         cli.Sbx.GetUserSecretsHostPortsAsync(name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureText(cli.Root.Path);
 
         // Act
         var exit = await cli.Invoke("user-secrets", "--location", location, "--verbose");
@@ -212,7 +212,7 @@ public sealed class NodeModulesDiscoveryTests
             .Should()
             .Be("""{"Url":"http://host.docker.internal:8004/synthetic-private"}""");
         cli.Console.AllText.Should().NotContain("synthetic-private");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -240,7 +240,7 @@ public sealed class NodeModulesDiscoveryTests
         );
         cli.Root.File($"{target}/package/appsettings.json", "not JSON: synthetic-private");
         Authorize(cli);
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureText(cli.Root.Path);
         using var links = new DirectoryLinks();
         var targetPath = Path.Combine(cli.Root.Path, target, "package");
         if (linkedAncestor)
@@ -262,31 +262,19 @@ public sealed class NodeModulesDiscoveryTests
             .Should()
             .Be("""{"Url":"http://host.docker.internal:8004/synthetic-private"}""");
         cli.Console.AllText.Should().NotContain("synthetic-private").And.NotContain("Bad.csproj");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
-    private static void Project(UserSecretsCliHarness cli, string directory, string settings)
-    {
-        cli.Root.File(
+    private static void Project(UserSecretsCliHarness cli, string directory, string settings) =>
+        UserSecretProjects.Write(
+            cli.Root,
             $"folder/{directory}/Consumer.csproj",
-            "<Project><PropertyGroup><UserSecretsId>shared</UserSecretsId></PropertyGroup></Project>"
+            "shared",
+            settings
         );
-        cli.Root.File($"folder/{directory}/appsettings.json", settings);
-    }
 
     private static void Authorize(UserSecretsCliHarness cli) =>
         cli
             .Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
-
-    private static Dictionary<string, string> Sources(UserSecretsCliHarness cli) =>
-        Directory
-            .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
-            .ToDictionary(path => path, File.ReadAllText);
-
-    private static void AssertUnchanged(Dictionary<string, string> originals)
-    {
-        foreach (var (path, content) in originals)
-            File.ReadAllText(path).Should().Be(content);
-    }
 }

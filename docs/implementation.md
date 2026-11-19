@@ -20,6 +20,15 @@ raw errors and scalar fragments), prohibits attached streams and writes explicit
 UTF-8/no-BOM stdin. It is used by user-secrets transfers even with `--verbose`;
 ordinary process diagnostics and `abox secrets` keep their existing behavior.
 
+If a child closes its input early, the process runner closes stdin, continues
+draining captured output and awaits the child, returning its ordinary exit result.
+A child that exits successfully without consuming all input therefore still
+returns success; the user-secret receiver independently checks payload length and
+digest before committing a file.
+It does not print arbitrary unexpected exception messages as a fallback: those
+messages could contain secrets. Cancellation and sensitive-output suppression
+remain unchanged.
+
 ### `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal] [--metadata-only]`
 
 Normal builds run the following full image-building path. The explicit
@@ -73,6 +82,11 @@ configuration says otherwise. Teams sharing a squad/tag keep separate generated
 sources, manifests, state mixins and local image selections, including in one
 multi-team build. Separate source projects deliberately using the same team identity
 still share that team's local storage; project identity is not a storage dimension.
+
+Generated workload display names/descriptions and state paths are quoted YAML
+scalars, preserving Unicode and YAML-significant characters. This quoting changes
+the generated descriptor bytes and their source fingerprints; rebuild affected
+local manifests before publishing after upgrading from unquoted generation.
 
 Build-store reads check the manifest's squad, tag and explicit team ownership marker
 (`Reference`). If no qualified manifest exists, an old
@@ -475,15 +489,17 @@ singular-error status is not readiness. Configuration diagnostics in a valid
 for the intentional hardening and
 bounded startup/cancellation behavior.
 
-### `abox secrets list|set|remove [--team <name>] --squad <name> [--service <name>]`
+### `abox secrets list|set|remove [--team <name>] --squad <name> [--root <dir>]`
 
 The kits of a squad ask for a service with the `credential@1` capability. The `secrets`
 section of the configuration says how the value of that service is obtained. abox keeps
 the values on the host, through `sbx secret`, so they never enter a sandbox.
 The team defaults to the user setting `defaultTeam` when `--team` is omitted.
+All three subcommands accept `--root` to select the starting directory for team
+source discovery. Only `set` and `remove` accept repeatable `--service <name>`.
 
-- `list` shows the services the kits ask for, the kits that ask for them, and whether
-  the value is stored on the host.
+- `list` shows the services the local kits ask for, the kits that ask for them, and
+  whether the value is stored on the host. Registry kit descriptors are not inspected.
 - `set` asks for the values and stores them. The value goes through the standard input
   of sbx as explicit UTF-8 without a BOM or added newline, preserving non-ASCII service
   and custom secrets independently of the console code page. It stays out of process
@@ -595,7 +611,7 @@ Shared orchestration is in `UserSecrets/`, outside command slices:
   No hook framework or alternate pipeline is needed.
 - `UserSecretsReportWriter` formats the value-free store summaries once for both
   automatic and on-demand output, JSON-escaping rewritten key names.
-- `SbxClient.UserSecrets.cs` owns captured default-user exec, environment/path checks
+- Internal `SbxUserSecrets.cs`, reached through `SbxClient`, owns captured default-user exec, environment/path checks
   and the fixed receiver. All ancestor symlinks, nonregular/multiply-linked files
   and wrong-owned secret directories/files fail. It verifies stdin byte count and
   digest before same-directory atomic replacement. GNU-compatible coreutils are
@@ -749,7 +765,7 @@ documents explicitly authorized local declarations on the existing `D:\dev\rwe`
 sandbox and read-only production port discovery; no real secret copy, connectivity
 or authentication check was performed for that change.
 
-### `abox ports [--location <path>] [--offset <n>]` (#43, #44, #45, #46)
+### `abox ports [--location <path>] [--offset <n>] [--refresh-https-bootstrap]` (#43, #44, #45, #46)
 
 Resolves the existing sandbox with the shared current-first/legacy resolver and
 passes its actual identity to `ApplicationPorts/AppPorts`. Location precedence is
@@ -1048,24 +1064,33 @@ After updating the approved repository bundle, rebuild the CLI/tool and workload
 ```
 cli/src/Abox/
   Program.cs        runs the command line
+  AboxException.cs  the safe application error reported by command handling
+  Assets/           embedded workload certificate assets
   Cli/              the composition root: the service collection and the root command
   Features/
     Build/          abox build: the command and the service that does its work
     Publish/        abox publish: v3 frontend builds, JFrog pushes and set assembly
     Create/         abox create: the command and its slice registration
     Run/            abox run: the command and the service that does its work
+      CreateRecoveryHints.cs  renders run's create hint for a missing sandbox or
+                              an image that lacks a launcher's required program
     Secrets/        abox secrets: the command and the service that does its work
     UserSecrets/    abox user-secrets: on-demand command only
     Ports/          abox ports: on-demand command only
     Prune/          abox prune: the command and the service that does its work
     Sandbox/        the commands other programs call: abox exec and abox pipe
+      SandboxCommand.cs     shared hidden-command construction and argv validation;
+                            passes the named sandbox to sbx exec
     CommandHandling.cs  turns an abox error into a message and an exit code
   Configuration/    the directories and the user configuration
     FolderConfig.cs runtime-only abox.json (not squad/build configuration)
   UserSecrets/      shared selection/policy, bounded project/appsettings discovery,
                     endpoint override generation and runtime copy flow
   ApplicationPorts/ shared static discovery, occurrence reporting and publishing flow
+  Https/            shared host certificate preparation and sandbox HTTPS activation
   Kits/             the .abox and .workload files, the chain, the kit generators
+    McpDeclaration.cs      shared MCP name and HTTP(S) URL validation
+    YamlScalar.cs          shared generated-YAML scalar quoting, including supplementary Unicode
   LocalState/       local on-disk state shared by the command slices
     BuildManifest.cs
     BuildSources.cs
@@ -1075,18 +1100,36 @@ cli/src/Abox/
     SandboxRecord.cs
     SandboxRecordStore.cs
   Launchers/        one class per launcher
-  Sandboxes/        application-level sandbox orchestration shared by create and run
+    ILauncher.cs           launcher contract and data-only LauncherContext;
+                           launcher services are constructor-injected
+  Sandboxes/        orchestration and resolution shared by create, run, ports and user-secrets
     SandboxCreator.cs       the create operation shared by create and run
     SandboxResolver.cs      current-first, exact legacy fallback for existing sandboxes
     PublishedSquadSource.cs reads the published set's bundled squad metadata
+    PublishedConfigArchive.cs safely reads squad metadata from Docker-save archives
+    PublishedRuntimeMetadata.cs validates bundled state and MCP runtime declarations
     SquadSources.cs         local and remote ISquadSource adapters
   Sbx/              every call to sbx: CLI arguments, settings and response models
-  Health/           the checks every command runs first
+    SbxClient.cs    the public facade; owns the executable name and version query
+    SbxInvoker.cs   shared captured execution, JSON and failure handling
+    SbxDevelopmentCertificates.cs  protected HTTPS runtime and certificate operations
+    SbxApplicationPorts.cs         application relay and port mapping operations
+    SbxUserSecrets.cs              secret transport and network-policy operations
+    SbxKitSources.cs               repository-scoped kit-source trust settings
+    PullPolicy.cs                 closed pull choices, mapped to flags by the wrapper
+  Health/           runtime preflight for sandbox commands, secrets and normal builds;
+                    checks the queried sbx version against the required minimum
   Infrastructure/   the console, the processes, the YAML
-    OciRegistry.cs          raw Docker calls and OCI inspection primitives
+    OciRegistry.cs          intent-level Docker operations, Buildx checks and OCI inspection
+    ProcessOutput.cs        captured-output diagnostics and output policy
+    SecretRedactor.cs       credential collection and diagnostic redaction
+    PrivateStagingException.cs  structural protected-staging failure classification
     TemporaryDirectory.cs   temporary working directories and their cleanup
   Naming/           sandbox and image names
     ImageName.cs            the unqualified team reference of a local build
+    TcpPort.cs              shared TCP parsing and the 1–65535 range
+    WindowsDeviceName.cs    shared reserved device-name validation
+    SquadBuildIdentity.cs  validated team/squad/tag and shared repository naming
 ```
 
 For architecture and coding conventions, see the
@@ -1135,6 +1178,8 @@ For architecture and coding conventions, see the
 ## What is not built yet
 
 - Discovering published squads remotely when `--squad` is omitted.
+- Detecting file collisions between different kits; duplicate kit repositories are
+  already rejected when resolving a squad.
 - Pruning local builds, versioned runtime kits, host-Docker `abox-workload` images
   and registry components. `abox prune` currently removes only sbx template images.
 - The `orca` launcher, and the `hc` helper and the `openssh-server` of the base image.

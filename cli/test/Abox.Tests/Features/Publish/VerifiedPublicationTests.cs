@@ -3,6 +3,7 @@ using Abox.Features.Publish;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -310,10 +311,7 @@ public sealed class VerifiedPublicationTests
 
         public string SaveBuild(string squad)
         {
-            var workload = _root.File(
-                $"{squad}/workload.yaml",
-                "# syntax=docker/sandbox-kit:3\nschemaVersion: \"3\"\nkind: workload\n"
-            );
+            var workload = Path.Combine(_root.Path, $"{squad}/workload.yaml");
             var build = new BuildManifest
             {
                 Squad = squad,
@@ -323,9 +321,12 @@ public sealed class VerifiedPublicationTests
                 WorkloadKitDirectory = Path.GetDirectoryName(workload)!,
                 IncludesPersonalConfigurations = false,
             };
-            build.SourceHashes = BuildSources.Capture(build);
-            _store.Save(build);
-            return workload;
+            return PublicationBuilds.SaveWorkload(
+                _store,
+                build,
+                workload,
+                "# syntax=docker/sandbox-kit:3\nschemaVersion: \"3\"\nkind: workload\n"
+            );
         }
 
         public Task<int> PublishAsync(params string[] squads) =>
@@ -339,7 +340,7 @@ public sealed class VerifiedPublicationTests
 
         public void AddRegistryKit(string squad)
         {
-            var build = _store.Load("sample", squad, "latest")!;
+            var build = _store.Load(new SquadBuildIdentity("sample", squad, "latest"))!;
             build.Kits.Add(
                 new ManifestKit
                 {
@@ -348,8 +349,7 @@ public sealed class VerifiedPublicationTests
                     Arguments = new() { ["message"] = "hello" },
                 }
             );
-            build.SourceHashes = BuildSources.Capture(build);
-            _store.Save(build);
+            PublicationBuilds.SaveVerified(_store, build);
         }
 
         public void WorkloadInspection(Func<string, string> response) =>

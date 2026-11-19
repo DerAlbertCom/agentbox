@@ -274,7 +274,7 @@ public sealed class RunRecoveryHintTests
                 Tag = "release",
             }
         );
-        var sourceRoot = fixture.Cli.Root.Directory_("separate sources");
+        var sourceRoot = fixture.Cli.Root.CreateDirectory("separate sources");
         fixture.Builds.Save(
             new BuildManifest
             {

@@ -12,6 +12,8 @@ kits/
     github-enterprise-auth.yaml
   elastic-auth/
     elastic-auth.yaml
+  host-access-cape/
+    host-access-cape.yaml
 ```
 
 How to write a workload, a kit or a squad is [docs/authoring.md](../docs/authoring.md):

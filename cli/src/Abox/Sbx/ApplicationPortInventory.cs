@@ -2,6 +2,7 @@ using System.Net;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Abox.Infrastructure;
+using Abox.Naming;
 
 namespace Abox.Sbx;
 
@@ -30,7 +31,8 @@ internal static class ApplicationPortInventory
             if (
                 relays.Any(relay =>
                     relay is null
-                    || relay.RelayPort is < 55536 or > 65535
+                    || relay.RelayPort < 55536
+                    || !TcpPort.IsValid(relay.RelayPort)
                     || requested.Contains(relay.RelayPort)
                 )
                 || !relays.Select(relay => relay.ApplicationPort).Order().SequenceEqual(requested)
@@ -61,8 +63,8 @@ internal static class ApplicationPortInventory
                 || bindings.Any(binding =>
                     binding is null
                     || !IPAddress.TryParse(binding.HostIp, out _)
-                    || binding.HostPort is < 1 or > 65535
-                    || binding.SandboxPort is < 1 or > 65535
+                    || !TcpPort.IsValid(binding.HostPort)
+                    || !TcpPort.IsValid(binding.SandboxPort)
                     || binding.Protocol
                         is not ("tcp" or "tcp4" or "tcp6" or "udp" or "udp4" or "udp6")
                 )

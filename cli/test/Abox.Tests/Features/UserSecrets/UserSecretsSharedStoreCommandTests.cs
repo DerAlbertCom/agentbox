@@ -27,18 +27,18 @@ public sealed class UserSecretsSharedStoreCommandTests
         );
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
         // Act
         var exit = await cli.Run("--verbose");
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "shared")
+        cli.LatestWritten("shared")
             .Should()
             .Be("""{"Services:Url":"http://host.docker.internal:8004/synthetic-path"}""");
         cli.Console.AllText.Should().Contain("1 keys.").And.NotContain("synthetic-path");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -80,7 +80,7 @@ public sealed class UserSecretsSharedStoreCommandTests
             cli.Root.File("folder/Unrelated/appsettings.json", "not JSON: unrelated configuration");
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
                 .Returns(new[] { 8004, 4317 });
-            var originals = Sources(cli);
+            var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
             // Act
             var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
@@ -98,7 +98,7 @@ public sealed class UserSecretsSharedStoreCommandTests
                 .And.NotContain("Warning:")
                 .And.NotContain("Unrelated.csproj")
                 .And.NotContain("synthetic-");
-            AssertUnchanged(originals);
+            FileSnapshots.AssertUnchanged(originals);
         }
     }
 
@@ -131,7 +131,7 @@ public sealed class UserSecretsSharedStoreCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli, "shared")
+        cli.LatestWritten("shared")
             .Should()
             .Be(
                 """{"Postgres":"Host=host.docker.internal;Port=5432;Database=synthetic-db;Password=synthetic-password","Telemetry":"http://host.docker.internal:4317/synthetic-telemetry","Url":"http://host.docker.internal:8004/synthetic-url"}"""
@@ -211,14 +211,14 @@ public sealed class UserSecretsSharedStoreCommandTests
         cli.Root.File("folder/Unknown.csproj", "not XML: no explicit matching association");
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004, 4317 });
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
         // Act
         var exit = await cli.Run("--verbose");
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "shared"));
+        using var written = JsonDocument.Parse(cli.LatestWritten("shared"));
         written.RootElement.EnumerateObject().Should().HaveCount(2);
         written
             .RootElement.GetProperty("Safe")
@@ -239,7 +239,7 @@ public sealed class UserSecretsSharedStoreCommandTests
                         : expected.RootElement.GetString()
                 );
         cli.Console.AllText.Should().NotContain("synthetic-");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -272,14 +272,14 @@ public sealed class UserSecretsSharedStoreCommandTests
         );
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
-        var originals = Sources(cli);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
         // Act
         var exit = await cli.Run();
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli, "shared"));
+        using var written = JsonDocument.Parse(cli.LatestWritten("shared"));
         written.RootElement.EnumerateObject().Should().HaveCount(expectedCount);
         if (expectedCount > 0)
             written
@@ -289,7 +289,7 @@ public sealed class UserSecretsSharedStoreCommandTests
                 .Should()
                 .Be("http://host.docker.internal:8004/synthetic-development");
         cli.Console.AllText.Should().NotContain("Excluded").And.NotContain("synthetic-");
-        AssertUnchanged(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -316,7 +316,7 @@ public sealed class UserSecretsSharedStoreCommandTests
         exit.Should().Be(force ? 0 : 1, cli.Console.AllText);
         if (force)
         {
-            Written(cli, "shared")
+            cli.LatestWritten("shared")
                 .Should()
                 .Be("""{"Endpoint":"http://host.docker.internal:8004/synthetic-path"}""");
             cli.Console.AllText.Should().Contain("Safety override");
@@ -346,34 +346,6 @@ public sealed class UserSecretsSharedStoreCommandTests
             .Returns(new[] { 8004 });
     }
 
-    private static void Project(UserSecretsCliHarness cli, string name, string? json)
-    {
-        cli.Root.File(
-            $"folder/{name}/{name}.csproj",
-            "<Project><PropertyGroup><UserSecretsId>shared</UserSecretsId></PropertyGroup></Project>"
-        );
-        if (json is not null)
-            cli.Root.File($"folder/{name}/appsettings.json", json);
-    }
-
-    private static Dictionary<string, byte[]> Sources(UserSecretsCliHarness cli) =>
-        Directory
-            .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
-            .ToDictionary(path => path, File.ReadAllBytes);
-
-    private static void AssertUnchanged(Dictionary<string, byte[]> originals)
-    {
-        foreach (var (path, original) in originals)
-            File.ReadAllBytes(path).Should().Equal(original);
-    }
-
-    private static string Written(UserSecretsCliHarness cli, string id) =>
-        (string)
-            cli
-                .Sbx.ReceivedCalls()
-                .Last(call =>
-                    call.GetMethodInfo().Name == nameof(ISbxClient.WriteUserSecretsAsync)
-                    && (string)call.GetArguments()[1]! == id
-                )
-                .GetArguments()[2]!;
+    private static void Project(UserSecretsCliHarness cli, string name, string? json) =>
+        UserSecretProjects.Write(cli.Root, $"folder/{name}/{name}.csproj", "shared", json);
 }

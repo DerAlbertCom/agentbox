@@ -21,10 +21,7 @@ public sealed class HerdrAppLauncherTests
         };
 
         // Act
-        var result = await new HerdrAppLauncher(fixture.Runner).RunAsync(
-            context,
-            CancellationToken.None
-        );
+        var result = await fixture.Launcher.RunAsync(context, CancellationToken.None);
 
         // Assert
         result.Should().Be(0);
@@ -97,15 +94,8 @@ public sealed class HerdrAppLauncherTests
             .Returns(new ProcessResult(0, "actual", ""));
         var sbx = Substitute.For<ISbxClient>();
         sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(42);
-        var launcher = new HerdrAppLauncher(runner);
-        var context = new LauncherContext(
-            "location",
-            "actual",
-            "/workspace",
-            [],
-            sbx,
-            new TestConsole()
-        );
+        var launcher = new HerdrAppLauncher(runner, sbx, new TestConsole());
+        var context = new LauncherContext("location", "actual", "/workspace", []);
 
         // Act
         var action = () => launcher.RunAsync(context, CancellationToken.None);

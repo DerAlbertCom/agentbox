@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 using Abox.Infrastructure;
+using Abox.Naming;
 using Abox.Sandboxes;
 using NSubstitute;
 
@@ -225,7 +226,7 @@ internal sealed class PublishedArchiveScenario
     private const string Reference = "rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac:latest";
     private const string Config =
         "rwest.jfrog.io/published/agentbox-rwest-mti-ca/ac/components/config@"
-        + PublishedSquadTest.Digest;
+        + PublishedSquadFactory.Digest;
     private readonly List<ProcessRequest> _calls = [];
     private readonly PublishedSquadSource _source;
     private string? _archivePath;
@@ -242,7 +243,11 @@ internal sealed class PublishedArchiveScenario
     }
 
     public Task<PublishedSquad> LoadAsync() =>
-        _source.LoadAsync(Reference, "mti-ca", "ac", "latest", CancellationToken.None);
+        _source.LoadAsync(
+            Reference,
+            new SquadBuildIdentity("mti-ca", "ac", "latest"),
+            CancellationToken.None
+        );
 
     public void AssertReadOnlyAndCleaned()
     {
@@ -261,7 +266,7 @@ internal sealed class PublishedArchiveScenario
         if (args.Contains("--format"))
             return new ProcessResult(
                 0,
-                JsonSerializer.Serialize(new { digest = PublishedSquadTest.Digest }),
+                JsonSerializer.Serialize(new { digest = PublishedSquadFactory.Digest }),
                 ""
             );
         if (args.Contains("--raw"))

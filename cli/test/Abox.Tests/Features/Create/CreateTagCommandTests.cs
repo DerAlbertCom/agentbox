@@ -49,10 +49,9 @@ public sealed class CreateTagCommandTests
             new Preflight(console, sbx, programs),
             new Lazy<SquadResolver>(() => new SquadResolver(config.Value)),
             new Lazy<SandboxCreator>(() =>
-                new SandboxCreator(
+                TestServiceGraphs.Creator(
                     new SandboxRecordStore(paths),
                     paths,
-                    SandboxTest.Resolver(sbx),
                     sbx,
                     console,
                     new LocalSquadSource(
@@ -61,8 +60,7 @@ public sealed class CreateTagCommandTests
                         console
                     ),
                     new RemoteSquadSource(config.Value, sbx, published),
-                    new UserSecretsCopy(config.Value, new UserSecretsHost(null, null), sbx),
-                    SandboxTest.Ports(sbx, console)
+                    new UserSecretsCopy(config.Value, new UserSecretsHost(null, null), sbx)
                 )
             ),
             console

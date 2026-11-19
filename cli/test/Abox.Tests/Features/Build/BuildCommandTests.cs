@@ -35,10 +35,8 @@ public sealed class BuildCommandTests
         );
         var store = new BuildStore(paths);
         var resolver = new SquadResolver(config);
-        var service = new BuildService(
+        var service = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             store,
             new LocalWorkloadImages(programs, new OciRegistry(runner), console),
@@ -73,7 +71,7 @@ public sealed class BuildCommandTests
 
         // Assert
         exitCode.Should().Be(0);
-        var manifest = store.Load("sample", "ac", "remote")!;
+        var manifest = store.Load(new SquadBuildIdentity("sample", "ac", "remote"))!;
         manifest.LocalWorkload.Should().BeNull();
         manifest.Reference.Should().Be(ImageName.OfTeam("sample", "remote"));
         manifest.State.Should().ContainSingle();

@@ -13,23 +13,24 @@ public sealed class StatePathBuildTests : IDisposable
 {
     private readonly TempDirectory _root = new();
     private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
-    private readonly IProcessRunner _runner = LocalWorkloadTest.Runner();
+    private readonly IProcessRunner _runner = LocalWorkloadFactory.Runner();
     private readonly BuildStore _store;
     private readonly BuildService _build;
     private readonly SquadResolver _resolver = new(new AboxConfig());
 
     public StatePathBuildTests()
     {
-        var paths = AboxPaths.For(_root.Directory_("config"), Path.Combine(_root.Path, "state"));
+        var paths = AboxPaths.For(
+            _root.CreateDirectory("config"),
+            Path.Combine(_root.Path, "state")
+        );
         _store = new BuildStore(paths);
         _root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
-        _build = new BuildService(
+        _build = TestServiceGraphs.Build(
             _resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             _store,
-            LocalWorkloadTest.Images(_runner),
+            LocalWorkloadFactory.Images(_runner),
             _sbx,
             new TestConsole()
         );

@@ -18,25 +18,19 @@ public sealed class SplitSettingsCommandTests
             """{"Database_Config":{"Host":"localhost","Port":8004,"Database":"synthetic-db"}}"""
         );
         Mapped(cli);
-        var originals = Originals(cli);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
         // Act
         var exit = await cli.Run();
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
-        AssertOriginals(originals);
+        cli.LatestWritten().Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
+        FileSnapshots.AssertUnchanged(originals);
     }
 
-    private static void Project(UserSecretsCliHarness cli, string settings, string name = "Api")
-    {
-        cli.Root.File(
-            $"folder/{name}/{name}.csproj",
-            "<Project><PropertyGroup><UserSecretsId>sample</UserSecretsId></PropertyGroup></Project>"
-        );
-        cli.Root.File($"folder/{name}/appsettings.json", settings);
-    }
+    private static void Project(UserSecretsCliHarness cli, string settings, string name = "Api") =>
+        UserSecretProjects.Write(cli.Root, $"folder/{name}/{name}.csproj", "sample", settings);
 
     [Fact]
     public async Task HostOnlyFilterUsesCaseInsensitiveDevelopmentPortMetadataWithoutEmittingIt()
@@ -56,7 +50,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
+        cli.LatestWritten().Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
     }
 
     [Theory]
@@ -97,15 +91,15 @@ public sealed class SplitSettingsCommandTests
             )
         );
         Mapped(cli);
-        var originals = Originals(cli);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
         // Act
         var exit = await cli.Run();
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be(expected);
-        AssertOriginals(originals);
+        cli.LatestWritten().Should().Be(expected);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     [Theory]
@@ -136,17 +130,17 @@ public sealed class SplitSettingsCommandTests
             )
         );
         Mapped(cli);
-        var originals = Originals(cli);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
         // Act
         var exit = await cli.Run();
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli));
+        using var written = JsonDocument.Parse(cli.LatestWritten());
         written.RootElement.EnumerateObject().Should().ContainSingle();
         written.RootElement.GetProperty("DATABASE_CONFIG:host").GetString().Should().Be(expected);
-        AssertOriginals(originals);
+        FileSnapshots.AssertUnchanged(originals);
     }
 
     private static void Mapped(UserSecretsCliHarness cli) =>
@@ -190,7 +184,7 @@ public sealed class SplitSettingsCommandTests
             if (selected)
                 cli.Store("sample", pair);
             Mapped(cli);
-            var originals = Originals(cli);
+            var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
             // Act
             var exit = await cli.Run(["--force", .. verbose ? new[] { "--verbose" } : []]);
@@ -207,16 +201,9 @@ public sealed class SplitSettingsCommandTests
                 .And.NotContain("remote.test");
             if (!selected)
                 cli.Console.AllText.Should().Contain("Api.csproj");
-            AssertOriginals(originals);
+            FileSnapshots.AssertUnchanged(originals);
         }
     }
-
-    private static string Written(UserSecretsCliHarness cli) =>
-        (string)
-            cli
-                .Sbx.ReceivedCalls()
-                .Last(call => call.GetMethodInfo().Name == nameof(ISbxClient.WriteUserSecretsAsync))
-                .GetArguments()[2]!;
 
     [Theory]
     [InlineData("LOCALHOST")]
@@ -252,7 +239,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli)
+        cli.LatestWritten()
             .Should()
             .Be(
                 """{"Database_Config":{"Host":"host.docker.internal","Port":"08004","Password":"synthetic-password"}}"""
@@ -281,7 +268,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be(source);
+        cli.LatestWritten().Should().Be(source);
     }
 
     [Theory]
@@ -305,7 +292,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be(expected);
+        cli.LatestWritten().Should().Be(expected);
     }
 
     [Theory]
@@ -345,7 +332,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be("{}");
+        cli.LatestWritten().Should().Be("{}");
         cli.Console.AllText.Should().NotContain("unsupported");
     }
 
@@ -376,7 +363,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        using var written = JsonDocument.Parse(Written(cli));
+        using var written = JsonDocument.Parse(cli.LatestWritten());
         written
             .RootElement.GetProperty(section + ":" + hostKey)
             .GetString()
@@ -421,7 +408,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli)
+        cli.LatestWritten()
             .Should()
             .Be(eligible ? """{"DATABASE_CONFIG:HOST":"host.docker.internal"}""" : "{}");
     }
@@ -454,7 +441,7 @@ public sealed class SplitSettingsCommandTests
         exit.Should().Be(force ? 0 : 1, cli.Console.AllText);
         if (force)
         {
-            Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
+            cli.LatestWritten().Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
             cli.Console.AllText.Should().Contain("Safety override");
         }
         else
@@ -520,7 +507,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         firstExit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
+        cli.LatestWritten().Should().Be("""{"Database_Config:Host":"host.docker.internal"}""");
 
         // Arrange
         cli.Root.File(
@@ -533,7 +520,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         refreshExit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be("{}");
+        cli.LatestWritten().Should().Be("{}");
     }
 
     [Theory]
@@ -561,7 +548,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli).Should().Be("""{"Database_Config:Port":8004}""");
+        cli.LatestWritten().Should().Be("""{"Database_Config:Port":8004}""");
     }
 
     [Theory]
@@ -602,7 +589,7 @@ public sealed class SplitSettingsCommandTests
         // Assert
         exit.Should().Be(selectedPort ? 0 : 1, cli.Console.AllText);
         if (selectedPort)
-            Written(cli)
+            cli.LatestWritten()
                 .Should()
                 .Be(
                     """{"Database_Config:Host":"host.docker.internal","Database_Config:Port":8004}"""
@@ -661,7 +648,7 @@ public sealed class SplitSettingsCommandTests
             );
             cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
                 .Returns(new[] { 8004, 8006 });
-            var originals = Originals(cli);
+            var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
 
             // Act
             var exit = await cli.Run("--verbose", "--force");
@@ -669,7 +656,7 @@ public sealed class SplitSettingsCommandTests
             // Assert
             exit.Should().Be(compatible ? 0 : 1, cli.Console.AllText);
             if (compatible)
-                Written(cli)
+                cli.LatestWritten()
                     .Should()
                     .Be(
                         secretPort && !filterPort
@@ -686,7 +673,7 @@ public sealed class SplitSettingsCommandTests
                     .And.Contain("Worker.csproj");
             }
             cli.Console.AllText.Should().NotContain("remote.test");
-            AssertOriginals(originals);
+            FileSnapshots.AssertUnchanged(originals);
         }
     }
 
@@ -719,7 +706,7 @@ public sealed class SplitSettingsCommandTests
 
             // Assert
             exit.Should().Be(0, cli.Console.AllText);
-            Written(cli).Should().Be(selected ? pair : "{}");
+            cli.LatestWritten().Should().Be(selected ? pair : "{}");
             cli.Console.AllText.Should()
                 .NotContain("synthetic-private")
                 .And.NotContain("synthetic-password");
@@ -759,7 +746,7 @@ public sealed class SplitSettingsCommandTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        Written(cli)
+        cli.LatestWritten()
             .Should()
             .Be(
                 selectedPort
@@ -767,16 +754,5 @@ public sealed class SplitSettingsCommandTests
                     : """{"Database_Config:Host":"host.docker.internal"}"""
             );
         cli.Console.AllText.Should().NotContain("Warning:").And.NotContain("SyntheticPrivateId");
-    }
-
-    private static Dictionary<string, byte[]> Originals(UserSecretsCliHarness cli) =>
-        Directory
-            .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
-            .ToDictionary(path => path, File.ReadAllBytes);
-
-    private static void AssertOriginals(Dictionary<string, byte[]> originals)
-    {
-        foreach (var (path, original) in originals)
-            File.ReadAllBytes(path).Should().Equal(original);
     }
 }

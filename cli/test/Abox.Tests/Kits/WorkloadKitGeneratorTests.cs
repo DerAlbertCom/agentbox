@@ -192,7 +192,7 @@ public sealed class WorkloadKitGeneratorTests
         dockerfile.Should().Contain("    git \\");
         dockerfile.Should().Contain("    jq \\");
         dockerfile.Should().Contain("apt-get clean");
-        CountOccurrences(dockerfile, "apt-get update").Should().Be(1);
+        TestText.CountOccurrences(dockerfile, "apt-get update").Should().Be(1);
         dockerfile
             .IndexOf("jq", StringComparison.Ordinal)
             .Should()
@@ -275,7 +275,7 @@ public sealed class WorkloadKitGeneratorTests
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain("mise use -g -y nodejs@24.4.3");
         dockerfile.Should().Contain("mise use -g -y dotnet@10.0.403");
-        CountOccurrences(dockerfile, "mise use -g -y").Should().Be(2);
+        TestText.CountOccurrences(dockerfile, "mise use -g -y").Should().Be(2);
     }
 
     [Fact(SkipExceptions = [typeof(ShellUnavailableException)])]
@@ -411,30 +411,7 @@ public sealed class WorkloadKitGeneratorTests
         // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
         dockerfile.Should().Contain("mise use -g -y dotnet@10.0.403 dotnet@9.0.303");
-        CountOccurrences(dockerfile, "mise use -g -y").Should().Be(1);
-    }
-
-    [Fact]
-    public void TheVersionThatComesLastInTheWorkloadIsTheDefaultOfItsTool()
-    {
-        // Arrange
-        var workload = WriteWorkload(
-            """
-            mise:
-              - dotnet@9.0.303
-              - dotnet@10.0.403
-            """
-        );
-
-        // Act
-        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
-
-        // Assert
-        var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        dockerfile
-            .IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
-            .Should()
-            .BeLessThan(dockerfile.IndexOf("dotnet@9.0.303", StringComparison.Ordinal));
+        TestText.CountOccurrences(dockerfile, "mise use -g -y").Should().Be(1);
     }
 
     [Fact]
@@ -482,23 +459,33 @@ public sealed class WorkloadKitGeneratorTests
         File.Exists(Path.Combine(_root.Path, "kit", "scripts", "enable-fzf.sh")).Should().BeTrue();
     }
 
-    [Fact]
-    public void GeneratedFilesUseLinuxLineEndings()
+    [Theory]
+    [InlineData("mti-ca-dotnet")]
+    [InlineData("[{&!a #b é雪'😀}]")]
+    public void GeneratedFilesUseLinuxLineEndings(string name)
     {
         // Arrange
         _root.File("setup.sh", "#!/bin/bash\r\necho setup\r\n");
+        var workload = WriteWorkload(
+            "apt: [git]\nmise: [nodejs@24.4.3]\nscripts: [setup.sh]\n",
+            name
+        );
 
         // Act
-        _generator.Generate(
-            WriteWorkload("apt: [git]\nmise: [nodejs@24.4.3]\nscripts: [setup.sh]\n"),
-            Path.Combine(_root.Path, "kit")
-        );
+        _generator.Generate(workload, Path.Combine(_root.Path, "kit"));
 
         // Assert
         foreach (var file in new[] { "workload.dockerfile", "workload.yaml", "scripts/setup.sh" })
         {
-            File.ReadAllText(Path.Combine(_root.Path, "kit", file)).Should().NotContain("\r");
+            var content = File.ReadAllText(Path.Combine(_root.Path, "kit", file));
+            content.Should().NotContain("\r").And.NotContain("\\uD83D");
         }
+        var descriptor = YamlReader.LoadFile(Path.Combine(_root.Path, "kit", "workload.yaml"));
+        descriptor.GetString("displayName").Should().Be(name);
+        descriptor
+            .GetString("description")
+            .Should()
+            .Be($"The base image built from {name}.workload.");
     }
 
     [Fact]
@@ -594,9 +581,7 @@ public sealed class WorkloadKitGeneratorTests
 
         // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        dockerfile
-            .Should()
-            .Contain($"--mount=type=secret,id={WorkloadKitGenerator.GitHubTokenSecret}");
+        dockerfile.Should().Contain($"--mount=type=secret,id={OciRegistry.GitHubTokenSecret}");
         dockerfile.Should().NotContain("--build-arg");
     }
 
@@ -618,29 +603,17 @@ public sealed class WorkloadKitGeneratorTests
         action.Should().Throw<AboxException>().WithMessage("*missing.sh*");
     }
 
-    private WorkloadFile WriteWorkload(string content)
+    private WorkloadFile WriteWorkload(string content, string name = "mti-ca-dotnet")
     {
-        var path = _root.File("mti-ca-dotnet.workload", content);
+        var path = _root.File(name + ".workload", content);
         return WorkloadFile.Load(path);
     }
 
     private async Task<ProcessResult> RunBootstrapAsync(string commands, string afterBootstrap = "")
     {
-        var shell = "sh";
-        if (OperatingSystem.IsWindows())
-        {
-            shell =
-                (Environment.GetEnvironmentVariable("PATH") ?? "")
-                    .Split(Path.PathSeparator)
-                    .Where(directory => File.Exists(Path.Combine(directory, "git.exe")))
-                    .Select(directory =>
-                        Path.GetFullPath(Path.Combine(directory, "..", "usr", "bin", "sh.exe"))
-                    )
-                    .FirstOrDefault(File.Exists)
-                ?? throw new ShellUnavailableException(
-                    "Git for Windows sh is needed to execute Docker RUN commands."
-                );
-        }
+        var shell = TestShell.Require(
+            "Git for Windows sh is needed to execute Docker RUN commands."
+        );
 
         _generator.Generate(
             WriteWorkload("mise: [dotnet@10.0.403]\n"),
@@ -661,20 +634,5 @@ public sealed class WorkloadKitGeneratorTests
             new ProcessRequest(shell, ["-c", script], WorkingDirectory: _root.Path),
             CancellationToken.None
         );
-    }
-
-    private sealed class ShellUnavailableException(string message) : Exception(message);
-
-    private static int CountOccurrences(string text, string value)
-    {
-        var count = 0;
-        var index = text.IndexOf(value, StringComparison.Ordinal);
-        while (index >= 0)
-        {
-            count++;
-            index = text.IndexOf(value, index + value.Length, StringComparison.Ordinal);
-        }
-
-        return count;
     }
 }

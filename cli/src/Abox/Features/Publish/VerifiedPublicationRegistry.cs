@@ -27,8 +27,12 @@ internal sealed class VerifiedPublicationRegistry(
     string? builder
 )
 {
-    internal Task<ProcessResult> RequireBuildxAsync(CancellationToken cancellationToken) =>
-        RunAsync(["buildx", "version"], false, cancellationToken);
+    private static readonly OciFailure OperationFailure = new(exitCode =>
+        $"Publishing failed (docker buildx, exit code {exitCode}). Check the Buildx builder and run 'docker login {RegistryImageName.Registry}' with a JFrog identity allowed to push to the workload's publishRepository."
+    );
+
+    internal Task RequireBuildxAsync(CancellationToken cancellationToken) =>
+        registry.RequireBuildxAsync(OperationFailure, cancellationToken);
 
     internal async Task ValidateRegistryKitsAsync(
         IEnumerable<ManifestKit> kits,
@@ -56,23 +60,18 @@ internal sealed class VerifiedPublicationRegistry(
             request.PublicationDirectory,
             Guid.NewGuid().ToString("N") + ".json"
         );
-        var arguments = new List<string> { "buildx", "build" };
-        if (builder is not null)
-            arguments.AddRange(["--builder", builder]);
-        arguments.AddRange([
-            "--file",
-            PublicationSources.Descriptor(request.Directory),
-            "--tag",
-            request.Reference,
-            "--metadata-file",
-            metadata,
-            "--provenance=mode=min",
-            "--push",
-        ]);
-        if (request.Kind == PublicationImageKind.Workload)
-            arguments.AddRange(WorkloadKitGenerator.GitHubBuildSecretArguments());
-        arguments.Add(request.Directory);
-        await RunAsync(arguments, true, cancellationToken);
+        await registry.BuildAndPushAsync(
+            new OciPushBuild(
+                request.Directory,
+                PublicationSources.Descriptor(request.Directory),
+                request.Reference,
+                metadata,
+                builder,
+                request.Kind == PublicationImageKind.Workload
+            ),
+            OperationFailure,
+            cancellationToken
+        );
 
         var pinned = OciRegistry.Pin(
             request.Reference,
@@ -90,12 +89,9 @@ internal sealed class VerifiedPublicationRegistry(
     {
         // Only a previously verified immutable candidate reaches this stage. A failure after
         // promotion cannot roll back this tag, nor any earlier squad's successful publication.
-        await RunAsync(
-            OciRegistry.ImageToolsArguments(
-                builder,
-                ["create", "--prefer-index=false", "--tag", requestedReference, candidate]
-            ),
-            true,
+        await registry.TagAsync(
+            new OciTag(candidate, requestedReference, builder),
+            OperationFailure,
             cancellationToken
         );
         await InspectAsync(
@@ -145,8 +141,11 @@ internal sealed class VerifiedPublicationRegistry(
             throw new AboxException(
                 $"Registry artifact '{reference}' has too many nested image indexes."
             );
-        var result = CheckResult(
-            await registry.InspectAsync(reference, true, builder, cancellationToken)
+        var result = await registry.InspectAsync(
+            new OciImage(reference, builder),
+            true,
+            OperationFailure,
+            cancellationToken
         );
         try
         {
@@ -230,19 +229,4 @@ internal sealed class VerifiedPublicationRegistry(
     private static bool IsBuildPhaseArgument(JsonElement declaration) =>
         declaration.TryGetProperty("buildArg", out _)
         || declaration.TryGetProperty("buildSecret", out _);
-
-    private async Task<ProcessResult> RunAsync(
-        IReadOnlyList<string> arguments,
-        bool attachConsole,
-        CancellationToken cancellationToken
-    ) => CheckResult(await registry.RunAsync(arguments, attachConsole, cancellationToken));
-
-    private static ProcessResult CheckResult(ProcessResult result)
-    {
-        if (!result.Succeeded)
-            throw new AboxException(
-                $"Publishing failed (docker buildx, exit code {result.ExitCode}). Check the Buildx builder and run 'docker login {RegistryImageName.Registry}' with a JFrog identity allowed to push to the workload's publishRepository.{Environment.NewLine}{(result.StandardError + result.StandardOutput).Trim()}"
-            );
-        return result;
-    }
 }

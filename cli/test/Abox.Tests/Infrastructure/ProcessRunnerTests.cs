@@ -6,6 +6,62 @@ namespace Abox.Tests;
 
 public sealed class ProcessRunnerTests
 {
+    [Fact]
+    public async Task SensitiveAttachedConsoleIsRejectedBeforeTheChildStarts()
+    {
+        // Arrange
+        using var root = new TempDirectory();
+        var console = new TestConsole();
+        var runner = new ProcessRunner(new ProcessOutput(console) { Verbose = true });
+        var request = new ProcessRequest(
+            OperatingSystem.IsWindows() ? "cmd" : "sh",
+            OperatingSystem.IsWindows()
+                ? ["/c", "echo started > started.txt"]
+                : ["-c", "touch started.txt"],
+            WorkingDirectory: root.Path,
+            AttachConsole: true,
+            OutputPolicy: ProcessOutputPolicy.Sensitive
+        );
+
+        // Act
+        var action = () => runner.RunAsync(request, CancellationToken.None);
+
+        // Assert
+        await action.Should().ThrowAsync<AboxException>().WithMessage("*suppressed*");
+        File.Exists(Path.Combine(root.Path, "started.txt")).Should().BeFalse();
+        console.AllText.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SensitiveStartFailureDoesNotExposeRawExceptionDetailsEvenInVerboseMode()
+    {
+        // Arrange
+        using var root = new TempDirectory();
+        var console = new TestConsole();
+        var runner = new ProcessRunner(new ProcessOutput(console) { Verbose = true });
+        var request = new ProcessRequest(
+            Path.Combine(root.Path, "synthetic-private-missing-executable"),
+            ["123456789 true"],
+            StandardInput: "synthetic-password",
+            OutputPolicy: ProcessOutputPolicy.Sensitive
+        );
+
+        // Act
+        var action = () => runner.RunAsync(request, CancellationToken.None);
+
+        // Assert
+        var error = await action.Should().ThrowAsync<AboxException>();
+        error
+            .Which.ToString()
+            .Should()
+            .Contain("suppressed")
+            .And.NotContain("synthetic-private")
+            .And.NotContain(root.Path)
+            .And.NotContain("synthetic-password")
+            .And.NotContain("123456789 true");
+        console.AllText.Should().BeEmpty();
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -195,22 +251,40 @@ public sealed class ProcessRunnerTests
         }
     }
 
-    [Fact]
-    public async Task TheStandardInputOfTheChildIsWritten()
+    [Theory]
+    [InlineData(0, ProcessOutputPolicy.Normal)]
+    [InlineData(0, ProcessOutputPolicy.Sensitive)]
+    [InlineData(23, ProcessOutputPolicy.Normal)]
+    [InlineData(23, ProcessOutputPolicy.Sensitive)]
+    public async Task StandardInputCompletionReturnsTheChildResult(
+        int exitCode,
+        ProcessOutputPolicy outputPolicy
+    )
     {
         // Arrange
+        var exitsEarly = exitCode != 0;
+        var command = exitsEarly ? "echo input rejected >&2 & exit /b 23" : "sort";
         var request = new ProcessRequest(
             OperatingSystem.IsWindows() ? "cmd" : "sh",
-            OperatingSystem.IsWindows() ? ["/c", "sort"] : ["-c", "cat"],
-            StandardInput: "the value"
+            OperatingSystem.IsWindows()
+                ? ["/c", command]
+                : ["-c", exitsEarly ? "echo 'input rejected' >&2; exit 23" : "cat"],
+            StandardInput: exitsEarly ? new string('x', 4 * 1024 * 1024) : "the value",
+            OutputPolicy: outputPolicy
         );
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(15));
 
         // Act
-        var result = await new ProcessRunner().RunAsync(request, CancellationToken.None);
+        var result = await new ProcessRunner().RunAsync(request, cancellation.Token);
 
         // Assert
-        result.Succeeded.Should().BeTrue();
-        result.StandardOutput.Should().Contain("the value");
+        result.ExitCode.Should().Be(exitCode);
+        if (outputPolicy == ProcessOutputPolicy.Sensitive)
+            (result.StandardOutput + result.StandardError).Should().BeEmpty();
+        else if (exitsEarly)
+            result.StandardError.Should().Contain("input rejected");
+        else
+            result.StandardOutput.Should().Contain("the value");
     }
 
     [Fact]

@@ -5,6 +5,7 @@ using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -38,16 +39,14 @@ public sealed class BuildTagCommandTests
         var programs = Substitute.For<IHostPrograms>();
         programs.Exists("sbx").Returns(true);
         programs.Exists("docker").Returns(true);
-        var runner = LocalWorkloadTest.Runner();
+        var runner = LocalWorkloadFactory.Runner();
         var sbx = Substitute.For<ISbxClient>();
         sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
         sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
         var resolver = new SquadResolver(new AboxConfig());
         var store = new BuildStore(paths);
-        var service = new BuildService(
+        var service = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             store,
             new LocalWorkloadImages(programs, new OciRegistry(runner), console),
@@ -72,7 +71,7 @@ public sealed class BuildTagCommandTests
 
         // Assert
         exitCode.Should().Be(0, console.AllText);
-        var manifest = store.Load("sample", "ac", tag)!;
+        var manifest = store.Load(new SquadBuildIdentity("sample", "ac", tag))!;
         manifest.Tag.Should().Be(tag);
         File.ReadAllText(Path.Combine(manifest.WorkloadKitDirectory, "workload.yaml"))
             .Should()
@@ -123,10 +122,8 @@ public sealed class BuildTagCommandTests
         var console = new TestConsole();
         var config = new AboxConfig();
         var resolver = new SquadResolver(config);
-        var build = new BuildService(
+        var build = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             new BuildStore(paths),
             new LocalWorkloadImages(programs, new OciRegistry(runner), console),

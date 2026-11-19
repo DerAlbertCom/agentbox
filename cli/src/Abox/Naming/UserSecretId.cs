@@ -14,18 +14,7 @@ internal static partial class UserSecretId
     }
 
     internal static bool IsValid(string id) =>
-        SafeId().IsMatch(id) && !id.EndsWith('.') && !IsDeviceName(id);
-
-    private static bool IsDeviceName(string id)
-    {
-        var name = id.Split('.')[0].ToUpperInvariant();
-        return name is "CON" or "PRN" or "AUX" or "NUL"
-            || (
-                name.Length == 4
-                && (name.StartsWith("COM") || name.StartsWith("LPT"))
-                && name[3] is >= '0' and <= '9'
-            );
-    }
+        SafeId().IsMatch(id) && !id.EndsWith('.') && !WindowsDeviceName.IsReserved(id);
 
     [GeneratedRegex(@"\A[A-Za-z0-9][A-Za-z0-9_.-]{0,127}\z", RegexOptions.CultureInvariant)]
     private static partial Regex SafeId();
