@@ -11,20 +11,6 @@ public static class RegistryImageName
         repository is not null
         && Regex.IsMatch(repository, @"\A[a-z0-9]+(?:(?:[._]|__|-+)[a-z0-9]+)*\z");
 
-    public static string SquadRepository(string team, string squad)
-    {
-        var name = $"agentbox-{ImageName.Tenant}-{team}".ToLowerInvariant();
-        var leaf = squad.ToLowerInvariant();
-        if (!IsValidRepository(name) || !IsValidRepository(leaf))
-        {
-            throw new AboxException(
-                $"The team/squad '{team}/{squad}' is not a valid registry repository name."
-            );
-        }
-
-        return name + "/" + leaf;
-    }
-
     /// <summary>The exact JFrog repository scope used for pulling and source trust.</summary>
     public static string PullRepositoryPrefix(string repository)
     {
@@ -38,13 +24,13 @@ public static class RegistryImageName
         return $"{Registry}/{repository}/";
     }
 
-    public static string OfSquad(string repository, string team, string squad, string tag)
+    public static string OfSquad(string repository, SquadBuildIdentity identity)
     {
         var prefix = PullRepositoryPrefix(repository);
 
-        ValidateTag(tag);
+        identity.Validate();
 
-        return $"{prefix}{SquadRepository(team, squad)}:{tag}";
+        return $"{prefix}{identity.Repository}:{identity.Tag}";
     }
 
     /// <summary>Rejects tags that cannot name either a registry image or a local build.</summary>

@@ -1,3 +1,5 @@
+using Abox.Kits;
+
 namespace Abox.Sbx;
 
 /// <summary>
@@ -120,7 +122,6 @@ public interface ISbxClient
     );
 
     Task<SbxOutcome> SetCustomSecretAsync(
-        string service,
         string? host,
         string? environmentVariable,
         string value,
@@ -128,9 +129,7 @@ public interface ISbxClient
     );
 
     Task<SbxOutcome> RemoveSecretAsync(
-        string service,
-        string? host,
-        string? environmentVariable,
+        SecretDeclaration declaration,
         CancellationToken cancellationToken
     );
 

@@ -1,6 +1,3 @@
-using Abox.Infrastructure;
-using Abox.Sbx;
-
 namespace Abox.Launchers;
 
 /// <summary>
@@ -17,15 +14,11 @@ public sealed record HostRequirement(string Program, string InstallHint);
 /// <param name="SandboxName">The name of the sandbox.</param>
 /// <param name="WorkspacePath">Where the workspace is inside the sandbox.</param>
 /// <param name="Argv">The arguments after <c>--</c>.</param>
-/// <param name="Sbx">The sbx wrapper.</param>
-/// <param name="Console">The terminal.</param>
 public sealed record LauncherContext(
     string Location,
     string SandboxName,
     string WorkspacePath,
-    IReadOnlyList<string> Argv,
-    ISbxClient Sbx,
-    IConsole Console
+    IReadOnlyList<string> Argv
 );
 
 /// <summary>

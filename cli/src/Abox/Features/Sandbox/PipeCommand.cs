@@ -13,42 +13,6 @@ namespace Abox.Features.Sandbox;
 public sealed class PipeCommand : Command
 {
     public PipeCommand(ISbxClient sbx, TrailingArguments trailing, IConsole console)
-        : base("pipe", "Run a command in a sandbox, with the standard streams attached.")
-    {
-        Hidden = true;
-
-        var sandbox = new Argument<string>("sandbox")
-        {
-            Description = "The sandbox to run the command in.",
-        };
-
-        Arguments.Add(sandbox);
-
-        SetAction(
-            async (parseResult, cancellationToken) =>
-            {
-                var argv = trailing.Values;
-                if (argv.Count == 0)
-                {
-                    console.WriteError(
-                        "error: no command given. Use: abox pipe <sandbox> -- <command>"
-                    );
-                    return 1;
-                }
-
-                return await CommandHandling.RunAsync(
-                    async () =>
-                        await sbx.ExecAsync(
-                            new SbxExecRequest(
-                                parseResult.GetValue(sandbox)!,
-                                argv,
-                                KeepStandardInputOpen: true
-                            ),
-                            cancellationToken
-                        ),
-                    console
-                );
-            }
-        );
-    }
+        : base("pipe", "Run a command in a sandbox, with the standard streams attached.") =>
+        SandboxCommand.Configure(this, sbx, trailing, console, keepStandardInputOpen: true);
 }

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Abox.Configuration;
 using Abox.Https;
 using Abox.Infrastructure;
+using Abox.Naming;
 using Abox.Sbx;
 
 namespace Abox.ApplicationPorts;
@@ -36,7 +37,7 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console, DevelopmentHttps 
         var plan = await AppPortDiscovery.DiscoverAsync(location, cancellationToken);
         var occurrences = plan.Occurrences;
         foreach (var occurrence in occurrences)
-            if ((long)occurrence.Port + offset is < 1 or > 65535)
+            if (!TcpPort.IsValid((long)occurrence.Port + offset))
                 throw new AboxException(
                     $"Invalid host port for {JsonSerializer.Serialize(occurrence.SourceFile)}: sandbox port {occurrence.Port} plus offset {offset} must be in 1..65535. Fix the port or offset before publishing; no ports were published."
                 );

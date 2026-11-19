@@ -25,10 +25,8 @@ public sealed class BuildTagServiceTests
         var runner = Substitute.For<IProcessRunner>();
         var programs = Substitute.For<IHostPrograms>();
         var console = new TestConsole();
-        var service = new BuildService(
+        var service = TestServiceGraphs.Build(
             new SquadResolver(new AboxConfig()),
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             new BuildStore(paths),
             new LocalWorkloadImages(programs, new OciRegistry(runner), console),

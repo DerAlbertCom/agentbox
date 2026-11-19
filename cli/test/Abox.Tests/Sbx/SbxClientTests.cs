@@ -1,5 +1,6 @@
 using Abox.Configuration;
 using Abox.Infrastructure;
+using Abox.Kits;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -92,16 +93,13 @@ public sealed class SbxClientTests : IDisposable
                 "inspect" => _client.InspectKitAsync("kit", cancellationToken),
                 "set-secret" => _client.SetSecretAsync("service", "value", cancellationToken),
                 "set-custom-secret" => _client.SetCustomSecretAsync(
-                    "service",
                     "host",
                     "ENV",
                     "value",
                     cancellationToken
                 ),
                 "remove-secret" => _client.RemoveSecretAsync(
-                    "service",
-                    null,
-                    null,
+                    new SecretDeclaration("service"),
                     cancellationToken
                 ),
                 "add-mcp" => _client.AddMcpServerAsync(
@@ -119,9 +117,12 @@ public sealed class SbxClientTests : IDisposable
     }
 
     [Theory]
-    [InlineData("rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest", "always")]
-    [InlineData("/kits/workload", "never")]
-    public async Task CreationPassesTheExplicitPullPolicy(string source, string pullPolicy)
+    [InlineData(
+        "rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest",
+        PullPolicy.Always
+    )]
+    [InlineData("/kits/workload", PullPolicy.Never)]
+    public async Task CreationPassesTheExplicitPullPolicy(string source, PullPolicy pullPolicy)
     {
         // Arrange
         _runner
@@ -158,7 +159,7 @@ public sealed class SbxClientTests : IDisposable
                             "--name",
                             "sample",
                             "--pull",
-                            pullPolicy,
+                            pullPolicy == PullPolicy.Always ? "always" : "never",
                         }
                     )
                 ),

@@ -5,7 +5,7 @@ using Abox.Naming;
 
 namespace Abox.Features.Publish;
 
-internal sealed record SelectedPublicationBuild(string Team, BuildManifest Build);
+internal sealed record SelectedPublicationBuild(SquadBuildIdentity Identity, BuildManifest Build);
 
 /// <summary>Validates the entire selection, then prepares private fingerprint-checked sources.</summary>
 internal sealed class PublicationSources(BuildStore store)
@@ -15,10 +15,9 @@ internal sealed class PublicationSources(BuildStore store)
         RejectCaseCollisions(request);
         var builds = request
             .Teams.SelectMany(team =>
-                team.Squads.Select(squad => new SelectedPublicationBuild(
-                    team.Name,
-                    LoadBuild(team.Name, squad, request.Tag)
-                ))
+                team.Squads.Select(squad =>
+                    SelectBuild(new SquadBuildIdentity(team.Name, squad, request.Tag))
+                )
             )
             .ToList();
         if (builds.Count == 0)
@@ -49,11 +48,15 @@ internal sealed class PublicationSources(BuildStore store)
         return snapshots;
     }
 
-    private BuildManifest LoadBuild(string team, string squad, string tag)
+    private SelectedPublicationBuild SelectBuild(SquadBuildIdentity identity) =>
+        new(identity, LoadBuild(identity));
+
+    private BuildManifest LoadBuild(SquadBuildIdentity identity)
     {
-        RegistryImageName.SquadRepository(team, squad);
+        var (team, squad, tag) = identity;
+        _ = identity.Repository;
         var build =
-            store.Load(team, squad, tag)
+            store.Load(identity)
             ?? throw new AboxException(
                 $"No local build of '{squad}:{tag}'. Run 'abox build --team {team} --tag {tag} --no-personal' first."
             );
@@ -65,6 +68,8 @@ internal sealed class PublicationSources(BuildStore store)
             throw new AboxException(
                 $"The local build '{squad}:{tag}' has no valid publishRepository. Set 'publishRepository' in its .workload file and run 'abox build --team {team} --tag {tag} --no-personal' again before publishing."
             );
+        foreach (var server in build.Mcp)
+            new McpDeclaration(server.Name, server.Url).Validate($"local build {squad}:{tag}");
         Descriptor(build.WorkloadKitDirectory);
         foreach (var kit in build.Kits.Where(kit => kit.IsLocal))
             Descriptor(kit.Reference);

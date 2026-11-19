@@ -44,9 +44,12 @@ public sealed class SquadResolver(AboxConfig config)
         var team = _sources.TeamDirectory(rootDirectory, teamName);
 
         var projectChain = _sources.LoadProjectChain(team.Folder, squadName);
-        var personalChains = personalConfigurations.Select(_sources.LoadPersonalChain).ToList();
+        var personalChains = _sources.LoadPersonalChains(personalConfigurations);
 
-        var files = projectChain.Concat(personalChains.SelectMany(chain => chain)).ToList();
+        var personalFiles = personalChains
+            .SelectMany(chain => chain)
+            .DistinctBy(file => file.Path, StringComparer.OrdinalIgnoreCase);
+        var files = projectChain.Concat(personalFiles).ToList();
 
         var workload = ResolveWorkload(projectChain, personalChains, team.RootDirectory);
         var parameters = MergeParameters(files);
@@ -63,7 +66,6 @@ public sealed class SquadResolver(AboxConfig config)
             team.RootDirectory,
             workload,
             kits,
-            parameters,
             mcp,
             state,
             files.Select(file => file.Path).ToList(),
@@ -159,14 +161,14 @@ public sealed class SquadResolver(AboxConfig config)
             {
                 origins.Add(server.Name, file.Path, $"MCP server '{server.Name}'");
 
-                servers.Add(
-                    new McpDeclaration(
-                        server.Name,
-                        server.Url is null
-                            ? null
-                            : ParameterReference.Expand(server.Url, parameters, file.Path)
-                    )
+                var declaration = new McpDeclaration(
+                    server.Name,
+                    server.Url is null
+                        ? null
+                        : ParameterReference.Expand(server.Url, parameters, file.Path)
                 );
+                declaration.Validate(file.Path);
+                servers.Add(declaration);
             }
         }
 

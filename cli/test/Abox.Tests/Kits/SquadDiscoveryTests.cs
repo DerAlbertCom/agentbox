@@ -20,10 +20,10 @@ public sealed class SquadDiscoveryTests
         root.File($"{teams}/sample/cape.abox", "workload: shared\n");
         root.File($"{teams}/other/cape.abox", "workload: wrong\n");
         var workload = root.File($"{kits}/shared.workload", "template: example.com/base:1\n");
-        var projectKit = root.Directory_($"{kits}/project-kit");
-        var personalKit = root.Directory_($"{kits}/personal-kit");
+        var projectKit = root.CreateDirectory($"{kits}/project-kit");
+        var personalKit = root.CreateDirectory($"{kits}/personal-kit");
         var personal = root.File("personal/extra.abox", "kits: [personal-kit]\n");
-        var nested = root.Directory_("projects/app/src");
+        var nested = root.CreateDirectory("projects/app/src");
         root.File("projects/app/src/kits/shared.workload", "template: example.com/wrong:1\n");
         var resolver = new SquadResolver(
             new AboxConfig { TeamsDirectory = teams, KitsDirectory = kits }
@@ -53,9 +53,9 @@ public sealed class SquadDiscoveryTests
         using var root = new TempDirectory();
         root.File("teams/sample/ac.abox", "workload: shared\nkits: [project-kit]\n");
         root.File("kits/shared.workload", "template: example.com/base:1\n");
-        root.Directory_("kits/project-kit");
-        var workingDirectory = root.Directory_("projects/app");
-        root.Directory_("projects/app/src");
+        root.CreateDirectory("kits/project-kit");
+        var workingDirectory = root.CreateDirectory("projects/app");
+        root.CreateDirectory("projects/app/src");
         var resolver = new SquadResolver(new AboxConfig());
         var originalDirectory = Directory.GetCurrentDirectory();
         try
@@ -90,10 +90,10 @@ public sealed class SquadDiscoveryTests
         if (missing == "kit")
             root.File("kits/shared.workload", "template: example.com/base:1\n");
         else
-            root.Directory_("kits/project-kit");
-        var nested = root.Directory_("projects/app/src");
+            root.CreateDirectory("kits/project-kit");
+        var nested = root.CreateDirectory("projects/app/src");
         root.File("projects/app/src/kits/shared.workload", "template: example.com/wrong:1\n");
-        root.Directory_("projects/app/src/kits/project-kit");
+        root.CreateDirectory("projects/app/src/kits/project-kit");
         var resolver = new SquadResolver(new AboxConfig());
 
         // Act
@@ -114,7 +114,7 @@ public sealed class SquadDiscoveryTests
         root.File("config/teams/sample/ac.abox", "base: shared\n");
         root.File("config/teams/one/shared.abox", "workload: one\n");
         root.File("config/teams/two/shared.abox", "workload: two\n");
-        var nested = root.Directory_("src/app");
+        var nested = root.CreateDirectory("src/app");
         var resolver = new SquadResolver(new AboxConfig { TeamsDirectory = "config/teams" });
 
         // Act

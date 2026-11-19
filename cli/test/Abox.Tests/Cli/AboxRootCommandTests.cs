@@ -20,9 +20,9 @@ public sealed class AboxRootCommandTests
         // Arrange
         using var root = new TempDirectory();
         var console = new TestConsole();
-        var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
-        services.AddSingleton(AboxPaths.For(root.Path, root.Path));
-        services.AddSingleton<Command>(provider =>
+        var paths = AboxPaths.For(root.Path, root.Path);
+        using var application = new CliTestApplication(console, paths, new TrailingArguments());
+        application.Services.AddSingleton<Command>(provider =>
         {
             var command = new Command("test-tool");
             command.SetAction(
@@ -44,7 +44,7 @@ public sealed class AboxRootCommandTests
             );
             return command;
         });
-        using var provider = services.BuildServiceProvider();
+        var provider = application.Provider;
 
         // Act
         var exitCode = await provider
@@ -82,13 +82,13 @@ public sealed class AboxRootCommandTests
         var console = new TestConsole();
         var sbx = Substitute.For<ISbxClient>();
         sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(0);
-        var services = new ServiceCollection().AddAbox(
+        using var application = new CliTestApplication(
             console,
+            AboxPaths.For(root.Path, Path.Combine(root.Path, "state")),
             new TrailingArguments { Values = ["echo", "hello"] }
         );
-        services.AddSingleton(AboxPaths.For(root.Path, Path.Combine(root.Path, "state")));
-        services.AddSingleton(sbx);
-        using var provider = services.BuildServiceProvider();
+        application.Services.AddSingleton(sbx);
+        var provider = application.Provider;
 
         // Act
         var exitCode = await provider.GetRequiredService<AboxRootCommand>().InvokeAsync(arguments);
@@ -149,9 +149,12 @@ public sealed class AboxRootCommandTests
         using var root = new TempDirectory();
         root.File("config.yaml", "unknown-key: invalid\n");
         var console = new TestConsole();
-        var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
-        services.AddSingleton(AboxPaths.For(root.Path, root.Path));
-        using var provider = services.BuildServiceProvider();
+        using var application = new CliTestApplication(
+            console,
+            AboxPaths.For(root.Path, root.Path),
+            new TrailingArguments()
+        );
+        var provider = application.Provider;
 
         // Act
         var exitCode = await provider.GetRequiredService<AboxRootCommand>().InvokeAsync([command]);
@@ -189,16 +192,18 @@ public sealed class AboxRootCommandTests
         // Arrange
         using var root = new TempDirectory();
         var console = new TestConsole();
-        var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
-        services.AddSingleton(AboxPaths.For(root.Path, root.Path));
-        services.AddSingleton<ILauncher, ShellLauncher>();
+        var paths = AboxPaths.For(root.Path, root.Path);
+        var application = new CliTestApplication(console, paths, new TrailingArguments());
+        application.Services.AddSingleton<ILauncher, ShellLauncher>();
 
         // Act
         var exitCode = await CommandHandling.RunAsync(
             async () =>
             {
-                using var provider = services.BuildServiceProvider();
-                return await provider.GetRequiredService<AboxRootCommand>().InvokeAsync(["--help"]);
+                using (application)
+                    return await application
+                        .Provider.GetRequiredService<AboxRootCommand>()
+                        .InvokeAsync(["--help"]);
             },
             console
         );

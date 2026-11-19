@@ -1,5 +1,6 @@
 using Abox.Configuration;
 using Abox.LocalState;
+using Abox.Naming;
 
 namespace Abox.Tests;
 
@@ -35,8 +36,8 @@ public sealed class BuildTagSafetyTests
         };
         Action access = operation switch
         {
-            "directory" => () => store.DirectoryFor("sample", "ac", tag),
-            "load" => () => store.Load("sample", "ac", tag),
+            "directory" => () => store.DirectoryFor(new SquadBuildIdentity("sample", "ac", tag)),
+            "load" => () => store.Load(new SquadBuildIdentity("sample", "ac", tag)),
             "legacy" => () => store.LoadLegacy("ac", tag),
             _ => () =>
                 store.Save(

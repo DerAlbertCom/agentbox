@@ -26,6 +26,9 @@ public static class InstallInstructions
                 "  winget install -h Docker.sbx",
                 "For all users, from an elevated prompt:",
                 "  msiexec.exe /i DockerSandboxesMachine.msi /quiet",
+                "Local sandboxes need Windows Hypervisor Platform, from elevated PowerShell:",
+                "  Enable-WindowsOptionalFeature -Online -FeatureName HypervisorPlatform -All",
+                "Open a new terminal after installing so PATH updates.",
             ];
         }
 

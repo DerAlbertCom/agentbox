@@ -4,6 +4,7 @@ using Abox.Health;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -13,7 +14,7 @@ public sealed class BuildMcpValidationTests : IDisposable
 {
     private readonly TempDirectory _root = new();
     private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
-    private readonly IProcessRunner _runner = LocalWorkloadTest.Runner();
+    private readonly IProcessRunner _runner = LocalWorkloadFactory.Runner();
     private readonly TestConsole _console = new();
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
@@ -21,7 +22,7 @@ public sealed class BuildMcpValidationTests : IDisposable
 
     public BuildMcpValidationTests()
     {
-        _paths = AboxPaths.For(_root.Directory_("config"), Path.Combine(_root.Path, "state"));
+        _paths = AboxPaths.For(_root.CreateDirectory("config"), Path.Combine(_root.Path, "state"));
         _store = new BuildStore(_paths);
         _root.File("teams/sample/ac.abox", "workload: sample\n");
         _root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
@@ -32,10 +33,8 @@ public sealed class BuildMcpValidationTests : IDisposable
         _sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
         var config = new AboxConfig();
         var resolver = new SquadResolver(config);
-        var build = new BuildService(
+        var build = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(_paths),
             _store,
             new LocalWorkloadImages(programs, new OciRegistry(_runner), _console),
@@ -53,7 +52,7 @@ public sealed class BuildMcpValidationTests : IDisposable
 
     [Theory]
     [MemberData(nameof(UnsupportedDeclarations))]
-    public async Task UnsupportedMcpFieldsFailBeforeChangingBuildsOrRuntime(
+    public async Task InvalidMcpDeclarationsFailBeforeChangingBuildsOrRuntime(
         string field,
         string value,
         string origin,
@@ -64,11 +63,16 @@ public sealed class BuildMcpValidationTests : IDisposable
         (await BuildAsync(metadataOnly))
             .Should()
             .Be(0, _console.AllText);
-        var buildDirectory = _store.DirectoryFor("sample", "ac", "latest");
+        var buildDirectory = _store.DirectoryFor(new SquadBuildIdentity("sample", "ac", "latest"));
         _root.File(Path.Combine(buildDirectory, "workload/scripts/keep.sh"), "keep this script");
         var before = FilesInState();
-        var declaration =
-            $"mcp:\n  - name: elastic\n    url: https://example.com/mcp\n    {field}: {value}\n";
+        var declaration = field switch
+        {
+            "name" => $"mcp:\n  - name: {value}\n    url: https://example.com/mcp\n",
+            "url" => $"mcp:\n  - name: elastic\n    url: {value}\n",
+            _ =>
+                $"mcp:\n  - name: elastic\n    url: https://example.com/mcp\n    {field}: {value}\n",
+        };
         var source = origin switch
         {
             "personal" => _root.File("config/personal.abox", declaration),
@@ -91,8 +95,14 @@ public sealed class BuildMcpValidationTests : IDisposable
             .Which.Should()
             .Contain(Path.GetFullPath(source))
             .And.Contain($"mcp.{field}")
-            .And.Contain("not a known key")
-            .And.Contain("Known keys: name, url");
+            .And.Contain(field is "name" or "url" ? "not valid" : "not a known key");
+        if (field is "command" or "args" or "headers")
+            _console
+                .Errors.Single()
+                .Should()
+                .Contain("not a known key")
+                .And.Contain("Known keys: name, url");
+        _console.AllText.Should().NotContain("password");
         FilesInState()
             .Should()
             .BeEquivalentTo(before, "a failed build must preserve previous output");
@@ -116,6 +126,14 @@ public sealed class BuildMcpValidationTests : IDisposable
                 ("args", "[]"),
                 ("headers", "{X-Example: configured}"),
                 ("headers", "{}"),
+                ("name", "'elastic,other'"),
+                ("name", "'-elastic'"),
+                ("name", "'élastic'"),
+                ("name", "''"),
+                ("url", "file:///local"),
+                ("url", "https://user:password@example.com/mcp"),
+                ("url", "not-a-url"),
+                ("url", "''"),
             }
         )
         foreach (var origin in new[] { "squad", "base", "personal" })
@@ -167,13 +185,20 @@ public sealed class BuildMcpValidationTests : IDisposable
         _sbx.ReceivedCalls().Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task AnUndeclaredMcpUrlParameterStillFailsBeforeGeneration()
+    [Theory]
+    [InlineData("", "missing")]
+    [InlineData("parameters: {missing: 'file:///local'}\n", "mcp.url")]
+    [InlineData("parameters: {missing: 'https://user:password@example.com/mcp'}\n", "mcp.url")]
+    public async Task AnInvalidMcpUrlParameterStillFailsBeforeGeneration(
+        string parameters,
+        string error
+    )
     {
         // Arrange
         var source = _root.File(
             "teams/sample/ac.abox",
             "workload: sample\nmcp:\n  - name: elastic\n    url: ${{ parameters.missing }}\n"
+                + parameters
         );
 
         // Act
@@ -181,7 +206,11 @@ public sealed class BuildMcpValidationTests : IDisposable
 
         // Assert
         exitCode.Should().Be(1);
-        _console.AllText.Should().Contain("missing").And.Contain(Path.GetFullPath(source));
+        _console
+            .AllText.Should()
+            .Contain(error)
+            .And.Contain(Path.GetFullPath(source))
+            .And.NotContain("password");
         Directory.Exists(_paths.StateDirectory).Should().BeFalse();
         _runner.ReceivedCalls().Should().BeEmpty();
         _sbx.ReceivedCalls().Should().BeEmpty();

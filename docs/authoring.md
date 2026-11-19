@@ -176,6 +176,11 @@ capabilities:
         You work in a sandbox.
 ```
 
+- Abox's own descriptor lookup, used by `secrets` and `publish`, first tries
+  `<directory-name>.yaml`, then `spec.yaml`, then the first `*.yaml` file sorted by
+  path, all directly inside the kit directory. Build verification and local create
+  pass the directory to sbx, whose descriptor lookup is independent; prefer the
+  conventional `<directory-name>.yaml` form.
 - A name without a slash or a colon is a directory in the `kits` folder. A name with a
   slash or a colon, like `docker.io/acme/pi-config:1.0`, is a published kit that sbx
   resolves and that abox does not build.
@@ -201,6 +206,8 @@ registers the server if its name is missing; it does not replace an existing hos
 registration. URLs support the same parameter references as kit arguments. MCP
 names must be unique across the squad's base chain and personal additions. Local
 build manifests and published squad metadata preserve these names and resolved URLs.
+Names must match `[A-Za-z0-9_][A-Za-z0-9_.-]*`; URLs, after parameter expansion, must
+be absolute `http` or `https` URLs without userinfo (a username or password).
 
 Only `name` and `url` are supported mapping keys. `command`, `args` and `headers`
 are rejected as unknown keys, even when empty: abox does not support launching MCP
@@ -219,6 +226,8 @@ syntax), backslashes, drive/stream colons and `.` or `..` path segments are reje
 Names must be portable across supported hosts: no control characters,
 `< > " | ? *`, trailing dots/spaces or Windows device names such as `CON`, `NUL`,
 `COM1` and `LPT1` (including device names with extensions).
+The shared portability check also rejects `COM0` and `LPT0`; these two names are
+newly rejected for state paths as part of unifying the checks.
 
 For declarations in `.abox`, surrounding whitespace is trimmed and repeated
 interior forward slashes and trailing slashes are collapsed. For example,
@@ -256,14 +265,18 @@ service. The `secrets` section declares how the value is obtained:
 
 - A service sbx knows carries `service` and `prompt`. `abox secrets set` asks for the
   value once and stores it under the name of the service.
+- A scalar service name, such as `secrets: [github]`, is shorthand for a mapping
+  containing only `service`; its default prompt is `The secret 'github': `.
 - A service sbx does not know carries `service`, `host` and `env` besides: the value is
   stored as a custom secret, and the variable named in `env` stands in inside the
   sandbox where the sandbox talks to `host`.
 - A value that is built from parts carries `inputs` (each with its own `prompt`),
   `separator` (default `:`) and `encoding` (`plain` or `base64`).
 
-`abox secrets list` shows the services of a squad, the kits that ask for them and
-whether the values are stored; `abox secrets remove` takes the values off the host.
+`abox secrets list` shows declared secrets and services requested by local kits,
+the local kits requesting each service, and whether values are stored. Registry
+kits are not inspected for requested services. `abox secrets remove` takes the
+values off the host.
 
 ## The workload: `.workload`
 
@@ -311,7 +324,12 @@ scripts:                                     # run while the image is built
 
 ## What abox checks
 
-Every command runs the same checks first: sbx is installed, new enough and healthy.
+Commands that use runtime preflight check that sbx is installed, new enough and
+healthy. `--help`, `--version`, `publish`, `build --metadata-only` and the hidden
+`exec`/`pipe` commands skip that preflight. Publication uses Docker/Buildx checks
+instead; metadata-only builds need neither tool. `user-secrets` validates and
+prepares its host input before runtime preflight, so invalid input fails without
+accessing the runtime.
 
 When a build resolves the chain of a squad it reports what it can prove wrong, and the
 error names the file that is wrong:

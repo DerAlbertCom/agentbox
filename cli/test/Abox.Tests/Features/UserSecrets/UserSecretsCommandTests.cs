@@ -1,17 +1,16 @@
 using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
-using Fixture = Abox.Tests.UserSecretsCliHarness;
 
 namespace Abox.Tests;
 
-public sealed partial class UserSecretsCommandTests
+public sealed class UserSecretsCommandTests
 {
     [Fact]
     public async Task ConfiguredDefaultLocationIsUsedWhenLocationIsOmitted()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new UserSecretsCliHarness();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
 
@@ -29,7 +28,7 @@ public sealed partial class UserSecretsCommandTests
     public async Task PreflightFailureDoesNotReachTheDestination()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new UserSecretsCliHarness();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
         fixture.Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 50, 0));
@@ -49,7 +48,7 @@ public sealed partial class UserSecretsCommandTests
     public async Task CancelledCopyUsesExit130AndExplainsSafeRetryWithoutLeakingCancellationDetails()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new UserSecretsCliHarness();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
         fixture
@@ -82,7 +81,7 @@ public sealed partial class UserSecretsCommandTests
     public async Task DoesNotCreateOrReplaceAMissingSandbox()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new UserSecretsCliHarness();
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
         fixture
@@ -113,7 +112,7 @@ public sealed partial class UserSecretsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new UserSecretsCliHarness();
         fixture.Configure("""{"squad":"ac","userSecrets":["first","later"]}""");
         fixture.Store("first", "{}");
         fixture.Store("later", "{}");

@@ -19,23 +19,15 @@ public sealed class BuildStore(AboxPaths paths)
     };
 
     /// <summary>The directory of one build.</summary>
-    public string DirectoryFor(string team, string squad, string tag) =>
-        DirectoryFor(ValidatedIdentity(team, squad, tag));
-
-    private static BuildIdentity ValidatedIdentity(string team, string squad, string tag)
+    public string DirectoryFor(SquadBuildIdentity identity)
     {
-        RegistryImageName.ValidateTag(tag);
-        RegistryImageName.SquadRepository(team, squad);
-        return new BuildIdentity(team, squad, tag);
+        identity.Validate();
+        return paths.BuildDirectory(identity);
     }
 
-    private string DirectoryFor(BuildIdentity identity) =>
-        paths.BuildDirectory(identity.Team, identity.Squad, identity.Tag);
-
     /// <summary>The manifest of a build, or null when there is no such build.</summary>
-    public BuildManifest? Load(string team, string squad, string tag)
+    public BuildManifest? Load(SquadBuildIdentity identity)
     {
-        var identity = ValidatedIdentity(team, squad, tag);
         var path = Path.Combine(DirectoryFor(identity), ManifestFileName);
         // A present qualified manifest is authoritative, including when it is invalid.
         var manifest = File.Exists(path) ? Read(path, identity) : ReadLegacy(identity);
@@ -49,7 +41,7 @@ public sealed class BuildStore(AboxPaths paths)
     /// <summary>Recovers hint identity only from a legacy manifest's explicit ownership marker.</summary>
     public BuildManifest? LoadLegacy(string squad, string tag)
     {
-        var unknownOwner = new BuildIdentity("<name>", squad, tag);
+        var unknownOwner = new SquadBuildIdentity("<name>", squad, tag);
         var manifest = ReadLegacy(unknownOwner);
         if (manifest is null)
         {
@@ -58,20 +50,19 @@ public sealed class BuildStore(AboxPaths paths)
         if (
             !ImageName.TryParseTeam(manifest.Reference, tag, out var team)
             || !RegistryImageName.IsValidRepository(
-                $"agentbox-{ImageName.Tenant}-{team}".ToLowerInvariant()
+                SquadBuildIdentity.TeamRepository(team).ToLowerInvariant()
             )
         )
         {
-            throw unknownOwner.Rebuild();
+            throw Rebuild(unknownOwner);
         }
-        EnsureOwnership(manifest, new BuildIdentity(team, squad, tag));
+        EnsureOwnership(manifest, new SquadBuildIdentity(team, squad, tag));
         return manifest;
     }
 
-    private BuildManifest? ReadLegacy(BuildIdentity identity)
+    private BuildManifest? ReadLegacy(SquadBuildIdentity identity)
     {
-        RegistryImageName.ValidateTag(identity.Tag);
-        RegistryImageName.SquadRepository("legacy", identity.Squad);
+        (identity with { Team = "legacy" }).Validate();
         var path = Path.Combine(
             paths.BuildsDirectory,
             identity.Squad,
@@ -85,20 +76,20 @@ public sealed class BuildStore(AboxPaths paths)
         return Read(path, identity);
     }
 
-    private static BuildManifest Read(string path, BuildIdentity identity)
+    private static BuildManifest Read(string path, SquadBuildIdentity identity)
     {
         try
         {
             return JsonSerializer.Deserialize<BuildManifest>(
                     File.ReadAllText(path),
                     SerializerOptions
-                ) ?? throw identity.Rebuild();
+                ) ?? throw Rebuild(identity);
         }
         catch (Exception exception)
             when (exception is JsonException or IOException or UnauthorizedAccessException)
         {
             throw new AboxException(
-                $"The build '{identity.Squad}:{identity.Tag}' is not readable: {exception.Message} {identity.Rebuild().Message}",
+                $"The build '{identity.Squad}:{identity.Tag}' is not readable: {exception.Message} {Rebuild(identity).Message}",
                 exception
             );
         }
@@ -110,9 +101,9 @@ public sealed class BuildStore(AboxPaths paths)
         RegistryImageName.ValidateTag(manifest.Tag);
         if (!ImageName.TryParseTeam(manifest.Reference, manifest.Tag, out var team))
         {
-            throw new BuildIdentity("<name>", manifest.Squad, manifest.Tag).Rebuild();
+            throw Rebuild(new SquadBuildIdentity("<name>", manifest.Squad, manifest.Tag));
         }
-        var directory = DirectoryFor(team, manifest.Squad, manifest.Tag);
+        var directory = DirectoryFor(new SquadBuildIdentity(team, manifest.Squad, manifest.Tag));
         Directory.CreateDirectory(directory);
 
         File.WriteAllText(
@@ -121,7 +112,7 @@ public sealed class BuildStore(AboxPaths paths)
         );
     }
 
-    private static void EnsureOwnership(BuildManifest manifest, BuildIdentity identity)
+    private static void EnsureOwnership(BuildManifest manifest, SquadBuildIdentity identity)
     {
         if (
             !ImageName.TryParseTeam(manifest.Reference, identity.Tag, out var owner)
@@ -130,15 +121,12 @@ public sealed class BuildStore(AboxPaths paths)
             || manifest.Tag != identity.Tag
         )
         {
-            throw identity.Rebuild();
+            throw Rebuild(identity);
         }
     }
 
-    private sealed record BuildIdentity(string Team, string Squad, string Tag)
-    {
-        public AboxException Rebuild() =>
-            new(
-                $"The local build '{Squad}:{Tag}' has no proven ownership for team '{Team}'. Prepare it again: abox build --team {Team} --tag {Tag}"
-            );
-    }
+    private static AboxException Rebuild(SquadBuildIdentity identity) =>
+        new(
+            $"The local build '{identity.Squad}:{identity.Tag}' has no proven ownership for team '{identity.Team}'. Prepare it again: abox build --team {identity.Team} --tag {identity.Tag}"
+        );
 }

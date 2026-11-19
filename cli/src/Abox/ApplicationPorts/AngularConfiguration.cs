@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Abox.Naming;
 
 namespace Abox.ApplicationPorts;
 
@@ -45,7 +46,7 @@ internal static class AngularConfiguration
     {
         if (!options.TryGetProperty("port", out var value))
             return;
-        if (!value.TryGetInt32(out var port) || port is < 1 or > 65535)
+        if (!value.TryGetInt32(out var port) || !TcpPort.IsValid(port))
             throw new FormatException();
         result.Add(new AppPortOccurrence(source, context, port));
     }

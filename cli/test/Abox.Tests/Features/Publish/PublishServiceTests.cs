@@ -4,51 +4,25 @@ using Abox.Features.Publish;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class PublishServiceTests
+public sealed class PublishServiceTests
 {
-    private readonly TempDirectory _root = new();
-    private readonly BuildStore _store;
-    private readonly IProcessRunner _runner = Substitute.For<IProcessRunner>();
-    private readonly IHostPrograms _programs = Substitute.For<IHostPrograms>();
-    private readonly TestConsole _console = new();
-    private readonly List<ProcessRequest> _calls = [];
-    private readonly List<string> _descriptors = [];
-    private readonly List<string> _configurations = [];
-    private readonly PublishService _service;
+    private readonly PublishServiceFixture _fixture = new();
+    private TempDirectory _root => _fixture.Root;
+    private BuildStore _store => _fixture.Store;
+    private IProcessRunner _runner => _fixture.Runner;
+    private IHostPrograms _programs => _fixture.Programs;
+    private TestConsole _console => _fixture.Console;
+    private List<ProcessRequest> _calls => _fixture.Calls;
+    private List<string> _descriptors => _fixture.Descriptors;
+    private List<string> _configurations => _fixture.Configurations;
+    private PublishService _service => _fixture.Service;
 
-    public PublishServiceTests()
-    {
-        _store = new BuildStore(AboxPaths.For(_root.Path, Path.Combine(_root.Path, "state")));
-        _service = new PublishService(_store, _programs, new OciRegistry(_runner), _console);
-        _programs.Exists("docker").Returns(true);
-        _runner
-            .When(runner =>
-                runner.RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            )
-            .Do(call => _calls.Add(call.Arg<ProcessRequest>()));
-        _runner
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                var request = call.Arg<ProcessRequest>();
-                var arguments = request.Arguments.ToList();
-                if (arguments.Contains("--file"))
-                {
-                    _descriptors.Add(File.ReadAllText(arguments[arguments.IndexOf("--file") + 1]));
-                    var config = Path.Combine(arguments.Last(), "squad.json");
-                    if (File.Exists(config))
-                    {
-                        _configurations.Add(File.ReadAllText(config));
-                    }
-                }
-
-                return PublishTestProcess.Run(request);
-            });
-    }
+    private void SaveRegistryKitBuild() => _fixture.SaveRegistryKitBuild();
 
     [Fact]
     public async Task PersonalConfigurationKitsCannotBePublished()
@@ -59,13 +33,11 @@ public sealed partial class PublishServiceTests
         _root.File("kits/private/private.yaml", "schemaVersion: \"3\"\nkind: mixin\n");
         var configDirectory = Path.Combine(_root.Path, "config");
         _root.File("config/personal.abox", "kits:\n  - private\n");
-        var build = new Abox.Features.Build.BuildService(
+        var build = TestServiceGraphs.Build(
             new SquadResolver(new AboxConfig()),
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(AboxPaths.For(configDirectory, _root.Path)),
             _store,
-            LocalWorkloadTest.Images(),
+            LocalWorkloadFactory.Images(),
             Substitute.For<Abox.Sbx.ISbxClient>(),
             _console
         );
@@ -93,7 +65,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         var local = Path.Combine(_root.Path, "local kit");
         Directory.CreateDirectory(local);
         File.WriteAllText(
@@ -269,7 +241,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.PublishRepository = null;
         _store.Save(build);
 
@@ -306,18 +278,29 @@ public sealed partial class PublishServiceTests
         _calls.Should().BeEmpty();
     }
 
-    [Fact]
-    public async Task EveryBuildIsCheckedBeforeAnythingIsPublished()
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("elastic,other", null)]
+    [InlineData("elastic", "file:///local")]
+    [InlineData("elastic", "https://user:password@example.com/mcp")]
+    public async Task EveryBuildIsCheckedBeforeAnythingIsPublished(string? name, string? url)
     {
         // Arrange
         SaveBuild("ac");
+        if (name is not null)
+        {
+            SaveBuild("bd");
+            var build = _store.Load(new SquadBuildIdentity("sample", "bd", "latest"))!;
+            build.Mcp.Add(new ManifestMcp { Name = name, Url = url });
+            _store.Save(build);
+        }
 
         // Act
         var action = () => _service.PublishAsync(Request("ac", "bd"), CancellationToken.None);
 
         // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
-            "*abox build --team sample --tag latest*"
+            name is null ? "*abox build --team sample --tag latest*" : "*MCP server*mcp.*not valid*"
         );
         _calls.Should().BeEmpty();
     }
@@ -327,10 +310,10 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.Reference = "agentbox-rwest-other:latest";
         File.WriteAllText(
-            Path.Combine(_store.DirectoryFor("sample", "ac", "latest"), "build.json"),
+            ManifestPath(new("sample", "ac", "latest")),
             JsonSerializer.Serialize(build)
         );
 
@@ -351,7 +334,7 @@ public sealed partial class PublishServiceTests
         SaveBuild("ac");
         File.Delete(
             Path.Combine(
-                _store.Load("sample", "ac", "latest")!.WorkloadKitDirectory,
+                _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!.WorkloadKitDirectory,
                 "workload.yaml"
             )
         );
@@ -440,7 +423,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.Tag = "release-1";
         build.Reference = "agentbox-rwest-sample:release-1";
         _store.Save(build);
@@ -509,8 +492,7 @@ public sealed partial class PublishServiceTests
         _console.AllText.Should().Contain("Published");
     }
 
-    private PublishRequest Request(params string[] squads) =>
-        new([new SquadResolver.ResolvedTeam("sample", _root.Path, squads)], "latest");
+    private PublishRequest Request(params string[] squads) => _fixture.Request(squads);
 
     [Fact]
     public async Task PublishedSetOmitsOnlyAbsentComponentArguments()
@@ -549,6 +531,7 @@ public sealed partial class PublishServiceTests
         await _service.PublishAsync(Request("ac"), CancellationToken.None);
 
         // Assert
+        // The syntax header is literal LF; indented JSON uses the platform newline.
         _descriptors[^2]
             .Should()
             .Be(
@@ -559,7 +542,7 @@ public sealed partial class PublishServiceTests
                       "kind": "mixin",
                       "build": "FROM scratch\nCOPY squad.json /usr/share/abox/squad.json\n"
                     }
-                    """
+                    """.ReplaceLineEndings(Environment.NewLine)
             );
     }
 
@@ -568,7 +551,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveRegistryKitBuild();
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.CreatedAt = DateTimeOffset.Parse("2026-01-02T03:04:05+00:00");
         build.Mcp.Add(new ManifestMcp { Name = "host-server" });
         build.ConfigFiles.Add(_root.File("private.abox", "secret: synthetic-private-value\n"));
@@ -606,7 +589,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.IncludesPersonalConfigurations = null;
         _store.Save(build);
 
@@ -625,7 +608,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.SourceHashes.Clear();
         _store.Save(build);
 
@@ -644,7 +627,7 @@ public sealed partial class PublishServiceTests
         SaveBuild("ac");
         File.AppendAllText(
             Path.Combine(
-                _store.Load("sample", "ac", "latest")!.WorkloadKitDirectory,
+                _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!.WorkloadKitDirectory,
                 "workload.yaml"
             ),
             "description: changed\n"
@@ -663,7 +646,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.ConfigFiles.Add(_root.File("squad.abox", "workload: sample\n"));
         SaveVerifiedBuild(build);
         File.AppendAllText(build.ConfigFiles[0], "state: [~/.private]\n");
@@ -692,7 +675,7 @@ public sealed partial class PublishServiceTests
         // Arrange
         SaveBuild("ac");
         var path = Path.Combine(
-            _store.Load("sample", "ac", "latest")!.WorkloadKitDirectory,
+            _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!.WorkloadKitDirectory,
             "workload.yaml"
         );
         var original = File.ReadAllText(path);
@@ -751,7 +734,7 @@ public sealed partial class PublishServiceTests
         // Arrange
         SaveBuild("ac");
         SaveBuild("workload");
-        var second = _store.Load("sample", "workload", "latest")!;
+        var second = _store.Load(new SquadBuildIdentity("sample", "workload", "latest"))!;
         second.Reference = "agentbox-rwest-sample-ac:latest";
         _store.Save(second);
         var request = new PublishRequest(
@@ -931,7 +914,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         var local = Path.Combine(_root.Path, "build-arg-kit");
         Directory.CreateDirectory(local);
         File.WriteAllText(
@@ -964,7 +947,7 @@ public sealed partial class PublishServiceTests
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.Kits.Add(
             new ManifestKit
             {
@@ -1044,38 +1027,22 @@ public sealed partial class PublishServiceTests
         }
     }
 
+    private string ManifestPath(SquadBuildIdentity identity) => _fixture.ManifestPath(identity);
+
     private void SaveBuild(
         string squad,
         string repository = "mtiae-developer-container-images-local"
-    )
-    {
-        var workload = Path.Combine(_store.DirectoryFor("sample", squad, "latest"), "workload");
-        Directory.CreateDirectory(workload);
-        File.WriteAllText(
-            Path.Combine(workload, "workload.yaml"),
-            "# syntax=docker/sandbox-kit:3\nschemaVersion: \"3\"\nkind: workload\n"
-        );
-        SaveVerifiedBuild(
-            new BuildManifest
-            {
-                Squad = squad,
-                Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
-                PublishRepository = repository,
-                WorkloadKitDirectory = workload,
-            }
-        );
-    }
+    ) => _fixture.SaveBuild(squad, repository);
 
     [Fact]
     public async Task PublishingUsesTheOriginalVerifiedWorkloadNotTheLocalThinRecipe()
     {
         // Arrange
         SaveBuild("ac");
-        var build = _store.Load("sample", "ac", "latest")!;
+        var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         const string recipe = "FROM example.com/base:1\nRUN install-workload-tools\n";
         File.WriteAllText(Path.Combine(build.WorkloadKitDirectory, "workload.dockerfile"), recipe);
-        build.LocalWorkload = LocalWorkloadTest.Artifact(_root);
+        build.LocalWorkload = LocalWorkloadFactory.Artifact(_root);
         SaveVerifiedBuild(build);
         string? publishedRecipe = null;
         _runner
@@ -1106,10 +1073,5 @@ public sealed partial class PublishServiceTests
             .OnlyContain(configuration => !configuration.Contains(build.LocalWorkload.Reference));
     }
 
-    private void SaveVerifiedBuild(BuildManifest build)
-    {
-        build.IncludesPersonalConfigurations = false;
-        build.SourceHashes = BuildSources.Capture(build);
-        _store.Save(build);
-    }
+    private void SaveVerifiedBuild(BuildManifest build) => _fixture.SaveVerifiedBuild(build);
 }

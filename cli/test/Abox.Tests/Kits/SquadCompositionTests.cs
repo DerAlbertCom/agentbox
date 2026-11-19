@@ -30,8 +30,12 @@ public sealed class SquadCompositionTests
             );
     }
 
-    [Fact]
-    public void PersonalChainsFollowTheProjectChainAndCanSupplyParametersUsedByEarlierFiles()
+    [Theory]
+    [InlineData("base")]
+    [InlineData("./base")]
+    public void PersonalChainsFollowTheProjectChainAndCanSupplyParametersUsedByEarlierFiles(
+        string baseName
+    )
     {
         // Arrange
         using var root = new TempDirectory();
@@ -50,23 +54,18 @@ public sealed class SquadCompositionTests
         );
         var personalChild = root.File(
             "personal/extra.abox",
-            "base: base\nparameters: {url: 'https://example.com'}\nkits: [example.com/extra:1]\nstate: [~/.personal-child]\n"
+            $"base: {baseName}\nparameters: {{url: 'https://example.com'}}\nkits: [example.com/extra:1]\nstate: [~/.personal-child]\n"
         );
-        var localKit = root.Directory_("kits/personal-kit");
+        var localKit = root.CreateDirectory("kits/personal-kit");
         var resolver = new SquadResolver(new AboxConfig());
+        var files = new[] { projectBase, projectChild, personalBase, personalChild };
 
         // Act
-        var squad = resolver.Resolve(root.Path, "sample", "AC", [Path.GetFullPath(personalChild)]);
+        var squad = resolver.Resolve(root.Path, "sample", "AC", [personalBase, personalChild]);
 
         // Assert
         squad.Name.Should().Be("ac");
-        squad
-            .ConfigFiles.Should()
-            .Equal(
-                new[] { projectBase, projectChild, personalBase, personalChild }.Select(
-                    Path.GetFullPath
-                )
-            );
+        squad.ConfigFiles.Should().Equal(files.Select(Path.GetFullPath));
         squad
             .Kits.Select(kit => kit.Name)
             .Should()

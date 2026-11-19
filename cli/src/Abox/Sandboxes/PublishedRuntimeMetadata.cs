@@ -1,7 +1,7 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 
 namespace Abox.Sandboxes;
 
@@ -13,9 +13,11 @@ internal static class PublishedRuntimeMetadata
         RespectNullableAnnotations = true,
     };
 
-    internal sealed record Identity(string Team, string Squad, string Tag);
-
-    internal static BuildManifest Read(string json, Identity expected, JsonElement descriptor)
+    internal static BuildManifest Read(
+        string json,
+        SquadBuildIdentity expected,
+        JsonElement descriptor
+    )
     {
         using var document = JsonDocument.Parse(json);
         var root = document.RootElement;
@@ -45,7 +47,7 @@ internal static class PublishedRuntimeMetadata
         };
     }
 
-    private static void ValidateIdentity(JsonElement root, Identity expected)
+    private static void ValidateIdentity(JsonElement root, SquadBuildIdentity expected)
     {
         // The original publisher omitted SchemaVersion; its otherwise identical format is version 1.
         if (root.TryGetProperty("SchemaVersion", out var version) && version.GetInt32() != 1)
@@ -101,17 +103,14 @@ internal static class PublishedRuntimeMetadata
     {
         if (mcp.DistinctBy(item => item.Name).Count() != mcp.Count)
             throw new JsonException("Duplicate MCP declarations.");
-        foreach (var server in mcp)
+        try
         {
-            if (!Regex.IsMatch(server.Name, @"\A[A-Za-z0-9_][A-Za-z0-9_.-]*\z"))
-                throw new JsonException("Invalid MCP name.");
-            if (server.Url is not null && !IsMcpUrl(server.Url))
-                throw new JsonException("Invalid MCP URL.");
+            foreach (var server in mcp)
+                new McpDeclaration(server.Name, server.Url).Validate("bundled squad metadata");
+        }
+        catch (AboxException exception)
+        {
+            throw new JsonException("Invalid MCP declaration.", exception);
         }
     }
-
-    private static bool IsMcpUrl(string value) =>
-        Uri.TryCreate(value, UriKind.Absolute, out var url)
-        && url.Scheme is "http" or "https"
-        && string.IsNullOrEmpty(url.UserInfo);
 }

@@ -8,8 +8,6 @@ namespace Abox.Infrastructure;
 /// <summary>Owner-only staging, protected before an exporter can write private material.</summary>
 public sealed class ProtectedTemporaryDirectory : IDisposable
 {
-    internal const string PreparationFailureMessage =
-        "Cannot establish private certificate staging. Use an ordinary, accessible temporary directory with owner-only permissions; no export was started.";
     private readonly IConsole console;
     private bool disposed;
     private bool ownsDirectory;
@@ -40,7 +38,7 @@ public sealed class ProtectedTemporaryDirectory : IDisposable
             )
         {
             Dispose();
-            throw new AboxException(PreparationFailureMessage);
+            throw new PrivateStagingException();
         }
     }
 

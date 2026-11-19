@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Abox.Infrastructure;
+using Abox.Sbx;
 
 namespace Abox.Launchers;
 
@@ -7,7 +8,8 @@ namespace Abox.Launchers;
 /// The launcher that opens a space in the Herdr desktop app. The Herdr app runs the agents
 /// in terminals that stay alive in <c>hc</c>, so they keep running when the window closes.
 /// </summary>
-public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
+public sealed class HerdrAppLauncher(IProcessRunner runner, ISbxClient sbx, IConsole console)
+    : ILauncher
 {
     private const string AppProgram = "herdr-app";
     private const string CoreProgram = "hc";
@@ -33,8 +35,8 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
         // A newly initialized pipe cannot repair an already-running remote core.
         // Cross the shared bootstrap before the desktop can report launch success.
         if (
-            await context.Sbx.ExecAsync(
-                new Abox.Sbx.SbxExecRequest(context.SandboxName, ["true"]),
+            await sbx.ExecAsync(
+                new SbxExecRequest(context.SandboxName, ["true"]),
                 cancellationToken
             ) != 0
         )
@@ -46,7 +48,7 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
             await AddMachineAsync(context, cancellationToken);
         }
 
-        await StartAppAsync(context.Console, cancellationToken);
+        await StartAppAsync(cancellationToken);
 
         var arguments = new List<string>
         {
@@ -127,7 +129,7 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
         }
     }
 
-    private async Task StartAppAsync(IConsole console, CancellationToken cancellationToken)
+    private async Task StartAppAsync(CancellationToken cancellationToken)
     {
         // The released status client can itself wait 35 seconds. Bound the whole
         // discovery/start/readiness exchange, not just the delay between probes.
@@ -135,12 +137,12 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
         deadline.CancelAfter(TimeSpan.FromSeconds(45));
         try
         {
-            if (await AppIsRunningAsync(console, deadline.Token))
+            if (await AppIsRunningAsync(deadline.Token))
                 return;
 
             var result = await runner.RunUntilReadyAsync(
                 new ProcessRequest(AppProgram, [], AttachConsole: true),
-                token => WaitForAppAsync(console, token),
+                WaitForAppAsync,
                 deadline.Token
             );
             if (!result.Succeeded)
@@ -156,16 +158,13 @@ public sealed class HerdrAppLauncher(IProcessRunner runner) : ILauncher
         }
     }
 
-    private async Task WaitForAppAsync(IConsole console, CancellationToken cancellationToken)
+    private async Task WaitForAppAsync(CancellationToken cancellationToken)
     {
-        while (!await AppIsRunningAsync(console, cancellationToken))
+        while (!await AppIsRunningAsync(cancellationToken))
             await Task.Delay(TimeSpan.FromMilliseconds(250), cancellationToken);
     }
 
-    private async Task<bool> AppIsRunningAsync(
-        IConsole console,
-        CancellationToken cancellationToken
-    )
+    private async Task<bool> AppIsRunningAsync(CancellationToken cancellationToken)
     {
         var result = await runner.RunAsync(
             new ProcessRequest(AppProgram, ["status"]),

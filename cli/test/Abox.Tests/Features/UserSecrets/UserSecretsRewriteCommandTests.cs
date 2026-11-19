@@ -25,7 +25,7 @@ public sealed class UserSecretsRewriteCommandTests
         // Arrange
         using var root = new TempDirectory();
         var console = new TestConsole();
-        var location = root.Directory_("folder");
+        var location = root.CreateDirectory("folder");
         root.File(
             "folder/abox.json",
             automatic
@@ -52,16 +52,16 @@ public sealed class UserSecretsRewriteCommandTests
                 .Returns(new SandboxInfo(SandboxName.For(location), "running", null));
         var programs = Substitute.For<IHostPrograms>();
         programs.Exists(Arg.Any<string>()).Returns(true);
-        var services = new ServiceCollection().AddAbox(console, new TrailingArguments());
-        services.AddSingleton(
-            new AboxConfig { DefaultTeam = "sample", DefaultLocation = location }
-        );
-        services.AddSingleton(AboxPaths.For(root.Directory_("config"), root.Directory_("state")));
-        services.AddSingleton(new UserSecretsHost(root.Directory_("appdata"), null));
-        services.AddSingleton(sbx);
-        services.AddSingleton(programs);
-        services.AddSingleton(PublishedSquadTest.Source());
-        using var provider = services.BuildServiceProvider();
+        var paths = AboxPaths.For(root.CreateDirectory("config"), root.CreateDirectory("state"));
+        using var application = new CliTestApplication(console, paths, new TrailingArguments());
+        var config = new AboxConfig { DefaultTeam = "sample", DefaultLocation = location };
+        application.Services.AddSingleton(config);
+        var host = new UserSecretsHost(root.CreateDirectory("appdata"), null);
+        application.Services.AddSingleton(host);
+        application.Services.AddSingleton(sbx);
+        application.Services.AddSingleton(programs);
+        application.Services.AddSingleton(PublishedSquadFactory.Source());
+        var provider = application.Provider;
 
         // Act
         var exit = await provider

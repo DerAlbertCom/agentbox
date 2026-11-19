@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Abox.Naming;
 using static Abox.UserSecrets.EndpointSyntax;
 
 namespace Abox.UserSecrets;
@@ -99,9 +100,9 @@ internal sealed partial class OracleEasyConnectScanner(string value, HashSet<int
         var port = match.Groups["port"];
         if (!port.Success)
             return;
-        if (TryParseEndpointPort(port.Value, out var number))
+        if (TcpPort.TryParse(port.Value, out var number))
         {
-            if (ports.Contains(number))
+            if (ports.Contains(number.Value))
                 hosts.AddRange(pending);
         }
         else

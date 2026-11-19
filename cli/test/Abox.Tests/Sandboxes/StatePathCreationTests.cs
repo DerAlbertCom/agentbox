@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Abox.Configuration;
 using Abox.Features.Build;
 using Abox.Infrastructure;
@@ -13,9 +14,10 @@ namespace Abox.Tests;
 
 public sealed class StatePathCreationTests : IDisposable
 {
+    private static readonly SquadBuildIdentity Identity = new("sample", "ac", "latest");
     private readonly TempDirectory _root = new();
     private readonly ISbxClient _sbx = Substitute.For<ISbxClient>();
-    private readonly IPublishedSquadSource _published = PublishedSquadTest.Source();
+    private readonly IPublishedSquadSource _published = PublishedSquadFactory.Source();
     private readonly AboxPaths _paths;
     private readonly BuildStore _store;
     private readonly SandboxRecordStore _records;
@@ -24,19 +26,17 @@ public sealed class StatePathCreationTests : IDisposable
 
     public StatePathCreationTests()
     {
-        _paths = AboxPaths.For(_root.Directory_("config"), Path.Combine(_root.Path, "state"));
+        _paths = AboxPaths.For(_root.CreateDirectory("config"), Path.Combine(_root.Path, "state"));
         _store = new BuildStore(_paths);
         _records = new SandboxRecordStore(_paths);
-        _create = new SandboxCreator(
+        _create = TestServiceGraphs.Creator(
             _records,
             _paths,
-            SandboxTest.Resolver(_sbx),
             _sbx,
             _console,
-            new LocalSquadSource(_store, LocalWorkloadTest.Images(), _console),
+            new LocalSquadSource(_store, LocalWorkloadFactory.Images(), _console),
             new RemoteSquadSource(new AboxConfig(), _sbx, _published),
-            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx),
-            SandboxTest.Ports(_sbx, _console)
+            new UserSecretsCopy(new AboxConfig(), new UserSecretsHost(null, null), _sbx)
         );
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));
@@ -63,13 +63,13 @@ public sealed class StatePathCreationTests : IDisposable
     {
         // Arrange
         if (relativePath == "rooted-in-fixture")
-            relativePath = _root.Directory_("outside");
+            relativePath = _root.CreateDirectory("outside");
         var manifest = SaveBuild([
             new ManifestState { SandboxPath = "/home/agent/.valid", RelativePath = ".valid" },
             new ManifestState { SandboxPath = "/home/agent/outside", RelativePath = relativePath },
         ]);
         _published
-            .LoadAsync(Arg.Any<string>(), "sample", "ac", "latest", Arg.Any<CancellationToken>())
+            .LoadAsync(Arg.Any<string>(), Identity, Arg.Any<CancellationToken>())
             .Returns(new PublishedSquad("pinned-set", manifest));
         var name = SandboxName.For(_root.Path);
         var sentinel = _root.File("state/outside/sentinel.txt", "persistent data");
@@ -112,7 +112,7 @@ public sealed class StatePathCreationTests : IDisposable
         SaveBuild([
             new ManifestState { SandboxPath = "/home/agent/.cache", RelativePath = ".cache" },
         ]);
-        var manifest = _store.Load("sample", "ac", "latest")!;
+        var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         switch (error)
         {
             case "null-list":
@@ -217,6 +217,7 @@ public sealed class StatePathCreationTests : IDisposable
     [InlineData("/home/agent2", "/home/agent2", "home/agent2")]
     [InlineData("~////.cache////sessions/", "/home/agent/.cache/sessions", ".cache/sessions")]
     [InlineData("/var////lib/cache/", "/var/lib/cache", "var/lib/cache")]
+    [InlineData("~/a #b é雪'", "/home/agent/a #b é雪'", "a #b é雪'")]
     public async Task BuildAndRecreatePreserveSupportedStateMappingsAndContents(
         string declaration,
         string sandboxPath,
@@ -224,16 +225,16 @@ public sealed class StatePathCreationTests : IDisposable
     )
     {
         // Arrange
-        _root.File("teams/sample/ac.abox", "workload: sample\nstate:\n  - " + declaration + "\n");
+        var quoted = JsonSerializer.Serialize(declaration);
+        _root.File("teams/sample/ac.abox", $"workload: sample\nstate:\n  - {quoted}\n");
         _root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
         var resolver = new SquadResolver(new AboxConfig());
-        var build = new BuildService(
+        var team = resolver.ResolveTeam(_root.Path, "sample");
+        var build = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(_paths),
             _store,
-            LocalWorkloadTest.Images(),
+            LocalWorkloadFactory.Images(),
             _sbx,
             _console
         );
@@ -242,12 +243,7 @@ public sealed class StatePathCreationTests : IDisposable
 
         // Act
         await build.BuildAsync(
-            new BuildRequest(
-                [resolver.ResolveTeam(_root.Path, "sample")],
-                _root.Path,
-                "latest",
-                Verify: false
-            ),
+            new BuildRequest([team], _root.Path, "latest", Verify: false),
             CancellationToken.None
         );
         var first = await _create.CreateAsync(Request(), CancellationToken.None);
@@ -265,17 +261,16 @@ public sealed class StatePathCreationTests : IDisposable
         first.Should().Be(0);
         recreated.Should().Be(0);
         File.ReadAllText(saved).Should().Be("keep this session");
-        var manifest = _store.Load("sample", "ac", "latest")!;
+        var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         manifest
-            .State.Should()
-            .ContainSingle()
-            .Which.Should()
-            .BeEquivalentTo(
-                new ManifestState { SandboxPath = sandboxPath, RelativePath = relativePath }
-            );
-        File.ReadAllText(Path.Combine(manifest.StateMixinDirectory!, "state.yaml"))
+            .State.Select(entry => (entry.SandboxPath, entry.RelativePath))
             .Should()
-            .Contain("path: " + sandboxPath);
+            .Equal((sandboxPath, relativePath));
+        var generated = YamlReader
+            .LoadFile(Path.Combine(manifest.StateMixinDirectory!, "state.yaml"))
+            .GetEntries("capabilities")
+            .Single();
+        generated.GetEntry("config")!.GetString("path").Should().Be(sandboxPath);
         await _sbx.Received(2)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
@@ -306,7 +301,7 @@ public sealed class StatePathCreationTests : IDisposable
             Squad = "ac",
             Tag = "latest",
             Reference = ImageName.OfTeam("sample", "latest"),
-            LocalWorkload = LocalWorkloadTest.Artifact(_root),
+            LocalWorkload = LocalWorkloadFactory.Artifact(_root),
             State = state,
             Mcp = [new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }],
         };

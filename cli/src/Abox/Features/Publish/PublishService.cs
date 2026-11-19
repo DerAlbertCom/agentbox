@@ -48,7 +48,7 @@ public sealed class PublishService(
                 var selected = builds[index];
                 var publication = new Publication(
                     Path.Combine(temporary.Path, "publication", index.ToString()),
-                    $"{Registry}/{selected.Build.PublishRepository}/{RegistryImageName.SquadRepository(selected.Team, selected.Build.Squad)}",
+                    $"{Registry}/{selected.Build.PublishRepository}/{selected.Identity.Repository}",
                     "publish-" + Guid.NewGuid().ToString("N"),
                     publisher
                 );
@@ -88,7 +88,7 @@ public sealed class PublishService(
         );
         var configDirectory = WriteConfiguration(
             publication.Directory,
-            selected.Team,
+            selected.Identity.Team,
             selected.Build
         );
         var config = await publication.Publisher.PushVerifiedAsync(
@@ -178,7 +178,7 @@ public sealed class PublishService(
             Path.Combine(directory, "set.yaml"),
             new PublicationSetDescriptor
             {
-                DisplayName = $"{selected.Team} / {selected.Build.Squad}",
+                DisplayName = $"{selected.Identity.Team} / {selected.Build.Squad}",
                 Kits = kits,
             }
         );

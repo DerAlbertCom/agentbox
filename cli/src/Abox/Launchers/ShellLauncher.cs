@@ -5,7 +5,7 @@ namespace Abox.Launchers;
 /// <summary>
 /// The default launcher: a shell in the workspace of the sandbox.
 /// </summary>
-public sealed class ShellLauncher : ILauncher
+public sealed class ShellLauncher(ISbxClient sbx) : ILauncher
 {
     public string Id => "shell";
 
@@ -19,7 +19,7 @@ public sealed class ShellLauncher : ILauncher
     {
         var command = context.Argv.Count > 0 ? context.Argv : new[] { "bash", "-l" };
 
-        return await context.Sbx.ExecAsync(
+        return await sbx.ExecAsync(
             new SbxExecRequest(
                 context.SandboxName,
                 command,

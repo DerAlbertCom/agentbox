@@ -107,7 +107,6 @@ public sealed class SecretsService(
 
             var outcome = declaration.IsCustom
                 ? await sbx.SetCustomSecretAsync(
-                    declaration.Service,
                     declaration.Host,
                     declaration.EnvironmentVariable,
                     value,
@@ -144,11 +143,7 @@ public sealed class SecretsService(
         {
             var declaration = squad.Secrets.FirstOrDefault(secret => secret.Service == name);
             var outcome = await sbx.RemoveSecretAsync(
-                name,
-                declaration?.IsCustom == true ? declaration.Host : null,
-                declaration?.IsCustom == true && declaration.Host is null
-                    ? declaration.EnvironmentVariable
-                    : null,
+                declaration ?? new SecretDeclaration(name),
                 cancellationToken
             );
             if (!outcome.Succeeded)
@@ -170,19 +165,15 @@ public sealed class SecretsService(
     /// </summary>
     private static bool IsStored(string name, SecretDeclaration? declaration, HostSecrets stored)
     {
-        if (declaration?.IsCustom == true && declaration.Host is not null)
+        var (kind, value) = (declaration ?? new SecretDeclaration(name)).Identity;
+        return kind switch
         {
-            return stored.Custom.Any(custom => custom.Targets.Contains(declaration.Host));
-        }
-
-        if (declaration?.IsCustom == true && declaration.EnvironmentVariable is not null)
-        {
-            return stored.Custom.Any(custom =>
-                custom.EnvironmentVariable == declaration.EnvironmentVariable
-            );
-        }
-
-        return stored.Services.Contains(name);
+            SecretIdentityKind.Host => stored.Custom.Any(custom => custom.Targets.Contains(value)),
+            SecretIdentityKind.EnvironmentVariable => stored.Custom.Any(custom =>
+                custom.EnvironmentVariable == value
+            ),
+            _ => stored.Services.Contains(value),
+        };
     }
 
     /// <summary>

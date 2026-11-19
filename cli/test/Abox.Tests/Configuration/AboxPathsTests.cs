@@ -58,17 +58,4 @@ public sealed class AboxPathsTests
         paths.ConfigDirectory.Should().Be(Path.Combine("/home/albert", ".config", "abox"));
         paths.StateDirectory.Should().Be(Path.Combine("/home/albert", ".local", "state", "abox"));
     }
-
-    [Fact]
-    public void TheBuildsLiveUnderTheStateDirectory()
-    {
-        // Arrange
-        var paths = AboxPaths.For("/config", "/state");
-
-        // Act
-        var directory = paths.BuildDirectory("sample", "ac", "latest");
-
-        // Assert
-        directory.Should().Be(Path.Combine("/state", "builds", "sample", "ac", "latest"));
-    }
 }

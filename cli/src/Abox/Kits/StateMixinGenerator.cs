@@ -32,7 +32,7 @@ public sealed class StateMixinGenerator
             descriptor
                 .AppendLine("  - type: com.docker.sandbox/host-mount@1")
                 .AppendLine("    config:")
-                .AppendLine($"      path: {entry.SandboxPath}");
+                .AppendLine($"      path: {YamlScalar.Quote(entry.SandboxPath)}");
         }
 
         File.WriteAllText(

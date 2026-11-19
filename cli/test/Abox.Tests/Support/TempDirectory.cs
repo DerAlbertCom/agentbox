@@ -25,7 +25,7 @@ public sealed class TempDirectory : IDisposable
         return path;
     }
 
-    public string Directory_(string relativePath)
+    public string CreateDirectory(string relativePath)
     {
         var path = System.IO.Path.Combine(Path, relativePath);
         Directory.CreateDirectory(path);

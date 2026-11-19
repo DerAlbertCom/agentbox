@@ -16,12 +16,12 @@ work up**. How to write the squads, the kits and the workloads of a project is i
 | `abox build --team <name> [--root <dir>] [--tag <tag>] [--no-verify] [--no-personal]` | Prebuilds reusable local workload images with Docker Buildx and prepares the v3 kits of every squad. No registry writes. |
 | `abox build --team <name> --metadata-only` | Maintainer-only source preparation without image builds. Clears local image selection for this tag; not required for remote create. |
 | `abox publish --team <name> [--root <dir>] [--tag <tag>] [--builder <name>]` | Builds and pushes the local kit sets to `rwest.jfrog.io/<publishRepository>`, configured in each workload. Requires Docker Buildx and host registry sign-in. |
-| `abox create --team <name> [--squad <name>] [--location <path>] [--local] [--root <dir>]` | Pulls a self-contained published squad set, or uses a local prebuild with `--local`. The folder's `abox.json` can select the squad and opt into user-secret copying. Only local create can ask for an otherwise omitted squad; `--root` locates its team sources separately from the sandbox location. |
+| `abox create --team <name> [--squad <name>] [--location <path>] [--tag <tag>] [--local] [--root <dir>] [--yes]` | Pulls a self-contained published squad set, or uses a local prebuild with `--local`. The folder's `abox.json` can select the squad and opt into user-secret copying. Only local create can ask for an otherwise omitted squad; `--root` locates its team sources separately from the sandbox location. `--yes` confirms replacement. |
 | `abox run [<launcher>] [--location <path>] [-- <argv>...]` | Starts a launcher for the sandbox of a folder. The default launcher is a shell. |
 | `abox prune [--full] [--sbx]` | Removes the template images of sbx that stopped being used. `--full` reaches for everything sbx holds, `--sbx` stops the running sandboxes first. |
-| `abox secrets list\|set\|remove` | The host secrets the kits of a squad ask for. |
+| `abox secrets list\|set\|remove [--team <name>] --squad <name> [--root <dir>]` | The host secrets the local kits of a squad ask for. `set` and `remove` also accept repeatable `--service <name>`; `list` does not. |
 | `abox user-secrets [--location <path>] [--force]` | Copies explicitly selected local .NET user-secret stores into the folder's existing sandbox. |
-| `abox ports [--location <path>] [--offset <n>]` | Discovers .NET and Angular app ports and publishes them on host loopback at port + offset (default 10000). |
+| `abox ports [--location <path>] [--offset <n>] [--refresh-https-bootstrap]` | Discovers .NET and Angular app ports and publishes them on host loopback at port + offset (default 10000). The explicit refresh flag repairs only the protected HTTPS bootstrap reader. |
 
 Two more entry points exist, and stay out of the help: `abox pipe <sandbox> -- <command>`
 and `abox exec <sandbox> -- <command>`.
@@ -31,6 +31,8 @@ then the current folder. For `create --local`, team discovery starts at that loc
 and searches its parents, unless `--root <dir>` selects a separate source project.
 For `create`, `--root` requires `--local`; remote create rejects it because no local
 team sources are used.
+`build`, `publish` and every `secrets` subcommand also accept `--root <dir>` to
+override where their search for team sources starts.
 
 ### Reaching sandbox apps over HTTP
 
@@ -279,8 +281,11 @@ userSecretsDenyList:
   policy safeguard, not a detector for arbitrary production credentials.
 
 The file is at `$XDG_CONFIG_HOME/abox/config.yaml` when `XDG_CONFIG_HOME` is an
-absolute path; otherwise it is `~/.config/abox/config.yaml` on Linux/macOS or
-`%USERPROFILE%\.abox\config\config.yaml` on Windows. `pullRepository` is one
+absolute path; otherwise it is `<home>/.config/abox/config.yaml` on Linux/macOS or
+`<home>\.abox\config\config.yaml` on Windows. On every platform, `<home>` is the
+first nonblank value of `HOME`, then `USERPROFILE`, with the CLI installation
+directory as a last resort. In particular, Windows Git Bash's `HOME` takes
+precedence over `USERPROFILE`. `pullRepository` is one
 lowercase JFrog repository name, not a URL, host, path or tag. Omitted or blank
 values use the default. It is independent of each workload's `publishRepository`.
 

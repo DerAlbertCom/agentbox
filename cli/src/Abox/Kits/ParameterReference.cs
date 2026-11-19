@@ -35,9 +35,6 @@ public static partial class ParameterReference
             );
     }
 
-    /// <summary>Whether the value uses any parameter.</summary>
-    public static bool IsUsed(string value) => ReferencePattern().IsMatch(value);
-
     [GeneratedRegex(@"\$\{\{\s*parameters\.([A-Za-z_][A-Za-z0-9_-]*)\s*\}\}")]
     private static partial Regex ReferencePattern();
 }

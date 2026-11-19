@@ -38,40 +38,6 @@ public sealed class KitDescriptorTests
         descriptor.Should().NotBeNull();
         var service = descriptor!.Services.Should().ContainSingle().Which;
         service.Service.Should().Be("github");
-        service.Phases.Should().Equal("runtime");
-        service.EnvironmentVariable.Should().Be("GITHUB_TOKEN");
-        service.Domains.Should().Equal("api.github.com");
-    }
-
-    [Fact]
-    public void AServiceWithSeveralPhasesIsRead()
-    {
-        // Arrange
-        _root.File(
-            "kits/pi-config/pi-config.yaml",
-            """
-            schemaVersion: "3"
-            kind: mixin
-            capabilities:
-              - type: com.docker.sandbox/credential@1
-                config:
-                  service: github
-                  phase:
-                    - build
-                    - runtime
-            """
-        );
-
-        // Act
-        var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "pi-config"));
-
-        // Assert
-        descriptor.Should().NotBeNull();
-        descriptor!
-            .Services.Should()
-            .ContainSingle()
-            .Which.Phases.Should()
-            .Equal("build", "runtime");
     }
 
     [Fact]
@@ -104,7 +70,7 @@ public sealed class KitDescriptorTests
     public void AKitWithoutADescriptorHasNoServices()
     {
         // Arrange
-        _root.Directory_("kits/empty");
+        _root.CreateDirectory("kits/empty");
 
         // Act
         var descriptor = KitDescriptor.Load(Path.Combine(_root.Path, "kits", "empty"));

@@ -109,8 +109,7 @@ public sealed class HerdrStartupTests
         using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
 
         // Act
-        var action = () =>
-            new HerdrAppLauncher(fixture.Runner).RunAsync(fixture.Context, cancellation.Token);
+        var action = () => fixture.Launcher.RunAsync(fixture.Context, cancellation.Token);
 
         // Assert
         await action.Should().ThrowAsync<OperationCanceledException>();

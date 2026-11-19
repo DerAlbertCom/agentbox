@@ -4,6 +4,7 @@ using Abox.Features.Build;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using Abox.Sbx;
 using NSubstitute;
 
@@ -23,24 +24,22 @@ public sealed class AgentGuidanceBuildTests
         // Arrange
         using var root = new TempDirectory();
         var source = KitDescriptor.Load(FixtureKit(kitName))!;
-        var kitDirectory = root.Directory_("kits/" + kitName);
+        var kitDirectory = root.CreateDirectory("kits/" + kitName);
         File.Copy(source.DescriptorPath, Path.Combine(kitDirectory, kitName + ".yaml"));
         root.File("teams/sample/ac.abox", $"workload: sample\nkits: [{kitName}]\n");
         root.File("teams/sample/sample.workload", "template: example.com/base:1\n");
         root.File("runtime workspace/project.txt", "the runtime-mounted project\n");
         root.File("image-workdir/project.txt", "the image default is not the project\n");
-        var paths = AboxPaths.For(root.Directory_("config"), root.Directory_("state"));
+        var paths = AboxPaths.For(root.CreateDirectory("config"), root.CreateDirectory("state"));
         var store = new BuildStore(paths);
         var resolver = new SquadResolver(new AboxConfig());
         var runner = Substitute.For<IProcessRunner>();
         var sbx = Substitute.For<ISbxClient>();
-        var service = new BuildService(
+        var service = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(paths),
             store,
-            LocalWorkloadTest.Images(runner),
+            LocalWorkloadFactory.Images(runner),
             sbx,
             new TestConsole()
         );
@@ -56,8 +55,11 @@ public sealed class AgentGuidanceBuildTests
             ),
             CancellationToken.None
         );
-        var manifest = store.Load("sample", "ac", "latest")!;
-        var snapshot = BuildSources.Snapshot(manifest, root.Directory_("publication-snapshot"));
+        var manifest = store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
+        var snapshot = BuildSources.Snapshot(
+            manifest,
+            root.CreateDirectory("publication-snapshot")
+        );
         var kit = manifest.Kits.Should().ContainSingle().Which;
         var descriptor = KitDescriptor.Load(snapshot[kit.Reference])!;
         var yaml = YamlReader.LoadFile(descriptor.DescriptorPath);
@@ -108,18 +110,5 @@ public sealed class AgentGuidanceBuildTests
     }
 
     private static string Shell() =>
-        OperatingSystem.IsWindows()
-            ? (Environment.GetEnvironmentVariable("PATH") ?? "")
-                .Split(Path.PathSeparator)
-                .Where(directory => File.Exists(Path.Combine(directory, "git.exe")))
-                .Select(directory =>
-                    Path.GetFullPath(Path.Combine(directory, "..", "usr", "bin", "sh.exe"))
-                )
-                .FirstOrDefault(File.Exists)
-                ?? throw new ShellUnavailableException(
-                    "Git for Windows sh is needed to execute the generated agent guidance."
-                )
-            : "sh";
-
-    private sealed class ShellUnavailableException(string message) : Exception(message);
+        TestShell.Require("Git for Windows sh is needed to execute the generated agent guidance.");
 }

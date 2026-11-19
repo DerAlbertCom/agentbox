@@ -11,6 +11,10 @@ public sealed class LocalWorkloadImages(
     IConsole console
 )
 {
+    private static readonly OciFailure OperationFailure = new(exitCode =>
+        $"Local workload image operation failed (Docker, exit {exitCode}). Check the Docker context and run 'abox build' again. No source-build fallback is performed."
+    );
+
     public async Task<LocalWorkloadImage> BuildAsync(
         string workloadDirectory,
         string runtimeDirectory,
@@ -38,9 +42,9 @@ public sealed class LocalWorkloadImages(
     private async Task<string> HostContextAsync(CancellationToken cancellationToken)
     {
         RequireDocker();
-        await RunAsync(["buildx", "version"], cancellationToken);
+        await registry.RequireBuildxAsync(OperationFailure, cancellationToken);
         var context = (
-            await RunAsync(["context", "show"], cancellationToken)
+            await registry.CurrentContextAsync(OperationFailure, cancellationToken)
         ).StandardOutput.Trim();
         if (string.IsNullOrWhiteSpace(context))
         {
@@ -61,25 +65,17 @@ public sealed class LocalWorkloadImages(
     {
         var sourceHash = BuildSources.DirectoryHash(workloadDirectory);
         var reference = "docker.io/library/abox-workload:" + Guid.NewGuid().ToString("N");
-        var arguments = new List<string>
-        {
-            "--context",
-            context,
-            "buildx",
-            "build",
-            "--builder",
-            context,
-            "--file",
-            Path.Combine(workloadDirectory, "workload.yaml"),
-            "--tag",
-            reference,
-            "--provenance=false",
-            "--load",
-        };
-        arguments.AddRange(WorkloadKitGenerator.GitHubBuildSecretArguments());
-        arguments.Add(workloadDirectory);
         console.WriteLine($"Building reusable workload image '{reference}'...");
-        await RunAsync(arguments, cancellationToken);
+        await registry.BuildAndLoadAsync(
+            new OciLoadBuild(
+                workloadDirectory,
+                Path.Combine(workloadDirectory, WorkloadKitGenerator.KitName + ".yaml"),
+                reference,
+                context
+            ),
+            OperationFailure,
+            cancellationToken
+        );
         var imageId = await ImageIdAsync(context, reference, cancellationToken);
         if (BuildSources.DirectoryHash(workloadDirectory) != sourceHash)
         {
@@ -99,11 +95,11 @@ public sealed class LocalWorkloadImages(
     {
         Directory.CreateDirectory(runtimeDirectory);
         File.Copy(
-            Path.Combine(workloadDirectory, "workload.yaml"),
-            Path.Combine(runtimeDirectory, "workload.yaml")
+            Path.Combine(workloadDirectory, WorkloadKitGenerator.KitName + ".yaml"),
+            Path.Combine(runtimeDirectory, WorkloadKitGenerator.KitName + ".yaml")
         );
         File.WriteAllText(
-            Path.Combine(runtimeDirectory, "workload.dockerfile"),
+            Path.Combine(runtimeDirectory, WorkloadKitGenerator.KitName + ".dockerfile"),
             $"FROM {reference}\n"
         );
     }
@@ -147,7 +143,7 @@ public sealed class LocalWorkloadImages(
     private async Task EnsureHostBuilderAsync(string context, CancellationToken cancellationToken)
     {
         var builders = (
-            await RunAsync(["buildx", "ls", "--format", "json"], cancellationToken)
+            await registry.ListBuildersAsync(OperationFailure, cancellationToken)
         ).StandardOutput.Trim();
         var drivers = new HashSet<string>();
         try
@@ -185,8 +181,9 @@ public sealed class LocalWorkloadImages(
     )
     {
         var id = (
-            await RunAsync(
-                ["--context", context, "image", "inspect", "--format", "{{.Id}}", reference],
+            await registry.ImageIdAsync(
+                new OciLocalImage(context, reference),
+                OperationFailure,
                 cancellationToken
             )
         ).StandardOutput.Trim();
@@ -204,17 +201,4 @@ public sealed class LocalWorkloadImages(
             programs,
             "Local workload images need Docker with Buildx on PATH. Install Docker and run 'abox build' again."
         );
-
-    private async Task<ProcessResult> RunAsync(
-        IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken
-    )
-    {
-        var result = await registry.RunAsync(arguments, false, cancellationToken);
-        if (!result.Succeeded)
-            throw new AboxException(
-                $"Local workload image operation failed (Docker, exit {result.ExitCode}). Check the Docker context and run 'abox build' again. No source-build fallback is performed.{Environment.NewLine}{(result.StandardError + result.StandardOutput).Trim()}"
-            );
-        return result;
-    }
 }

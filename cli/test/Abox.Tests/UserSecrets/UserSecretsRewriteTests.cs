@@ -578,14 +578,8 @@ public sealed class UserSecretsRewriteTests
             root.File($".microsoft/usersecrets/{id}/secrets.json", json);
         }
 
-        internal void Project(string id, string json)
-        {
-            root.File(
-                $"{id}/App.csproj",
-                $"<Project><PropertyGroup><UserSecretsId>{id}</UserSecretsId></PropertyGroup></Project>"
-            );
-            root.File($"{id}/appsettings.json", json);
-        }
+        internal void Project(string id, string json) =>
+            UserSecretProjects.Write(root, $"{id}/App.csproj", id, json);
 
         internal async Task<PreparedUserSecrets> PrepareAsync(bool force = false)
         {

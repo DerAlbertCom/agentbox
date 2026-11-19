@@ -8,7 +8,7 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed partial class PortsCommandTests
+public sealed class PortsCommandTests
 {
     [Theory]
     [InlineData("0", 8203)]
@@ -21,7 +21,7 @@ public sealed partial class PortsCommandTests
     {
         // Arrange
         var runner = Substitute.For<IProcessRunner>();
-        using var fixture = new Fixture(runner: runner);
+        using var fixture = new PortsCommandFixture(runner: runner);
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
@@ -72,7 +72,7 @@ public sealed partial class PortsCommandTests
     public async Task OneRunOverrideCannotBypassInvalidSharedFolderConfiguration()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File("folder/abox.json", """{"portOffset":1e4,"userSecrets":["sample"]}""");
 
         // Act
@@ -97,7 +97,7 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             $$$$"""{"profiles":{"app":{"applicationUrl":"http://localhost:{{{{sandboxPort}}}}"}}}"""
@@ -136,7 +136,7 @@ public sealed partial class PortsCommandTests
     public async Task InvalidOffsetsCannotStartASandboxOrPublishAPartialPlan(string offset)
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:1;http://localhost:8203"}}}"""
@@ -161,7 +161,7 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
@@ -205,7 +205,7 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
@@ -239,7 +239,7 @@ public sealed partial class PortsCommandTests
     public async Task SelectedRootMayBeLinkedButKeepsItsLexicalSandboxIdentity()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         using var links = new DirectoryLinks();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
@@ -274,8 +274,8 @@ public sealed partial class PortsCommandTests
     public async Task MatchingFileLinksAreRejectedWithoutReadingTheTarget(string relative)
     {
         // Arrange
-        using var fixture = new Fixture();
-        fixture.Root.Directory_("folder/Properties");
+        using var fixture = new PortsCommandFixture();
+        fixture.Root.CreateDirectory("folder/Properties");
         var target = fixture.Root.File("synthetic-target.json", "must-never-be-read");
         var path = Path.Combine(fixture.Location, relative);
         try
@@ -314,7 +314,7 @@ public sealed partial class PortsCommandTests
     public async Task UnreadableProjectFailsBeforePublishingWithoutSilentlySkippingHttps()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         var path = fixture.Root.File(
             "folder/Web.csproj",
             """<Project Sdk="Microsoft.NET.Sdk.Web"><!-- never-echo-project-content --></Project>"""
@@ -373,7 +373,7 @@ public sealed partial class PortsCommandTests
     public async Task InvalidUtf8IsAnActionableDiscoveryFailure()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         var file = fixture.Root.File("folder/Properties/launchSettings.json", "");
         await File.WriteAllBytesAsync(file, [0xff, 0xfe, 0xff]);
 
@@ -394,7 +394,7 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
@@ -434,8 +434,8 @@ public sealed partial class PortsCommandTests
     public async Task ExplicitLocationOverridesDefaultWithoutRequiringFolderConfigTeamSourcesOrBuilds()
     {
         // Arrange
-        using var fixture = new Fixture();
-        var other = fixture.Root.Directory_("explicit");
+        using var fixture = new PortsCommandFixture();
+        var other = fixture.Root.CreateDirectory("explicit");
         fixture.Root.File(
             "explicit/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
@@ -465,7 +465,7 @@ public sealed partial class PortsCommandTests
     public async Task UnconfiguredLocationUsesCurrentFolderAndMissingSandboxGivesCreateHintWithoutCreation()
     {
         // Arrange
-        using var fixture = new Fixture(new AboxConfig());
+        using var fixture = new PortsCommandFixture(new AboxConfig());
 
         // Act
         var exit = await fixture.Run();
@@ -497,7 +497,7 @@ public sealed partial class PortsCommandTests
     public async Task SandboxDiscoveryFailureDoesNotFallBackOrPublish(bool cancel, int expected)
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture
             .Sbx.FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>())
             .Returns(
@@ -532,7 +532,7 @@ public sealed partial class PortsCommandTests
     public async Task NoExplicitPortsIsASuccessfulNoOp(string json)
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File("folder/Properties/launchSettings.json", json);
 
         // Act
@@ -551,7 +551,7 @@ public sealed partial class PortsCommandTests
     public async Task PreflightFailurePreventsDiscoveryAndPublishing()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 50, 0));
 
         // Act
@@ -574,7 +574,7 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
@@ -612,7 +612,7 @@ public sealed partial class PortsCommandTests
     public async Task DiscoveryStaysBelowLocationAndSkipsArtifactsDirectoryLinksAndCycles()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         using var links = new DirectoryLinks();
         foreach (
             var excluded in new[]
@@ -665,14 +665,14 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         if (limit == "oversized")
             fixture.Root.File(
                 "folder/Properties/launchSettings.json",
                 new string(' ', 1024 * 1024 + 1)
             );
         else
-            fixture.Root.Directory_("folder/" + string.Join('/', Enumerable.Repeat("d", 65)));
+            fixture.Root.CreateDirectory("folder/" + string.Join('/', Enumerable.Repeat("d", 65)));
 
         // Act
         var exit = await fixture.Run();
@@ -707,7 +707,7 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/a-valid/Properties/launchSettings.json",
             """{"profiles":{"http":{"applicationUrl":"http://localhost:8203"}}}"""
@@ -733,7 +733,7 @@ public sealed partial class PortsCommandTests
     public async Task OnlyExplicitPortsCountIncludingExplicitSchemeDefaultsAndWildcardHosts()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """
@@ -766,7 +766,7 @@ public sealed partial class PortsCommandTests
     )
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/a/Properties/launchSettings.json",
             """{"profiles":{"one":{"applicationUrl":"http://localhost:8203;http://localhost:8203"}}}"""
@@ -798,7 +798,7 @@ public sealed partial class PortsCommandTests
     public async Task ReportsEveryExplicitLaunchProfileUrlWithoutProjectEvaluationOrConfiguration()
     {
         // Arrange
-        using var fixture = new Fixture();
+        using var fixture = new PortsCommandFixture();
         fixture.Root.File(
             "folder/api/Properties/launchSettings.json",
             """
@@ -825,54 +825,5 @@ public sealed partial class PortsCommandTests
             .And.Contain("8204")
             .And.Contain("18204")
             .And.Contain("19000");
-    }
-
-    private sealed class Fixture : IDisposable
-    {
-        public TempDirectory Root { get; } = new();
-        public TestConsole Console { get; } = new();
-        public ISbxClient Sbx { get; } = Substitute.For<ISbxClient>();
-        public string Location { get; }
-        public string Name => SandboxName.For(Location);
-        private readonly ServiceProvider provider;
-
-        public Fixture(AboxConfig? config = null, IProcessRunner? runner = null)
-        {
-            Location = Root.Directory_("folder");
-            Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
-            Sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
-            Sbx.FindSandboxAsync(Name, Arg.Any<CancellationToken>())
-                .Returns(new SandboxInfo(Name, "running", null));
-            var programs = Substitute.For<IHostPrograms>();
-            programs.Exists(Arg.Any<string>()).Returns(true);
-            provider = new ServiceCollection()
-                .AddAbox(Console, new TrailingArguments())
-                .AddSingleton(config ?? new AboxConfig { DefaultLocation = Location })
-                .AddSingleton(AboxPaths.For(Root.Path, Root.Path))
-                .AddSingleton<ISbxClient>(
-                    runner is null
-                        ? Sbx
-                        : new SbxClient(runner, AboxPaths.For(Root.Path, Root.Path))
-                )
-                .AddSingleton(programs)
-                .BuildServiceProvider();
-        }
-
-        public Task<int> Run(params string[] args) =>
-            provider.GetRequiredService<AboxRootCommand>().InvokeAsync(["ports", .. args]);
-
-        public async Task NoPublishing() =>
-            await Sbx.DidNotReceive()
-                .EnsureApplicationPortsAsync(
-                    Arg.Any<string>(),
-                    Arg.Any<IReadOnlyList<ApplicationPortMapping>>(),
-                    Arg.Any<CancellationToken>()
-                );
-
-        public void Dispose()
-        {
-            provider.Dispose();
-            Root.Dispose();
-        }
     }
 }

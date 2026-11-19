@@ -86,7 +86,6 @@ public sealed class SbxSecretInputTests
             // Act
             var outcome = custom
                 ? await client.SetCustomSecretAsync(
-                    "synthetic",
                     "example.test",
                     "SYNTHETIC_TOKEN",
                     value,
@@ -146,7 +145,6 @@ public sealed class SbxSecretInputTests
         var action = () =>
             custom
                 ? client.SetCustomSecretAsync(
-                    "synthetic",
                     "example.test",
                     "SYNTHETIC_TOKEN",
                     "synthetic-ü€",

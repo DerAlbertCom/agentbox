@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using Abox.Infrastructure;
 
 namespace Abox.Kits;
 
@@ -17,15 +18,6 @@ public sealed class WorkloadKitGenerator
 
     /// <summary>The directory the scripts of the workload are copied into.</summary>
     public const string ScriptsDirectoryName = "scripts";
-
-    /// <summary>The BuildKit secret the GitHub token is passed as, so it stays out of the layers.</summary>
-    public const string GitHubTokenSecret = "github_token";
-
-    /// <summary>Passes the optional host token by environment-backed BuildKit secret, never by value.</summary>
-    public static IReadOnlyList<string> GitHubBuildSecretArguments() =>
-        string.IsNullOrEmpty(Environment.GetEnvironmentVariable("GITHUB_TOKEN"))
-            ? []
-            : ["--secret", $"id={GitHubTokenSecret},env=GITHUB_TOKEN"];
 
     /// <summary>
     /// Writes the kit into a directory, replacing what was there before.
@@ -58,9 +50,9 @@ public sealed class WorkloadKitGenerator
             .AppendLine("# syntax=docker/sandbox-kit:3")
             .AppendLine("schemaVersion: \"3\"")
             .AppendLine("kind: workload")
-            .AppendLine($"displayName: {workload.Name}")
+            .AppendLine($"displayName: {YamlScalar.Quote(workload.Name)}")
             .AppendLine(
-                $"description: The base image built from {Path.GetFileName(workload.Path)}."
+                $"description: {YamlScalar.Quote($"The base image built from {Path.GetFileName(workload.Path)}.")}"
             )
             .AppendLine("capabilities:")
             .AppendLine("  - type: com.docker.sandbox/sbx@1")
@@ -173,9 +165,11 @@ public sealed class WorkloadKitGenerator
             foreach (var (tool, versions) in GroupTools(workload.Mise))
             {
                 dockerfile
-                    .AppendLine($"RUN --mount=type=secret,id={GitHubTokenSecret},required=false \\")
                     .AppendLine(
-                        $"    GITHUB_TOKEN=\"$(cat /run/secrets/{GitHubTokenSecret} 2>/dev/null || true)\" \\"
+                        $"RUN --mount=type=secret,id={OciRegistry.GitHubTokenSecret},required=false \\"
+                    )
+                    .AppendLine(
+                        $"    GITHUB_TOKEN=\"$(cat /run/secrets/{OciRegistry.GitHubTokenSecret} 2>/dev/null || true)\" \\"
                     )
                     .AppendLine($"    mise use -g -y {string.Join(' ', versions)}");
             }
@@ -217,7 +211,7 @@ public sealed class WorkloadKitGenerator
 
         foreach (var spec in specs)
         {
-            var (tool, _) = Split(spec);
+            var tool = ToolName(spec);
 
             if (!byTool.TryGetValue(tool, out var versions))
             {
@@ -243,11 +237,11 @@ public sealed class WorkloadKitGenerator
             .ToList();
     }
 
-    /// <summary>The tool of a spec and the version it asks for.</summary>
-    private static (string Tool, string Version) Split(string spec)
+    /// <summary>The tool of a spec, without its version.</summary>
+    private static string ToolName(string spec)
     {
         var at = spec.LastIndexOf('@');
-        return at > 0 ? (spec[..at], spec[(at + 1)..]) : (spec, string.Empty);
+        return at > 0 ? spec[..at] : spec;
     }
 
     private static void CopyScripts(WorkloadFile workload, string targetDirectory)

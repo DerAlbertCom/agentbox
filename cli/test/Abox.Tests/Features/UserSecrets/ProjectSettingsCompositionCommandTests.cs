@@ -108,21 +108,9 @@ public sealed class ProjectSettingsCompositionCommandTests
         );
         cli.Root.File(source + "/appsettings.json", "{}");
         var link = Path.Combine(cli.Location, "alias");
-        await LinkDirectory(link, Path.Combine(cli.Root.Path, source));
-        return link;
-    }
-
-    private static async Task LinkDirectory(string link, string target)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            var result = await new ProcessRunner().RunAsync(
-                new ProcessRequest("cmd", ["/c", "mklink", "/J", link, target]),
-                CancellationToken.None
-            );
+        var result = await DirectoryLinks.CreateAsync(link, Path.Combine(cli.Root.Path, source));
+        if (result is not null)
             result.ExitCode.Should().Be(0, result.StandardError);
-        }
-        else
-            Directory.CreateSymbolicLink(link, target);
+        return link;
     }
 }

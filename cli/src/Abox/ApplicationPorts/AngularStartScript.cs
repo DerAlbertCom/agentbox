@@ -1,6 +1,6 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Abox.Naming;
 
 namespace Abox.ApplicationPorts;
 
@@ -65,12 +65,9 @@ internal static partial class AngularStartScript
             value = ++index < args.Count ? args[index] : "";
         else
             value = args[index]["--port=".Length..];
-        if (
-            !int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var port)
-            || port is < 1 or > 65535
-        )
+        if (!TcpPort.TryParse(value, out var port))
             throw new FormatException();
-        return port;
+        return port.Value;
     }
 
     [GeneratedRegex(@"(?<![\w-])--port(?![\w-])", RegexOptions.CultureInvariant)]

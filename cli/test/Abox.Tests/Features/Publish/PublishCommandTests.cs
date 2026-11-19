@@ -3,6 +3,7 @@ using Abox.Features.Publish;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
+using Abox.Naming;
 using NSubstitute;
 
 namespace Abox.Tests;
@@ -89,13 +90,11 @@ public sealed class PublishCommandTests
         _root.File("kits/shared.workload", "publishRepository: shared-images-local\n");
         var config = new AboxConfig { DefaultTeam = "sample" };
         var resolver = new SquadResolver(config);
-        var build = new Abox.Features.Build.BuildService(
+        var build = TestServiceGraphs.Build(
             resolver,
-            new WorkloadKitGenerator(),
-            new StateMixinGenerator(),
             new PersonalConfigurations(AboxPaths.For(_root.Path, _root.Path)),
             _store,
-            LocalWorkloadTest.Images(),
+            LocalWorkloadFactory.Images(),
             Substitute.For<Abox.Sbx.ISbxClient>(),
             _console
         );
@@ -212,11 +211,9 @@ public sealed class PublishCommandTests
     private void SaveBuild(string team, string squad, string tag)
     {
         _root.File($"teams/{team}/{squad}.abox", "workload: sample\n");
-        var workload = Path.Combine(_store.DirectoryFor(team, squad, tag), "workload");
-        Directory.CreateDirectory(workload);
-        File.WriteAllText(
-            Path.Combine(workload, "workload.yaml"),
-            "schemaVersion: \"3\"\nkind: workload\n"
+        var workload = Path.Combine(
+            _store.DirectoryFor(new SquadBuildIdentity(team, squad, tag)),
+            "workload"
         );
         var manifest = new BuildManifest
         {
@@ -227,7 +224,11 @@ public sealed class PublishCommandTests
             WorkloadKitDirectory = workload,
             IncludesPersonalConfigurations = false,
         };
-        manifest.SourceHashes = BuildSources.Capture(manifest);
-        _store.Save(manifest);
+        PublicationBuilds.SaveWorkload(
+            _store,
+            manifest,
+            Path.Combine(workload, "workload.yaml"),
+            "schemaVersion: \"3\"\nkind: workload\n"
+        );
     }
 }

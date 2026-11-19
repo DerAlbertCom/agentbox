@@ -1,5 +1,12 @@
 namespace Abox.Kits;
 
+internal enum SecretIdentityKind
+{
+    Host,
+    EnvironmentVariable,
+    Service,
+}
+
 /// <summary>How a secret value is stored in the host store.</summary>
 public enum SecretEncoding
 {
@@ -39,4 +46,10 @@ public sealed record SecretDeclaration(
 {
     /// <summary>Whether the secret is one sbx does not know.</summary>
     public bool IsCustom => Host is not null || EnvironmentVariable is not null;
+
+    internal (SecretIdentityKind Kind, string Value) Identity =>
+        Host is not null ? (SecretIdentityKind.Host, Host)
+        : EnvironmentVariable is not null
+            ? (SecretIdentityKind.EnvironmentVariable, EnvironmentVariable)
+        : (SecretIdentityKind.Service, Service);
 }

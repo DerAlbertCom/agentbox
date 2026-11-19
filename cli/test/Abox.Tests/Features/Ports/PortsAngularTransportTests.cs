@@ -17,7 +17,7 @@ public sealed class PortsAngularTransportTests
     {
         // Arrange
         using var root = new TempDirectory();
-        var location = root.Directory_("workspace");
+        var location = root.CreateDirectory("workspace");
         var name = SandboxName.For(location);
         root.File(
             "workspace/angular.json",
@@ -58,13 +58,13 @@ public sealed class PortsAngularTransportTests
             });
         var programs = Substitute.For<IHostPrograms>();
         programs.Exists("sbx").Returns(true);
-        using var provider = new ServiceCollection()
-            .AddAbox(console, new TrailingArguments())
-            .AddSingleton(new AboxConfig { DefaultLocation = location })
-            .AddSingleton(AboxPaths.For(root.Path, root.Path))
+        var paths = AboxPaths.For(root.Path, root.Path);
+        using var application = new CliTestApplication(console, paths, new TrailingArguments());
+        application
+            .Services.AddSingleton(new AboxConfig { DefaultLocation = location })
             .AddSingleton(runner)
-            .AddSingleton(programs)
-            .BuildServiceProvider();
+            .AddSingleton(programs);
+        var provider = application.Provider;
 
         // Act
         var first = await provider.GetRequiredService<AboxRootCommand>().InvokeAsync(["ports"]);

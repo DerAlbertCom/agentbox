@@ -85,14 +85,12 @@ public sealed class FolderConfig
         }
         catch (DecoderFallbackException)
         {
-            throw new AboxException(
-                "abox.json has invalid UTF-8. Fix the folder configuration; no stores were copied."
-            );
+            throw new AboxException("abox.json has invalid UTF-8. Fix the folder configuration.");
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException)
         {
             throw new AboxException(
-                "abox.json is not valid JSON. Check its structure; no secret values were copied."
+                "abox.json is not valid JSON. Check the folder configuration structure."
             );
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)

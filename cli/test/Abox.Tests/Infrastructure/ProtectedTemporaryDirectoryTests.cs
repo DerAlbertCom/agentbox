@@ -42,7 +42,7 @@ public sealed class ProtectedTemporaryDirectoryTests
     {
         try
         {
-            Directory.CreateSymbolicLink(link, target);
+            DirectoryLinks.CreateSymbolic(link, target);
         }
         catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows())
         {

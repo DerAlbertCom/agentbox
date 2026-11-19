@@ -1,6 +1,6 @@
-using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Abox.Naming;
 
 namespace Abox.ApplicationPorts;
 
@@ -36,16 +36,9 @@ internal static partial class DotnetLaunchSettings
                 var explicitPort = match.Groups["port"];
                 if (!explicitPort.Success)
                     continue;
-                if (
-                    !int.TryParse(
-                        explicitPort.Value,
-                        NumberStyles.None,
-                        CultureInfo.InvariantCulture,
-                        out var port
-                    ) || port is < 1 or > 65535
-                )
+                if (!TcpPort.TryParse(explicitPort.Value, out var port))
                     throw new FormatException();
-                result.Add(new AppPortOccurrence(source, profile.Name, port));
+                result.Add(new AppPortOccurrence(source, profile.Name, port.Value));
             }
         }
     }

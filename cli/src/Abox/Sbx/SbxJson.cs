@@ -99,9 +99,6 @@ internal sealed class SbxTemplate
 
     [JsonPropertyName("created_at")]
     public DateTimeOffset? CreatedAt { get; set; }
-
-    [JsonPropertyName("size")]
-    public long? Size { get; set; }
 }
 
 /// <summary>One MCP server of <c>sbx mcp ls --json</c>.</summary>

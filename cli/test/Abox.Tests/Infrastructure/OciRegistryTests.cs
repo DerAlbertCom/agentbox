@@ -8,32 +8,102 @@ public sealed class OciRegistryTests
     private const string Reference = "registry.example/team/kit:latest";
     private readonly IProcessRunner _runner = Substitute.For<IProcessRunner>();
 
-    [Fact]
-    public async Task FailedDockerInvocationsReturnTheUnmodifiedResult()
+    public static TheoryData<string, bool, string[]> FailedOperations =>
+        new()
+        {
+            { "probe", false, ["buildx", "version"] },
+            {
+                "push",
+                true,
+                [
+                    "buildx",
+                    "build",
+                    "--builder",
+                    "publisher",
+                    "--file",
+                    "source/workload.yaml",
+                    "--tag",
+                    Reference,
+                    "--metadata-file",
+                    "metadata.json",
+                    "--provenance=mode=min",
+                    "--push",
+                    "source",
+                ]
+            },
+            {
+                "tag",
+                true,
+                [
+                    "buildx",
+                    "imagetools",
+                    "--builder",
+                    "publisher",
+                    "create",
+                    "--prefer-index=false",
+                    "--tag",
+                    Reference,
+                    "candidate",
+                ]
+            },
+        };
+
+    [Theory]
+    [MemberData(nameof(FailedOperations))]
+    public async Task FailedDockerInvocationsReportTheCallersFailureWithCapturedOutput(
+        string operation,
+        bool attachConsole,
+        string[] expected
+    )
     {
         // Arrange
         var failure = new ProcessResult(17, "output", "error");
         _runner.RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>()).Returns(failure);
 
         // Act
-        var result = await new OciRegistry(_runner).RunAsync(
-            ["buildx", "version"],
-            true,
-            CancellationToken.None
-        );
+        var action = () => InvokeAsync(operation);
 
         // Assert
-        result.Should().BeSameAs(failure);
+        (await action.Should().ThrowAsync<AboxException>())
+            .Which.Message.Should()
+            .Be("Caller failure: 17." + Environment.NewLine + "erroroutput");
         await _runner
             .Received()
             .RunAsync(
                 Arg.Is<ProcessRequest>(request =>
                     request.FileName == "docker"
-                    && request.AttachConsole
-                    && request.Arguments.SequenceEqual(new[] { "buildx", "version" })
+                    && request.AttachConsole == attachConsole
+                    && request.Arguments.SequenceEqual(expected)
                 ),
                 CancellationToken.None
             );
+    }
+
+    private Task InvokeAsync(string operation)
+    {
+        var registry = new OciRegistry(_runner);
+        var failure = new OciFailure(exitCode => $"Caller failure: {exitCode}.");
+        return operation switch
+        {
+            "push" => registry.BuildAndPushAsync(
+                new OciPushBuild(
+                    "source",
+                    "source/workload.yaml",
+                    Reference,
+                    "metadata.json",
+                    "publisher",
+                    false
+                ),
+                failure,
+                CancellationToken.None
+            ),
+            "tag" => registry.TagAsync(
+                new OciTag("candidate", Reference, "publisher"),
+                failure,
+                CancellationToken.None
+            ),
+            _ => registry.RequireBuildxAsync(failure, CancellationToken.None),
+        };
     }
 
     [Theory]
@@ -65,9 +135,9 @@ public sealed class OciRegistryTests
 
         // Act
         var result = await new OciRegistry(_runner).InspectAsync(
-            Reference,
+            new OciImage(Reference, builder),
             raw,
-            builder,
+            new OciFailure(exitCode => $"Inspection failed: {exitCode}."),
             CancellationToken.None
         );
 

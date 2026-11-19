@@ -1,3 +1,5 @@
+using Abox.Naming;
+
 namespace Abox.Kits;
 
 /// <summary>
@@ -75,21 +77,7 @@ public sealed record StateEntry(string SandboxPath, string RelativePath)
         && !part.EndsWith('.')
         && !part.EndsWith(' ')
         && !part.Any(character => char.IsControl(character) || "\\:<>\"|?*".Contains(character))
-        && !IsDeviceName(part);
-
-    private static bool IsDeviceName(string part)
-    {
-        var name = part.Split('.')[0].TrimEnd(' ').ToUpperInvariant();
-        return name is "CON" or "PRN" or "AUX" or "NUL" or "CONIN$" or "CONOUT$"
-            || (
-                name.Length == 4
-                && (
-                    name.StartsWith("COM", StringComparison.Ordinal)
-                    || name.StartsWith("LPT", StringComparison.Ordinal)
-                )
-                && "123456789¹²³".Contains(name[3])
-            );
-    }
+        && !WindowsDeviceName.IsReserved(part);
 
     /// <summary>Whether this entry contains the other one.</summary>
     public bool Contains(StateEntry other) =>

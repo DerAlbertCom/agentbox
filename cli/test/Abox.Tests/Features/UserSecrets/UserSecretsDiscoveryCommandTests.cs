@@ -37,9 +37,7 @@ public sealed class UserSecretsDiscoveryCommandTests
             "<Project><PropertyGroup><UserSecretsId>$(SyntheticPrivateId)</UserSecretsId></PropertyGroup></Project>"
         );
         cli.Root.File("folder/unselected/appsettings.json", "not JSON: no static association");
-        var originals = Directory
-            .EnumerateFiles(cli.Root.Path, "*", SearchOption.AllDirectories)
-            .ToDictionary(path => path, File.ReadAllBytes);
+        var originals = FileSnapshots.CaptureBytes(cli.Root.Path);
         var processes = Substitute.For<IProcessRunner>();
         cli.Services.AddSingleton(processes);
         cli.Sbx.GetUserSecretsHostPortsAsync(cli.Name, Arg.Any<CancellationToken>())
@@ -67,8 +65,7 @@ public sealed class UserSecretsDiscoveryCommandTests
                     """{"Copied":"synthetic-only","Endpoint":"http://host.docker.internal:8004/synthetic-path"}"""
                 );
         }
-        foreach (var (path, original) in originals)
-            File.ReadAllBytes(path).Should().Equal(original);
+        FileSnapshots.AssertUnchanged(originals);
         processes.ReceivedCalls().Should().BeEmpty();
         cli.Console.AllText.Should().NotContain("synthetic-").And.NotContain("SyntheticPrivateId");
     }
@@ -90,7 +87,7 @@ public sealed class UserSecretsDiscoveryCommandTests
         using var links = new DirectoryLinks();
         cli.Configure("""{"userSecrets":["shared"]}""");
         cli.Store("shared", "{}");
-        var target = cli.Root.Directory_(
+        var target = cli.Root.CreateDirectory(
             targetKind switch
             {
                 "inside" => "folder/real",
@@ -187,7 +184,7 @@ public sealed class UserSecretsDiscoveryCommandTests
         cli.Configure("""{"userSecrets":["first","shared"]}""");
         cli.Store("first", "{}");
         Project(cli, "src/deep/Api", "http://localhost:8004/synthetic-path");
-        var target = cli.Root.Directory_("folder/removed");
+        var target = cli.Root.CreateDirectory("folder/removed");
         await links.Add(Path.Combine(cli.Location, "broken"), target, symbolic: false);
         Directory.Delete(target);
 
@@ -257,15 +254,11 @@ public sealed class UserSecretsDiscoveryCommandTests
         cli.Console.AllText.Should().NotContain("must never be read");
     }
 
-    private static void Project(UserSecretsCliHarness cli, string directory, string endpoint)
-    {
-        cli.Root.File(
+    private static void Project(UserSecretsCliHarness cli, string directory, string endpoint) =>
+        UserSecretProjects.Write(
+            cli.Root,
             $"folder/{directory}/{Path.GetFileName(directory)}.csproj",
-            "<Project><PropertyGroup><UserSecretsId>shared</UserSecretsId></PropertyGroup></Project>"
-        );
-        cli.Root.File(
-            "folder/" + directory + "/appsettings.json",
+            "shared",
             "{\"Endpoint\":\"" + endpoint + "\"}"
         );
-    }
 }
