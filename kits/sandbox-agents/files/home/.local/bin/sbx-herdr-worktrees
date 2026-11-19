@@ -1,0 +1,17 @@
+#!/bin/sh
+# Herdr App's worktree mod asks Core to use ~/.herdr/worktrees; unlike the
+# older TUI, it has no directory setting. Keep its actual checkouts in the
+# shared sandbox worktree root without modifying the host app's shipped mod.
+set -eu
+
+root="$HOME/worktrees"
+legacy="$HOME/.herdr/worktrees"
+mkdir -p "$root" "$HOME/.herdr"
+if [ -L "$legacy" ] && [ "$(readlink -f "$legacy")" = "$(readlink -f "$root")" ]; then
+    exit 0
+fi
+if [ -e "$legacy" ] || [ -L "$legacy" ]; then
+    echo "Refusing to replace $legacy: existing worktrees or a personal path may be there. Review it manually; no worktrees were moved or deleted." >&2
+    exit 1
+fi
+ln -sT "$root" "$legacy"

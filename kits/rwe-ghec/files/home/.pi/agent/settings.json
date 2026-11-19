@@ -1,0 +1,5 @@
+{
+  "defaultProvider": "github-copilot",
+  "defaultModel": "github-copilot/claude-sonnet-5.5",
+  "tuiMode": "regular"
+}

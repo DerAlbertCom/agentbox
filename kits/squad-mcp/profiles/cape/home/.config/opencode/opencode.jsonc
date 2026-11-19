@@ -1,0 +1,101 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "worktree": {
+    "directory": "~/worktrees"
+  },
+  "agents": {
+    "build": {
+      "model": "github-copilot/gpt-6.1-sol#medium"
+    },
+    "plan": {
+      "model": "github-copilot/gpt-6.1-sol#medium"
+    }
+  },
+  "permissions": [
+    {
+      "action": "external_directory",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "edit",
+      "resource": "*",
+      "effect": "ask"
+    },
+    {
+      "action": "elastic_*",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "elastic_observability_*",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "elastic_platform_core_list_indices",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "elastic_platform_core_index_explorer",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "elastic_platform_core_get_index_mapping",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "elastic_platform_core_generate_esql",
+      "resource": "*",
+      "effect": "allow"
+    },
+    {
+      "action": "elastic_platform_core_execute_esql",
+      "resource": "*",
+      "effect": "allow"
+    }
+  ],
+  "mcp": {
+    "servers": {
+      "clean-code": {
+        "type": "local",
+        "command": [
+          "bash",
+          "/home/agent/.local/bin/sbx-clean-code-mcp"
+        ]
+      },
+      "ado": {
+        "type": "local",
+        "command": [
+          "mcp-server-azuredevops",
+          "${ADO_ORGANIZATION}",
+          "--authentication",
+          "pat",
+          "-d",
+          "core",
+          "repositories",
+          "pipelines",
+          "wiki",
+          "work-items",
+          "search"
+        ],
+        "environment": {
+          "PERSONAL_ACCESS_TOKEN": "{env:AZURE_DEVOPS_EXT_PAT}"
+        }
+      },
+      "database": {
+        "type": "remote",
+        "url": "${MCP_DATABASE_URL}",
+        "oauth": false
+      },
+      "elastic": {
+        "type": "remote",
+        "url": "${MCP_ELASTIC_URL}",
+        "oauth": false
+      }
+    }
+  }
+}

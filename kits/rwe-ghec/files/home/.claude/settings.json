@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "apiKeyHelper": "printf %s \"$RWE_GHE_TOKEN\"",
+  "model": "claude-opus-5-5",
+  "skipWebFetchPreflight": true,
+  "worktree": { "location": "~/worktrees" },
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.local/bin/claude-statusline"
+  },
+  "skipDangerousModePermissionPrompt": true,
+  "permissions": {
+    "defaultMode": "bypassPermissions",
+    "disableAutoMode": "disable",
+    "additionalDirectories": ["/tmp"],
+    "allow": ["Bash", "Read", "WebFetch", "Edit(//tmp/**)", "Write(//tmp/**)"],
+    "deny": ["WebSearch"]
+  },
+  "hooks": {
+    "WorktreeRemove": [
+      { "hooks": [{ "type": "command", "command": "bash ~/.local/bin/claude-worktree-remove" }] }
+    ],
+    "WorktreeCreate": [
+      { "hooks": [{ "type": "command", "command": "bash ~/.local/bin/claude-worktree-create" }] }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [{ "type": "command", "command": "bash ~/.local/bin/claude-guard-edits" }]
+      }
+    ]
+  },
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://copilot-api.rwe.ghe.com",
+    "ANTHROPIC_CUSTOM_HEADERS": "Copilot-Integration-Id: vscode-chat",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "claude-opus-5-5",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "claude-sonnet-5-5",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "claude-haiku-4-5",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1"
+  }
+}

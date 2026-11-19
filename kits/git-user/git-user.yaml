@@ -1,0 +1,15 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Git defaults
+version: "1.0.0"
+capabilities:
+  - type: com.docker.sandbox/git-identity@1
+    optional: true
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Git uses rerere, zdiff3, histogram diffs, fetch pruning, rebase
+        autostash and automatic upstream setup. Set user.name/user.email
+        before committing if the runtime did not provide an identity.
+        Host aliases are not automatically imported.

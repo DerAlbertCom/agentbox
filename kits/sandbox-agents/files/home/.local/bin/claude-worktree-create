@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Claude's worktree.location setting only covers Desktop SSH sessions. The hook
+# also covers --worktree, EnterWorktree and isolated subagents in the CLI.
+set -euo pipefail
+input=$(cat)
+cwd=$(jq -er '.cwd | strings | select(length > 0)' <<< "$input")
+name=$(jq -er '.name | strings | select(test("^[A-Za-z0-9][A-Za-z0-9_-]*$"))' <<< "$input")
+common=$(realpath "$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir)")
+repo=$(basename "$(dirname "$common")")
+directory="$HOME/worktrees/$repo/$name"
+branch="worktree-$name"
+if [[ -e "$directory" || -L "$directory" ]]; then
+  # A same-named folder is not enough: only resume a registered checkout of
+  # this repository. In particular, never follow a collision through a symlink.
+  [[ ! -L "$directory" && -d "$directory" ]]
+  [[ $(git -C "$directory" rev-parse --show-toplevel) == "$directory" ]]
+  [[ $(realpath "$(git -C "$directory" rev-parse --path-format=absolute --git-common-dir)") == "$common" ]]
+  git -C "$cwd" worktree list --porcelain -z | grep -zFx -- "worktree $directory" >/dev/null
+  printf '%s\n' "$directory"
+  exit 0
+fi
+mkdir -p "$(dirname "$directory")"
+if git -C "$cwd" show-ref --verify --quiet "refs/heads/$branch"; then
+  # Reopen a previously removed checkout without resetting its branch.
+  git -C "$cwd" worktree add "$directory" "$branch" >&2
+else
+  git -C "$cwd" worktree add -b "$branch" "$directory" HEAD >&2
+  # Only branches created here are eligible for automatic branch cleanup.
+  git -C "$cwd" config --local "branch.$branch.caboxWorktree" "$directory"
+fi
+printf '%s\n' "$directory"

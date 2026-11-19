@@ -1,0 +1,14 @@
+{
+  "claude": {
+    "disabled": [
+      "ado",
+      "elastic"
+    ]
+  },
+  "copilot": {
+    "disabled": [
+      "ado",
+      "elastic"
+    ]
+  }
+}

@@ -1,0 +1,53 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Squad agent and MCP configuration
+version: "1.0.0"
+requires: [mti-ca-agents, mti-ca-ado-project]
+args:
+  MCP_PROFILE:
+    required: true
+    enum: [cape, mod, predictopus, bau]
+    env: MCP_PROFILE
+  MCP_DATABASE_URL:
+    default: ""
+    pattern: '(https://[A-Za-z0-9./_:-]+)?'
+    env: MCP_DATABASE_URL
+  MCP_ELASTIC_URL:
+    default: ""
+    pattern: '(https://[A-Za-z0-9./_:-]+)?'
+    env: MCP_ELASTIC_URL
+  MCP_CONTEXT7_URL:
+    default: ""
+    pattern: '(https://[A-Za-z0-9./_:-]+)?'
+    env: MCP_CONTEXT7_URL
+  MCP_ELASTIC_NPROD_URL:
+    default: ""
+    pattern: '(https://[A-Za-z0-9./_:-]+)?'
+    env: MCP_ELASTIC_NPROD_URL
+  MCP_ELASTIC_PROD_URL:
+    default: ""
+    pattern: '(https://[A-Za-z0-9./_:-]+)?'
+    env: MCP_ELASTIC_PROD_URL
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: |
+            set -eu
+            profile="/opt/abox/mcp-profiles/$MCP_PROFILE/home"
+            cp -R "$profile/." "$HOME/"
+            for file in .claude.json .pi/agent/mcp.json .config/opencode/opencode.jsonc .config/cabox/copilot-mcp-config.json; do
+              envsubst '$ADO_ORGANIZATION $MCP_DATABASE_URL $MCP_ELASTIC_URL $MCP_CONTEXT7_URL $MCP_ELASTIC_NPROD_URL $MCP_ELASTIC_PROD_URL' < "$profile/$file" > "$HOME/$file"
+            done
+          user: "1000"
+          env: [MCP_PROFILE, ADO_ORGANIZATION, MCP_DATABASE_URL, MCP_ELASTIC_URL, MCP_CONTEXT7_URL, MCP_ELASTIC_NPROD_URL, MCP_ELASTIC_PROD_URL]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Squad MCP configuration is installed for all four agents. OpenCode/pi
+        enable code mode; Claude/Copilot start disabled. Use Claude's /mcp or
+        COPILOT_MCP_ENABLE=name1,name2 (or all) for Copilot.
+        OpenCode/pi restrict Elastic tools to observability and index/ESQL queries.
+        Claude/Copilot cannot enforce the equivalent wildcard allow-list.
+        Authentication belongs to the proxy, not MCP configuration files.

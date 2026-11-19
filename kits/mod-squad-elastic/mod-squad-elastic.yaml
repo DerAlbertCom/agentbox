@@ -1,0 +1,40 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: MOD Elastic Agent Builder
+version: "1.0.0"
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow: [mti-am-nprod.kb.eu-central-1.aws.cloud.es.io, mti-am.kb.eu-central-1.aws.cloud.es.io]
+  - type: com.docker.sandbox/credential@1
+    config:
+      service: mod-elastic-nprod
+      phase: runtime
+      apiKey:
+        name: ELASTIC_NPROD_TOKEN
+        proxyManaged: true
+        inject:
+          - domain: mti-am-nprod.kb.eu-central-1.aws.cloud.es.io
+            header: Authorization
+            format: ApiKey %s
+  - type: com.docker.sandbox/credential@1
+    config:
+      service: mod-elastic-prod
+      phase: runtime
+      apiKey:
+        name: ELASTIC_PROD_TOKEN
+        proxyManaged: true
+        inject:
+          - domain: mti-am.kb.eu-central-1.aws.cloud.es.io
+            header: Authorization
+            format: ApiKey %s
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        elastic-nprod and elastic-prod use Elastic's built-in Agent Builder
+        /api/agent_builder/mcp endpoints. Keys are encoded Elastic API keys
+        requiring feature_agentBuilder.read, injected only for their own host.
+        Never save keys in project/agent config or install the deprecated
+        @elastic/mcp-server-elasticsearch server.

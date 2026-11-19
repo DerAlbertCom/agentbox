@@ -1,0 +1,44 @@
+[user]
+    useconfigonly = true
+
+[core]
+	autocrlf = input
+	pager = delta
+	longpaths = true
+
+[color]
+	ui = auto
+
+[init]
+	defaultBranch = main
+
+[rerere]
+	enabled = true
+	autoupdate = true
+
+[interactive]
+	diffFilter = delta --color-only
+
+[delta "decorations"]
+	commit-decoration-style = bold yellow box ul
+	file-style = bold yellow ul
+	file-decoration-style = none
+
+[merge]
+	conflictStyle = zdiff3
+
+[difftool]
+  prompt = false
+
+[diff]
+	algorithm = histogram
+
+[fetch]
+	prune = true
+
+[rebase]
+	autoStash = true
+
+[push]
+	autoSetupRemote = true
+	followTags = true

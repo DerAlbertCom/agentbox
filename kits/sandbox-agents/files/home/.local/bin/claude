@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+# Resolve past the shim while guarded, then clear the guard before the real agent
+# starts so child/nested Claude sessions do not inherit a false recursion signal.
+if [[ ${CABOX_CLAUDE_WRAPPER_ACTIVE:-} == 1 ]]; then
+  printf '%s\n' 'cabox: Claude wrapper re-entry detected; check the mise tool installation.' >&2
+  exit 1
+fi
+export CABOX_CLAUDE_WRAPPER_ACTIVE=1
+if ! cabox_binary=$(/usr/local/bin/mise which claude) || [[ ! -x "$cabox_binary" || "$cabox_binary" -ef "$0" || "$cabox_binary" -ef "$HOME/.local/bin/claude" || "$cabox_binary" -ef "$HOME/.local/share/mise/shims/claude" || "$cabox_binary" -ef /usr/local/share/mise/shims/claude ]]; then
+  printf '%s\n' 'cabox: Cannot resolve a real Claude binary through mise; refusing wrapper/shim fallback.' >&2
+  exit 1
+fi
+unset CABOX_CLAUDE_WRAPPER_ACTIVE
+# Seed each working directory once, so later /mcp toggles remain the user's choice.
+if [[ -f "$HOME/.config/cabox/mcp-defaults.json" ]]; then
+  node - "$(pwd -P)" "$(git rev-parse --show-toplevel 2>/dev/null || true)" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+let temp;
+try {
+  const home = process.env.HOME;
+  const directory = path.join(home, '.config/cabox');
+  const marker = path.join(directory, 'claude-mcp-seeded');
+  const defaults = JSON.parse(fs.readFileSync(path.join(directory, 'mcp-defaults.json'), 'utf8')).claude.disabled;
+  const seeded = new Set(fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').split('\n').filter(Boolean) : []);
+  const pending = [...new Set(process.argv.slice(2).filter(Boolean))].filter(p => !seeded.has(p));
+  if (pending.length) {
+    const file = path.join(home, '.claude.json');
+    const config = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : {};
+    config.projects ??= {};
+    for (const p of pending) {
+      config.projects[p] ??= {};
+      config.projects[p].disabledMcpServers = [...new Set([...(config.projects[p].disabledMcpServers ?? []), ...defaults])];
+    }
+    temp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(temp, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+    fs.renameSync(temp, file);
+    temp = undefined;
+    // A running Claude session can overwrite our rename with its own snapshot.
+    // Mark only confirmed writes, so a lost update is retried on the next launch.
+    const persisted = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const confirmed = pending.filter(p => {
+      const names = persisted.projects?.[p]?.disabledMcpServers;
+      return Array.isArray(names) && defaults.every(name => names.includes(name));
+    });
+    if (confirmed.length) fs.appendFileSync(marker, confirmed.map(p => p + '\n').join(''));
+    if (confirmed.length !== pending.length) console.error('cabox: Claude MCP defaults changed concurrently; unconfirmed paths will be retried.');
+  }
+} catch (error) {
+  if (temp) { try { fs.unlinkSync(temp); } catch {} }
+  console.error(`cabox: Claude MCP defaults could not be seeded: ${error.message}`);
+}
+NODE
+  if [[ $? != 0 ]]; then
+    printf '%s\n' 'cabox: Claude MCP seeding failed; starting Claude anyway.' >&2
+  fi
+fi
+exec "$cabox_binary" "$@"

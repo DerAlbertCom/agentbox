@@ -1,0 +1,38 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Azure DevOps project and NuGet source
+version: "1.0.0"
+requires: [mti-ca-azure-devops]
+provides: [mti-ca-ado-project]
+args:
+  ADO_ORGANIZATION:
+    required: true
+    pattern: '[A-Za-z0-9_-]+'
+    env: ADO_ORGANIZATION
+  ADO_PROJECT:
+    required: true
+    pattern: '[A-Za-z0-9 _-]+'
+    env: ADO_PROJECT
+  ADO_NUGET_FEED:
+    default: ""
+    pattern: '[A-Za-z0-9_-]*'
+    env: ADO_NUGET_FEED
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: |
+            set -eu
+            az devops configure --defaults "organization=https://dev.azure.com/$ADO_ORGANIZATION/" "project=$ADO_PROJECT"
+            if [ -n "$ADO_NUGET_FEED" ]; then
+              dotnet nuget add source "https://pkgs.dev.azure.com/$ADO_ORGANIZATION/_packaging/$ADO_NUGET_FEED/nuget/v3/index.json" --name "$ADO_NUGET_FEED"
+            fi
+          user: "1000"
+          env: [ADO_ORGANIZATION, ADO_PROJECT, ADO_NUGET_FEED, AZURE_DEVOPS_EXT_PAT, DOTNET_ROOT, DOTNET_DOTNETUP_DATA_DIR, REQUESTS_CA_BUNDLE]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Azure DevOps organization: ${{ kit.args.ADO_ORGANIZATION }};
+        project: ${{ kit.args.ADO_PROJECT }}. az devops uses the proxy-managed
+        AZURE_DEVOPS_EXT_PAT placeholder. Never save PATs in NuGet/npm configs.

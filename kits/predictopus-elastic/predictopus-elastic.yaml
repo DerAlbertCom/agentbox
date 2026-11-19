@@ -1,0 +1,30 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Predictopus Elastic Agent Builder
+version: "1.0.0"
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow: [689203ce69c64beab0a2be1c0829117e.eu-central-1.aws.cloud.es.io]
+  - type: com.docker.sandbox/credential@1
+    config:
+      service: predictopus-elastic
+      phase: runtime
+      apiKey:
+        name: ELASTIC_TOKEN
+        proxyManaged: true
+        inject:
+          - domain: 689203ce69c64beab0a2be1c0829117e.eu-central-1.aws.cloud.es.io
+            header: Authorization
+            format: ApiKey %s
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Predictopus elastic uses the built-in Agent Builder endpoint:
+        https://689203ce69c64beab0a2be1c0829117e.eu-central-1.aws.cloud.es.io/api/agent_builder/mcp.
+        Its encoded API key needs feature_agentBuilder.read and stays on the host.
+        Do not install the deprecated @elastic/mcp-server-elasticsearch server.
+        Predictopus uses JFrog metsca-nuget-prod, not an Azure Artifacts feed;
+        the Azure DevOps team is Predictopus Team in AssetOpt Renewables.

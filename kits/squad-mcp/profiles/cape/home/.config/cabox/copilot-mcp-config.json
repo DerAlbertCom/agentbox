@@ -1,0 +1,50 @@
+{
+  "mcpServers": {
+    "clean-code": {
+      "type": "local",
+      "command": "bash",
+      "args": [
+        "/home/agent/.local/bin/sbx-clean-code-mcp"
+      ],
+      "tools": [
+        "*"
+      ]
+    },
+    "ado": {
+      "type": "local",
+      "command": "mcp-server-azuredevops",
+      "args": [
+        "${ADO_ORGANIZATION}",
+        "--authentication",
+        "pat",
+        "-d",
+        "core",
+        "repositories",
+        "pipelines",
+        "wiki",
+        "work-items",
+        "search"
+      ],
+      "env": {
+        "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_EXT_PAT}"
+      },
+      "tools": [
+        "*"
+      ]
+    },
+    "database": {
+      "type": "http",
+      "url": "${MCP_DATABASE_URL}",
+      "tools": [
+        "*"
+      ]
+    },
+    "elastic": {
+      "type": "http",
+      "url": "${MCP_ELASTIC_URL}",
+      "tools": [
+        "*"
+      ]
+    }
+  }
+}

@@ -28,3 +28,7 @@ capabilities:
           - localhost:16686
           - localhost:4317
           - localhost:4318
+          - localhost:65520
+          - localhost:65521
+          - localhost:65522
+          - localhost:65523

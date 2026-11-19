@@ -1,0 +1,91 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: MTI-CA agents and shell defaults
+version: "1.0.0"
+provides: [mti-ca-agents]
+args:
+  SANDBOX_POLLING:
+    default: "1"
+    env: DOTNET_USE_POLLING_FILE_WATCHER
+  SANDBOX_HISTORY:
+    default: /home/agent/.local/state/bash/history
+    env: HISTFILE
+  SANDBOX_LANG:
+    default: C.UTF-8
+    env: LANG
+  SANDBOX_LC_ALL:
+    default: C.UTF-8
+    env: LC_ALL
+  SANDBOX_DOTNET_ROOT:
+    default: /home/agent/.local/share/dotnetup/dotnet
+    env: DOTNET_ROOT
+  SANDBOX_DOTNET_DATA:
+    default: /home/agent/.local/share/dotnetup
+    env: DOTNET_DOTNETUP_DATA_DIR
+  SANDBOX_DOTNET_NOLOGO:
+    default: "1"
+    env: DOTNET_NOLOGO
+  SANDBOX_DOTNET_TELEMETRY:
+    default: "1"
+    env: DOTNET_CLI_TELEMETRY_OPTOUT
+  SANDBOX_REQUESTS_CA:
+    default: /etc/ssl/certs/ca-certificates.crt
+    env: REQUESTS_CA_BUNDLE
+  SANDBOX_AWS_CA:
+    default: /etc/ssl/certs/ca-certificates.crt
+    env: AWS_CA_BUNDLE
+  SANDBOX_UV_CA:
+    default: "true"
+    env: UV_SYSTEM_CERTS
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        allow: ["**"]
+      runtime:
+        allow: ["**"]
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/bin/sbx-herdr-worktrees
+          user: "1000"
+        - command: |
+            mkdir -p ~/.local/state/bash ~/.agents/skills ~/.claude
+            if [ ! -e ~/.claude/skills ]; then ln -s ~/.agents/skills ~/.claude/skills; fi
+          user: "1000"
+      startup:
+        - command: sh /opt/sandbox/startup/herdr-core-startup.sh
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      directory: /home/agent
+      filename: AGENTS.md
+      content: |
+        Tools include OpenCode, pi, Claude Code, Copilot, gh, .NET SDKs 10/11,
+        dotnetup, Node/npm/pnpm, Python/uv, Nx, MongoDB tools, az devops, AWS,
+        Terraform/tfswitch, Helm, k9s, Herdr/hc, hunk, tuicr and codeburn.
+        Use mise for tool updates and dotnetup for .NET SDK channels 10/11.
+        Tool updates and worktrees under ~/worktrees are lost on recreation.
+        The workspace is $WORKSPACE_DIR; do not assume ~/workspace.
+        Bash uses starship/carapace/fzf; PowerShell uses oh-my-posh and
+        PSReadLine/CompletionPredictor. Noninteractive PowerShell stays inert.
+        hc starts headlessly; use `hc server status` and `hc --skill`.
+        Authentication is proxy-managed. Never save real credentials in files.
+        Use hunk to review changes and tig for Git history/diffs.
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      directory: /home/agent/.config/opencode
+      filename: AGENTS.md
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      directory: /home/agent/.pi/agent
+      filename: AGENTS.md
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      directory: /home/agent/.claude
+      filename: CLAUDE.md
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      directory: /home/agent/.copilot
+      filename: copilot-instructions.md

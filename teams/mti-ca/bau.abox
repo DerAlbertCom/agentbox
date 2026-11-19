@@ -1,0 +1,29 @@
+base: base
+kits:
+  - name: squad-mcp
+    args:
+      MCP_PROFILE: bau
+      MCP_DATABASE_URL: ${{ parameters.database-url }}
+      MCP_ELASTIC_URL: ${{ parameters.elastic-url }}
+  - cape-database-mcp
+  - name: azure-devops-project
+    args:
+      ADO_ORGANIZATION: ${{ parameters.ado-organization }}
+      ADO_PROJECT: ${{ parameters.ado-project }}
+      ADO_NUGET_FEED: ${{ parameters.ado-nuget-feed }}
+  - cape-elastic
+  - aws-bedrock
+  - bau-support-agent
+parameters:
+  ado-organization: RWEST-MFI-AE
+  ado-project: CS
+  ado-nuget-feed: rwest-cs
+  database-url: https://dev.cape.rwe.com/mcp
+  elastic-url: https://675962b701c243adb707252f420dc1c2.eu-central-1.aws.cloud.es.io/api/agent_builder/mcp
+secrets:
+  - service: cape-database-mcp
+    prompt: CAPE database MCP API key
+  - service: cape-elastic
+    prompt: CAPE Elastic encoded API key
+  - service: aws-bedrock
+    prompt: Bedrock runtime API key (not an IAM access key)

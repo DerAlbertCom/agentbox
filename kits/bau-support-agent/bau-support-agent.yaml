@@ -1,0 +1,35 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: CaRMen BAU support agent
+version: "0.1.0"
+requires: [mti-ca-azure-devops, mti-ca-bedrock]
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        allow: [pypi.org, files.pythonhosted.org, raw.githubusercontent.com, github.com, release-assets.githubusercontent.com]
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: |
+            set -eu
+            python3 -m pip install --break-system-packages strands-agents requests pydantic-settings presidio-analyzer presidio-anonymizer
+            python3 -m spacy download en_core_web_sm --break-system-packages
+            python3 -m spacy download de_core_news_sm --break-system-packages
+          user: "1000"
+          env: [REQUESTS_CA_BUNDLE, UV_SYSTEM_CERTS]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The CaRMen BAU Strands agent lives at ~/bau-support-agent; read its README.
+        Prefer the bau-task-analysis skill: step 0 runs triage, continuing to
+        deep analysis only when needs_deep_analysis is true. /bau-triage <id>
+        is the user-invoked equivalent. For prose requests such as "analysiere
+        Ticket 38664", load the skill; do not invoke agent.py first and triage twice.
+        Commands only fire when typed by the user; do not try calling /bau-triage.
+        If the skill is missing, report that the sandbox needs recreating and
+        fall back only to `python3 ~/bau-support-agent/agent.py <id> --triage-only`.
+        Do not improvise deep analysis. Without --triage-only the CLI uses legacy
+        single-stage mode. AZURE_DEVOPS_EXT_PAT and AWS_BEARER_TOKEN_BEDROCK are
+        proxy placeholders. This kit owns the app and skill; nothing syncs at runtime.

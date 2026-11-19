@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Explicit Git identity/alias import; inputs must be supplied by the caller.
+
+set -euo pipefail
+
+: "${GIT_USER_NAME:?GIT_USER_NAME is required}"
+: "${GIT_USER_EMAIL:?GIT_USER_EMAIL is required}"
+: "${GIT_ALIASES_BASE64:?GIT_ALIASES_BASE64 is required}"
+
+git config --global user.name "$GIT_USER_NAME"
+git config --global user.email "$GIT_USER_EMAIL"
+
+aliases_file=$(mktemp)
+existing_aliases_file=$(mktemp)
+trap 'rm -f "$aliases_file" "$existing_aliases_file"' EXIT
+
+# A dash represents a valid, empty host alias set. Otherwise the payload is
+# the NUL-delimited output of `git config --global --get-regexp ^alias\.`.
+if [[ "$GIT_ALIASES_BASE64" != '-' ]]; then
+    printf '%s' "$GIT_ALIASES_BASE64" | base64 --decode >"$aliases_file"
+fi
+
+# Mirror the host rather than only adding aliases, so aliases removed on the
+# host are also removed from the sandbox on its next start.
+git config --global --name-only --get-regexp '^alias\.' >"$existing_aliases_file" 2>/dev/null || true
+while IFS= read -r key; do
+    [[ -z "$key" ]] || git config --global --unset-all "$key" || true
+done <"$existing_aliases_file"
+
+while IFS= read -r -d '' record; do
+    if [[ "$record" != *$'\n'* ]]; then
+        echo 'Invalid Git alias payload: record has no key/value separator' >&2
+        exit 1
+    fi
+
+    key=${record%%$'\n'*}
+    value=${record#*$'\n'}
+    if [[ "$key" != alias.* ]]; then
+        echo "Invalid Git alias payload key: $key" >&2
+        exit 1
+    fi
+
+    git config --global --add "$key" "$value"
+done <"$aliases_file"

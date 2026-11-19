@@ -1,0 +1,30 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "worktree": { "directory": "~/worktrees" },
+
+  "experimental": {
+    "subagent_depth": 2
+  },
+
+  "agents": {
+    "build": {
+      "model": "github-copilot/claude-opus-5.5#medium"
+    },
+    "plan": {
+      "model": "github-copilot/claude-opus-5.5#medium"
+    },
+
+    "general": {
+      "model": "github-copilot/claude-sonnet-5.5",
+      "steps": 80,
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "explore", "effect": "allow" },
+        { "action": "external_directory", "resource": "/tmp/spec-notes/*", "effect": "allow" }
+      ]
+    },
+    "explore": {
+      "model": "github-copilot/gpt-6-luna"
+    }
+  }
+}

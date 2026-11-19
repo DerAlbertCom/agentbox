@@ -1,0 +1,130 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "update": "disable",
+  "model": "github-copilot/claude-sonnet-5.5",
+  "agents": {
+    "title": {
+      "model": "github-copilot/gpt-5.4-mini"
+    }
+  },
+  "providers": {
+    "github-copilot": {
+      "settings": {
+        "baseURL": "https://copilot-api.rwe.ghe.com",
+        "apiKey": "{env:RWE_GHE_TOKEN}"
+      },
+      "models": {
+        "claude-opus-5.5": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-sonnet-5.5": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-haiku-5.5": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-opus-5": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-sonnet-5": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-fable-5.1": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-fable-5": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-opus-4.8": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-opus-4.8-fast": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        },
+        "claude-haiku-4.5": {
+          "settings": {
+            "baseURL": "https://copilot-api.rwe.ghe.com/v1"
+          },
+          "headers": {
+            "Copilot-Integration-Id": "vscode-chat"
+          },
+          "compatibility": {
+            "supportsThinkingBlockBinding": false
+          }
+        }
+      }
+    }
+  }
+}

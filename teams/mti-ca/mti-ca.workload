@@ -1,11 +1,83 @@
-# The base image of the mti-ca team.
-#
-# The workload becomes a sandbox kit: abox writes the descriptor and the Dockerfile
-# from these lines. The last tool of the list is the default of the image.
-template: docker.io/sbx/shell-docker-image
+template: docker.io/docker/sandbox-templates:shell-docker@sha256:b178ca62ec2e79af2a044e3ec321bdb72188690e1c15d573ea5524b397554d3d
 publishRepository: mtiae-developer-container-images-local
-
-# The latest dotnet 10 SDK at the time of writing (2026-11). Pin it by hand when a
-# newer one comes out.
+apt:
+  - ca-certificates
+  - curl
+  - gnupg
+  - software-properties-common
+  - unzip
+  - libsecret-1-0
+  - build-essential
+  - file
+  - git
+  - pkg-config
+  - libncurses-dev
+  - libreadline-dev
+  - libpcre2-dev
+  - openssh-server
+  - gettext-base
+# abox installs this list in reverse order; runtimes precede their consumers.
 mise:
-  - dotnet@10.0.403
+  - npm:@anthropic-ai/claude-code[allow_builds=true]@2.1.326
+  - npm:@github/copilot[allow_builds=true]@1.0.112
+  - npm:@earendil-works/pi-coding-agent[allow_builds=true]@1.5.2
+  - npm:@opencode/cli[allow_builds=true]@2.3.0
+  - npm:codeburn@0.9.28
+  - npm:@fission-ai/openspec@1.17.0
+  - npm:nx@24.0.6
+  - npm:@angular/cli@22.2.7
+  - npm:@azure-devops/mcp[allow_builds=true]@2.11.0
+  - npm:hunkdiff[allow_builds=true]@0.25.0
+  - github:agavra/tuicr@0.29.0
+  - >-
+    --tool-option 'platforms={ linux-x64 = { url = "https://releases.herdr.dev/core/{{ version }}/herdr-core-linux-x86_64.tar.gz", checksum = "sha256:78424755c10a40dde38a0bdb55c20ac19706e9ae05ed68fc2acf1fcff0d941c1" }, linux-arm64 = { url = "https://releases.herdr.dev/core/{{ version }}/herdr-core-linux-aarch64.tar.gz", checksum = "sha256:e844a2bfab48a226097679d076bc83042fe57fccef5387ef802e5b24e78b529a" } }'
+    --postinstall 'ln -sf herdr-core "$MISE_TOOL_INSTALL_PATH/hc"'
+    http:herdr-core@0.1.21
+  - herdr@0.9.5
+  - edit@2.0.0
+  - yazi@26.9.1
+  - lazygit@0.66.3
+  - >-
+    --tool-option 'version_prefix=tig-'
+    --tool-option 'asset_pattern=tig-*.tar.gz'
+    --tool-option 'strip_components=1'
+    --tool-option 'bin_path=bin'
+    --postinstall 'cd "$MISE_TOOL_INSTALL_PATH" && ./configure --prefix="$MISE_TOOL_INSTALL_PATH" && make -j"$(nproc)" && make install && make clean'
+    github:jonas/tig@2.6.1
+  - delta@0.20.1
+  - fd@10.5.2
+  - oh-my-posh@31.9.1
+  - starship@1.27.0
+  - fzf@0.75.0
+  - carapace@1.8.2
+  - bat@0.26.1
+  - >-
+    --tool-option 'strip_components=1' --tool-option 'bin_path=bin'
+    --tool-option 'platforms={ linux-x64 = { url = "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2404-x86_64-{{ version }}.tgz", checksum = "sha256:20f43dcaa37f5a4841ac5a91da685a488a5ebbd81113c018e25a6b544cc350ea" }, linux-arm64 = { url = "https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2404-arm64-{{ version }}.tgz", checksum = "sha256:7644e12e351bceea542921e60769e3ed658fc770dc09eed07bc5cc2a1ca2ca41" } }'
+    http:mongodb-database-tools@100.20.1
+  - >-
+    --tool-option 'strip_components=1' --tool-option 'bin_path=bin'
+    --tool-option 'platforms={ linux-x64 = { asset_pattern = "mongosh-{{ version }}-linux-x64-openssl3.tgz" }, linux-arm64 = { asset_pattern = "mongosh-{{ version }}-linux-arm64-openssl3.tgz" } }'
+    mongosh@2.14.2
+  - gh@2.104.0
+  - k9s@0.51.0
+  - helm@4.3.2
+  - github:warrensbox/terraform-switcher@1.20.0
+  - terraform@1.17.2
+  - aqua:ByteNess/aws-vault@7.18.0
+  - >-
+    --tool-option 'with=["pip==26.3"]'
+    --tool-option 'dependency_prereleases=allow'
+    --tool-option 'install_env={ UV_NO_CACHE = "true", UV_SYSTEM_CERTS = "true" }'
+    pipx:azure-cli@2.93.0
+  - aws-cli@2.40.4
+  - powershell@7.6.10
+  - uv@0.13.8
+  - python@3.14.10
+  - pnpm@12.21.0
+  - bun@1.4.4
+  - npm:npm@12.2.2
+  - node@24.22.3
+scripts:
+  - install-dotnet.sh
+  - configure-shells.sh

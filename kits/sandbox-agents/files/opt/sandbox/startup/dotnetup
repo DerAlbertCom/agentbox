@@ -1,0 +1,6 @@
+#!/bin/sh
+# A fallback for launchers that keep ~/.local/bin but reset the rest of PATH.
+# Exec the real manager so self-update never has to replace a symlink/wrapper.
+set -eu
+. /opt/sandbox/startup/dotnet-env.sh
+exec "$HOME/.dotnetup/dotnetup" "$@"

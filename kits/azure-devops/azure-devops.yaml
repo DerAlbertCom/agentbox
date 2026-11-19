@@ -1,0 +1,30 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Azure DevOps proxy authentication
+version: "1.0.0"
+provides: [mti-ca-azure-devops]
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        allow: [dev.azure.com, pkgs.dev.azure.com, vssps.dev.azure.com, "*.blob.core.windows.net", "*.vsblob.core.windows.net"]
+      runtime:
+        allow: [dev.azure.com, pkgs.dev.azure.com, vssps.dev.azure.com, "*.blob.core.windows.net", "*.vsblob.core.windows.net"]
+  - type: com.docker.sandbox/credential@1
+    config:
+      service: azure-devops
+      phase: [install, runtime]
+      apiKey:
+        name: AZURE_DEVOPS_EXT_PAT
+        proxyManaged: true
+        inject:
+          - domain: dev.azure.com
+            header: Authorization
+            format: Basic %s
+          - domain: pkgs.dev.azure.com
+            header: Authorization
+            format: Basic %s
+          - domain: vssps.dev.azure.com
+            header: Authorization
+            format: Basic %s

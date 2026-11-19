@@ -1,0 +1,26 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: CAPE Elastic
+version: "1.0.0"
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      runtime:
+        allow: [675962b701c243adb707252f420dc1c2.eu-central-1.aws.cloud.es.io]
+  - type: com.docker.sandbox/credential@1
+    config:
+      service: cape-elastic
+      phase: runtime
+      apiKey:
+        name: ELASTIC_TOKEN
+        proxyManaged: true
+        inject:
+          - domain: 675962b701c243adb707252f420dc1c2.eu-central-1.aws.cloud.es.io
+            header: Authorization
+            format: ApiKey %s
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        CAPE Elastic API: https://675962b701c243adb707252f420dc1c2.eu-central-1.aws.cloud.es.io/api/.
+        Authentication is host-scoped and proxy-managed through ELASTIC_TOKEN.

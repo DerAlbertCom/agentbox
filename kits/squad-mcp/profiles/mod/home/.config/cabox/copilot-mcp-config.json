@@ -1,0 +1,54 @@
+{
+  "mcpServers": {
+    "aws-localhost-gateway": {
+      "type": "http",
+      "url": "${MCP_GATEWAY_URL}",
+      "tools": [
+        "*"
+      ]
+    },
+    "context7": {
+      "type": "http",
+      "url": "${MCP_CONTEXT7_URL}",
+      "tools": [
+        "*"
+      ]
+    },
+    "ado": {
+      "type": "local",
+      "command": "mcp-server-azuredevops",
+      "args": [
+        "${ADO_ORGANIZATION}",
+        "--authentication",
+        "pat",
+        "-d",
+        "core",
+        "repositories",
+        "pipelines",
+        "wiki",
+        "work-items",
+        "search"
+      ],
+      "env": {
+        "PERSONAL_ACCESS_TOKEN": "${AZURE_DEVOPS_EXT_PAT}"
+      },
+      "tools": [
+        "*"
+      ]
+    },
+    "elastic-nprod": {
+      "type": "http",
+      "url": "${MCP_ELASTIC_NPROD_URL}",
+      "tools": [
+        "*"
+      ]
+    },
+    "elastic-prod": {
+      "type": "http",
+      "url": "${MCP_ELASTIC_PROD_URL}",
+      "tools": [
+        "*"
+      ]
+    }
+  }
+}

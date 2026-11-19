@@ -1,0 +1,102 @@
+#!/bin/sh
+# Headless TUI startup; explicit shell requests add a tab without reusing panes.
+
+set -eu
+
+export HOME=/home/agent
+# Keep the system shim fallback for sandboxes created from older images.
+export PATH="/home/agent/.local/bin:/home/agent/.bun/bin:/home/agent/.local/share/mise/shims:/usr/local/share/mise/shims:/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/bin"
+if [ -r /opt/sandbox/startup/dotnet-env.sh ]; then . /opt/sandbox/startup/dotnet-env.sh; fi
+
+shell=${1:-}
+case "$shell" in
+    '') ;;
+    pwsh|bash)
+        command -v "$shell" >/dev/null || { echo "Requested shell not found: $shell" >&2; exit 1; }
+        ;;
+    *) echo "Unsupported shell: $shell" >&2; exit 1 ;;
+esac
+
+WS="${WORKSPACE_DIR:-/home/agent/workspace}"
+DEBUG_LOG="/home/agent/.config/herdr/startup-debug.log"
+mkdir -p /home/agent/.config/herdr
+exec >>"$DEBUG_LOG" 2>&1
+printf '=== sbx-herdr-startup run: %s ===\n' "$(date -u +%FT%TZ)"
+
+log() { printf '%s %s\n' "sbx-herdr-startup:" "$*" >&2; }
+
+# Start the headless server if its API is not answering. (Do NOT use
+# `herdr status server` as the guard: it exits 0 even when no server is
+# running.) `setsid` prevents the server from dying with its SSH connection.
+if ! herdr workspace list >/dev/null 2>&1; then
+    (cd "$WS" && nohup setsid herdr server >/dev/null 2>&1 </dev/null &)
+fi
+
+# Wait for the API socket (max ~60 s — a cold first start can take a
+# while). A broken Herdr server must not block sandbox startup.
+i=0
+until herdr workspace list >/dev/null 2>&1; do
+    i=$((i + 1))
+    [ $((i % 100)) -eq 0 ] && log "still waiting for herdr API (${i}x0.1s)"
+    [ "$i" -ge 600 ] && { log "herdr API not reachable, giving up"; [ -z "$shell" ] && exit 0; exit 1; }
+    sleep 0.1
+done
+
+workspace_id=
+for w in $(herdr workspace list | jq -r '.result.workspaces[].workspace_id'); do
+    if herdr pane list --workspace "$w" 2>/dev/null |
+        jq -e --arg ws "$WS" '.result.panes[] | select(.cwd == $ws)' >/dev/null 2>&1; then
+        log "workspace rooted at $WS already present ($w); nothing to do"
+        [ -z "$shell" ] && exit 0
+        workspace_id=$w
+        break
+    fi
+done
+
+if [ -n "$shell" ]; then
+    if [ -z "$workspace_id" ]; then
+        workspace_id=$(herdr workspace create --cwd "$WS" --focus | jq -er '.result.workspace.workspace_id')
+    fi
+    # Only the new pane receives input, after its configured Bash reaches a prompt.
+    #
+    # Both handshakes are visible in the pane (herdr types the command and the
+    # shell echoes it, and the readiness markers are printed on purpose), so the
+    # last step of each branch wipes the screen: the user must land on a clean
+    # prompt, not on scaffolding. pwsh clears from a separate `pane run` because
+    # its marker has to be matched before the screen is erased; Bash clears from
+    # a one-shot PROMPT_COMMAND that unsets itself at the first prompt, which
+    # needs no second round trip and cannot race the shell starting up.
+    marker="sbx-shell-ready-$$"
+    pane_id=$(herdr tab create --workspace "$workspace_id" --cwd "$WS" --focus \
+        --env "PROMPT_COMMAND=printf '%s\\n' '$marker'" | jq -er '.result.root_pane.pane_id')
+    herdr pane wait-output "$pane_id" --match "$marker" --timeout 15000 >/dev/null
+    if [ "$shell" = pwsh ]; then
+        herdr pane run "$pane_id" "unset PROMPT_COMMAND; exec pwsh -NoExit -Command \"Write-Output ('sbx-pwsh-' + '$$')\"" >/dev/null
+        herdr pane wait-output "$pane_id" --match "sbx-pwsh-$$" --timeout 15000 >/dev/null
+        herdr pane run "$pane_id" 'Clear-Host' >/dev/null
+    else
+        herdr pane run "$pane_id" "unset PROMPT_COMMAND; exec env PROMPT_COMMAND='clear; unset PROMPT_COMMAND' bash -il" >/dev/null
+    fi
+    herdr workspace focus "$workspace_id" >/dev/null
+    exit 0
+fi
+
+herdr workspace create --cwd "$WS" --focus >/dev/null
+log "created workspace rooted at $WS"
+
+# Close the untouched $HOME starter workspace (single pristine pane).
+# ~/workspace is now a real project directory, never a disposable starter.
+for w in $(herdr workspace list | jq -r '.result.workspaces[].workspace_id'); do
+    info=$(herdr workspace list | jq -r --arg w "$w" \
+        '.result.workspaces[] | select(.workspace_id == $w) |
+         "\(.pane_count) \(.tab_count)"')
+    pane_count=$(printf '%s' "$info" | cut -d' ' -f1)
+    tab_count=$(printf '%s' "$info" | cut -d' ' -f2)
+    [ "$pane_count" = "1" ] && [ "$tab_count" = "1" ] || continue
+
+    cwd=$(herdr pane list --workspace "$w" | jq -r '.result.panes[0].cwd')
+    if [ "$cwd" = "/home/agent" ]; then
+        herdr workspace close "$w" >/dev/null 2>&1 || true
+        log "closed untouched starter workspace $w (was $cwd)"
+    fi
+done

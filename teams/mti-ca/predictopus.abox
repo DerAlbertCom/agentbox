@@ -1,0 +1,27 @@
+base: base
+kits:
+  - name: squad-mcp
+    args:
+      MCP_PROFILE: predictopus
+      MCP_ELASTIC_URL: ${{ parameters.elastic-url }}
+  - name: jfrog
+    args:
+      JFROG_FEED: ${{ parameters.jfrog-feed }}
+  - name: azure-devops-project
+    args:
+      ADO_ORGANIZATION: ${{ parameters.ado-organization }}
+      ADO_PROJECT: ${{ parameters.ado-project }}
+  - predictopus-elastic
+parameters:
+  ado-organization: RWEST-MTI-AM
+  ado-project: AssetOpt Renewables
+  jfrog-feed: metsca-nuget-prod
+  elastic-url: https://689203ce69c64beab0a2be1c0829117e.eu-central-1.aws.cloud.es.io/api/agent_builder/mcp
+secrets:
+  - service: jfrog
+    inputs:
+      - name: username
+      - name: token
+    encoding: base64
+  - service: predictopus-elastic
+    prompt: Predictopus encoded Elastic API key (feature_agentBuilder.read)

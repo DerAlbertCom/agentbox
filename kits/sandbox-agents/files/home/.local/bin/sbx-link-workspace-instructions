@@ -1,0 +1,30 @@
+#!/bin/sh
+# Run at sbx exec's original primary cwd, before cabox changes session paths.
+set -eu
+source_dir=$(dirname "$(pwd -P)")
+state="$HOME/.local/state/cabox/instruction-links"
+[ -f "$source_dir/AGENTS.md" ] || { echo "cabox: Missing sandbox instructions at $source_dir/AGENTS.md" >&2; exit 1; }
+mkdir -p "$state"
+
+# A recorded target identifies links managed by cabox, including broken links
+# after the native workspace moves. Other files and symlinks are user-owned.
+for name in AGENTS.md kits-agent-context; do
+    destination="$HOME/$name"
+    target="$source_dir/$name"
+    if [ -L "$destination" ]; then
+        current=$(readlink "$destination")
+        previous=$(cat "$state/$name" 2>/dev/null || true)
+        if [ "$current" != "$target" ] && [ "$current" != "$previous" ]; then
+            echo "cabox: Refusing to replace personal symlink $destination; move it before running cabox." >&2
+            exit 1
+        fi
+    elif [ -e "$destination" ]; then
+        echo "cabox: Refusing to replace personal file/directory $destination; move it before running cabox." >&2
+        exit 1
+    fi
+done
+for name in AGENTS.md kits-agent-context; do
+    target="$source_dir/$name"
+    ln -sfnT "$target" "$HOME/$name"
+    printf '%s\n' "$target" > "$state/$name"
+done

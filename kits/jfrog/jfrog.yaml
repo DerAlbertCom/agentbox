@@ -1,0 +1,40 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: JFrog NuGet authentication
+version: "1.0.0"
+provides: [mti-ca-jfrog]
+args:
+  JFROG_FEED:
+    required: true
+    pattern: '[a-z0-9-]+'
+    env: JFROG_FEED
+capabilities:
+  - type: com.docker.sandbox/network-policy@1
+    config:
+      install:
+        allow: [rwest.jfrog.io]
+      runtime:
+        allow: [rwest.jfrog.io]
+  - type: com.docker.sandbox/credential@1
+    config:
+      service: jfrog
+      phase: [install, runtime]
+      apiKey:
+        name: JFROG_TOKEN
+        proxyManaged: true
+        inject:
+          - domain: rwest.jfrog.io
+            header: Authorization
+            format: Basic %s
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: dotnet nuget add source "https://rwest.jfrog.io/artifactory/api/nuget/v3/$JFROG_FEED" --name Artifactory
+          user: "1000"
+          env: [JFROG_FEED, DOTNET_ROOT, DOTNET_DOTNETUP_DATA_DIR]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        Artifactory's NuGet feed is ${{ kit.args.JFROG_FEED }} at rwest.jfrog.io.
+        The proxy injects Basic authentication; never save tokens in nuget.config.

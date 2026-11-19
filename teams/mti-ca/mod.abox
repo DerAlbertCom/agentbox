@@ -1,0 +1,40 @@
+base: base
+kits:
+  - context7
+  - name: squad-mcp
+    args:
+      MCP_PROFILE: mod
+      MCP_CONTEXT7_URL: ${{ parameters.context7-url }}
+      MCP_ELASTIC_NPROD_URL: ${{ parameters.elastic-nprod-url }}
+      MCP_ELASTIC_PROD_URL: ${{ parameters.elastic-prod-url }}
+  - name: azure-devops-project
+    args:
+      ADO_ORGANIZATION: ${{ parameters.ado-organization }}
+      ADO_PROJECT: ${{ parameters.ado-project }}
+      ADO_NUGET_FEED: ${{ parameters.ado-nuget-feed }}
+  - mod-squad-elastic
+  - name: mod-squad-terraform
+    args:
+      TF_DEFAULT_VERSION: ${{ parameters.terraform-version }}
+  - name: mod-squad-tools
+    args:
+      MONGO_HOST: ${{ parameters.mongo-host }}
+      MONGO_PORT: ${{ parameters.mongo-port }}
+  - mod-squad-aws-mcp
+parameters:
+  ado-organization: RWEST-MTI-AM
+  ado-project: MOD Squad
+  ado-nuget-feed: cao-amms
+  terraform-version: "1.17.2"
+  mongo-host: host.docker.internal
+  mongo-port: "27017"
+  context7-url: https://mcp.context7.com/mcp
+  elastic-nprod-url: https://mti-am-nprod.kb.eu-central-1.aws.cloud.es.io/api/agent_builder/mcp
+  elastic-prod-url: https://mti-am.kb.eu-central-1.aws.cloud.es.io/api/agent_builder/mcp
+secrets:
+  - service: context7
+    prompt: Optional Context7 API key
+  - service: mod-elastic-nprod
+    prompt: MOD nonproduction encoded Elastic API key (feature_agentBuilder.read)
+  - service: mod-elastic-prod
+    prompt: MOD production encoded Elastic API key (feature_agentBuilder.read)
