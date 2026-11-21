@@ -3,7 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { Command, CommandContext } from "sbox-cli";
-import { readApps, renderApps, type Rendered } from "./apps";
+import { readAppTemplates, renderAppTemplates, type Rendered } from "./apps";
 import { foldersWith } from "./folders";
 import { readPalette, type Palette } from "./palette";
 import { pick, preview } from "./picker";
@@ -106,8 +106,8 @@ class Themes {
   /** Renders every app with the theme and reports the failed run commands. */
   async render(name: string): Promise<Rendered> {
     const palette = this.palette(name);
-    const apps = readApps(join(this.ctx.paths.data, "apps"));
-    const rendered = await renderApps(apps, palette, this.ctx.env, this.ctx.paths.home);
+    const apps = readAppTemplates(join(this.ctx.paths.data, "apps"));
+    const rendered = await renderAppTemplates(apps, palette, this.ctx.env, this.ctx.paths.home);
     for (const failure of rendered.failures) this.ctx.stderr.write(`sbox theme: ${failure}\n`);
     return rendered;
   }

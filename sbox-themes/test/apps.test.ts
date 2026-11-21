@@ -273,7 +273,7 @@ function probeApp(extra = "") {
   };
 }
 
-describe("app definitions", () => {
+describe("app templates", () => {
   test("run the app's commands after rendering", async () => {
     // Arrange
     await home.install({ ...probeApp("run:\n  - fake-bat cache --build\n"), "themes/dusk/colors.toml": dusk });
@@ -308,7 +308,7 @@ describe("app definitions", () => {
     expect(await home.file("probe.txt")).toStartWith("mode=dark\n");
   });
 
-  test("reject an app definition with an unknown key", async () => {
+  test("reject an app template with an unknown key", async () => {
     // Arrange
     await home.install({ ...probeApp("restart: Probe\ncolours: []\n"), "themes/dusk/colors.toml": dusk });
 

@@ -1,6 +1,6 @@
 #!/bin/sh
 # The kit build step of themes, run by abox build as `build <stagedKitDir>` from this folder.
-# Bundles the theme command into the staged kit with the palettes and app definitions it
+# Bundles the theme command into the staged kit with the palettes and app templates it
 # reads; see sbox-cli/bundle.
 set -eu
 

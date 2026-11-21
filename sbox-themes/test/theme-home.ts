@@ -46,7 +46,7 @@ export function useThemeHome() {
     },
 
     /**
-     * Installs the theme command with the palettes and app definitions of this package, or with
+     * Installs the theme command with the palettes and app templates of this package, or with
      * the given ones: files by their path in the command's data folder.
      */
     async install(files?: Record<string, string>) {

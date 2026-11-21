@@ -30,7 +30,7 @@ const state = () => join(home, ".local/state/sbox/theme");
 const bin = () => join(home, "bin");
 const fzfLog = () => join(home, "fzf.log");
 
-/** Installs the theme command with the palettes and app definitions of this package. */
+/** Installs the theme command with the palettes and app templates of this package. */
 async function install() {
   await mkdir(data(), { recursive: true });
   await writeFile(

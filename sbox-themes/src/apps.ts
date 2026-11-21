@@ -5,8 +5,8 @@ import { Liquid } from "liquidjs";
 import { foldersWith } from "./folders";
 import { channels, mix, type Palette } from "./palette";
 
-/** An app definition: `<apps>/<app>/app.yaml` next to the app's Liquid templates. */
-export interface App {
+/** An app template: `<apps>/<app>/app.yaml` next to the app's Liquid templates. */
+export interface AppTemplate {
   readonly name: string;
   readonly folder: string;
   /** Templates rendered to target files. */
@@ -26,11 +26,11 @@ export interface Rendered {
   readonly failures: string[];
 }
 
-export function readApps(folder: string): App[] {
-  return foldersWith(folder, "app.yaml").map((name) => readApp(name, join(folder, name)));
+export function readAppTemplates(folder: string): AppTemplate[] {
+  return foldersWith(folder, "app.yaml").map((name) => readAppTemplate(name, join(folder, name)));
 }
 
-function readApp(name: string, folder: string): App {
+function readAppTemplate(name: string, folder: string): AppTemplate {
   const fail = (message: string): never => {
     throw new Error(`${join(folder, "app.yaml")}: ${message}`);
   };
@@ -64,10 +64,12 @@ function readApp(name: string, folder: string): App {
   };
 
   const files = list("files").map(
-    (item) => entry("files", item, { template: "string", target: "string" }) as App["files"][number],
+    (item) =>
+      entry("files", item, { template: "string", target: "string" }) as AppTemplate["files"][number],
   );
   const settings = list("settings").map(
-    (item) => entry("settings", item, { file: "string", merge: "object" }) as App["settings"][number],
+    (item) =>
+      entry("settings", item, { file: "string", merge: "object" }) as AppTemplate["settings"][number],
   );
   const run = list("run").map((item) =>
     typeof item === "string" && item !== "" ? item : fail("every 'run' entry must be a command"),
@@ -80,9 +82,9 @@ function readApp(name: string, folder: string): App {
   return { name, folder, files, settings, run, restart: yaml.restart as string | undefined };
 }
 
-/** Renders every app with the palette: writes the files, merges the settings, runs the commands. */
-export async function renderApps(
-  apps: readonly App[],
+/** Renders the app templates with the palette: writes the files, merges the settings, runs the commands. */
+export async function renderAppTemplates(
+  apps: readonly AppTemplate[],
   palette: Palette,
   env: Readonly<Record<string, string | undefined>>,
   home: string,
