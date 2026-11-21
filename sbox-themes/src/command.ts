@@ -9,6 +9,8 @@ import { readPalette, type Palette } from "./palette";
 import { pick, preview } from "./picker";
 
 const fallbackTheme = "tokyo-night";
+/** The terminal color script, rendered by the `terminal` app template. */
+const terminalColorScript = ".config/sbox/terminal-colors.sh";
 
 export default {
   summary: "Switch the color theme of the sandbox's apps",
@@ -60,6 +62,7 @@ export default {
     if (!themes.exists(name)) return themes.unknown(name);
     const rendered = await themes.render(name);
     await themes.save(name);
+    if (ctx.env.SBOX_TERMINAL_THEME === "1" && ctx.stdout.isTTY) themes.recolorTerminal();
     ctx.stdout.write(`Switched to the theme '${name}'. Some apps show it only after a restart.\n`);
     return rendered.failures.length ? 1 : 0;
   },
@@ -115,6 +118,14 @@ class Themes {
     const rendered = await renderAppTemplates(apps, palette, this.ctx.env, this.ctx.paths.home);
     for (const failure of rendered.failures) this.ctx.stderr.write(`sbox theme: ${failure}\n`);
     return rendered;
+  }
+
+  /** Prints the colors of the terminal color script, if it is rendered and runs. */
+  recolorTerminal() {
+    const script = join(this.ctx.paths.home, terminalColorScript);
+    if (!existsSync(script)) return;
+    const result = Bun.spawnSync(["sh", script], { stdout: "pipe", stderr: "ignore" });
+    if (result.exitCode === 0) this.ctx.stdout.write(result.stdout.toString());
   }
 
   async save(name: string) {

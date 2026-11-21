@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { sbox } from "../../sbox-cli/src/sbox";
 
 class Capture {
+  constructor(readonly isTTY = false) {}
   text = "";
   write(chunk: string) {
     this.text += chunk;
@@ -71,14 +72,15 @@ export function useThemeHome() {
       await writeFile(join(state(), "current"), theme + "\n");
     },
 
-    async run(args: string[], env: Record<string, string> = {}) {
-      const stdout = new Capture();
+    /** Runs `sbox theme`; with `tty` its stdin and stdout are terminals. */
+    async run(args: string[], env: Record<string, string> = {}, options: { tty?: boolean } = {}) {
+      const stdout = new Capture(options.tty);
       const stderr = new Capture();
       const code = await sbox(["theme", ...args], {
         env: { HOME: home, PATH: `${tools()}:${process.env.PATH ?? ""}`, ...env },
         stdout,
         stderr,
-        stdin: {},
+        stdin: { isTTY: options.tty },
       });
       return { code, stdout: stdout.text, stderr: stderr.text };
     },
