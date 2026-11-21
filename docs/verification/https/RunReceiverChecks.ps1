@@ -4,9 +4,9 @@ $ErrorActionPreference = 'Stop'
 # newly created --rm container's writable layer receives these public sources.
 $root = (Resolve-Path "$PSScriptRoot/../../..").Path
 $files = @{}
-@('cli/src/Abox/Sbx/development_certificate.py',
-  'cli/src/Abox/Sbx/development_certificate_trust.py',
-  'cli/src/Abox/Sbx/development_certificate_exec.sh',
+@('abox-cli/src/Abox/Sbx/development_certificate.py',
+  'abox-cli/src/Abox/Sbx/development_certificate_trust.py',
+  'abox-cli/src/Abox/Sbx/development_certificate_exec.sh',
   'docs/verification/https/ReceiverChecks.py') | ForEach-Object {
     $files[(Split-Path $_ -Leaf)] = [IO.File]::ReadAllText("$root/$_")
   }

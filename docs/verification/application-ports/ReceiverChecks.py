@@ -19,7 +19,7 @@ if sys.platform != "linux":
     sys.exit("Receiver checks require Linux (Unix sockets and SO_PEERCRED).")
 
 RECEIVER = Path(os.environ.get("ABOX_APPLICATION_PORTS_RECEIVER",
-    Path(__file__).resolve().parents[3] / "cli/src/Abox/Sbx/application_ports.py")).read_text(encoding="utf-8")
+    Path(__file__).resolve().parents[3] / "abox-cli/src/Abox/Sbx/application_ports.py")).read_text(encoding="utf-8")
 
 
 class ReceiverChecks(unittest.TestCase):
