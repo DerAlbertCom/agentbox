@@ -98,7 +98,8 @@ The in-sandbox CLI `sbox` and its commands are TypeScript on Bun, in one Bun
 workspace at the repository root with one lockfile (`bun.lock`).
 
 - Put each package in a top-level folder: `sbox-cli` is the core, command packages
-  are named `sbox-<command>`. A package lists its folder in the root `workspaces`.
+  are named `sbox-<name>` after what they hold, such as `sbox-themes` for the `theme`
+  command. A package lists its folder in the root `workspaces`.
 - Commands depend on the core only through the command API in `sbox-cli/src/api.ts`,
   with type-only imports (`import type { Command } from "sbox-cli"`), so nothing of
   the core is bundled into a command. Keep that API small; change it only in
