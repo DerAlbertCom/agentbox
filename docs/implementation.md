@@ -877,7 +877,7 @@ stopped sandbox). See [discovery bounds, runtime evidence and limitations](verif
 
 #### Shared development HTTPS setup (#46)
 
-After validated forwarding (or without ports when a Web SDK project is explicit),
+After validated forwarding, when a Web SDK project is explicit,
 `AppPorts` invokes shared `Https/SandboxHttps`, which also owns the
 `ports --refresh-https-bootstrap` refresh and the launch-readiness check. Non-Web/non-.NET folders perform
 no host certificate operation. The host exporter locates an already-installed

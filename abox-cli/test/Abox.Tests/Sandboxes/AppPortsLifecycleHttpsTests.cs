@@ -26,7 +26,7 @@ public sealed class AppPortsLifecycleHttpsTests
         "<Project xmlns=\"urn:synthetic\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup></Project>"
     )]
     [InlineData("App.FSPROJ", "utf-32BE", "<Project Sdk=\"microsoft.net.sdk.web\" />")]
-    public async Task StaticEncodedProjectDeclarationsConfigureHttpsWithoutInferringPorts(
+    public async Task StaticEncodedProjectDeclarationsConfigureHttpsForThePublishedPorts(
         string file,
         string encoding,
         string project
@@ -38,6 +38,10 @@ public sealed class AppPortsLifecycleHttpsTests
         fixture.Services.AddSingleton(certificate.Exporter);
         var path = fixture.Root.File("folder/" + file, "");
         await File.WriteAllTextAsync(path, project, Encoding.GetEncoding(encoding));
+        fixture.Root.File(
+            "folder/Properties/launchSettings.json",
+            """{"profiles":{"https":{"applicationUrl":"https://localhost:8203"}}}"""
+        );
         fixture
             .Sbx.GetDevelopmentCertificatePasswordAsync(fixture.Name, Arg.Any<CancellationToken>())
             .Returns(new string('a', 64));
@@ -48,15 +52,14 @@ public sealed class AppPortsLifecycleHttpsTests
         // Assert
         exit.Should().Be(0, fixture.Console.AllText);
         certificate.Exports.Should().Be(1);
-        fixture
-            .Console.AllText.Should()
-            .Contain("No explicit application ports")
-            .And.Contain("Created sandbox");
+        fixture.Console.AllText.Should().Contain("Created sandbox");
         await fixture
-            .Sbx.DidNotReceive()
+            .Sbx.Received(1)
             .EnsureApplicationPortsAsync(
-                Arg.Any<string>(),
-                Arg.Any<IReadOnlyList<ApplicationPortMapping>>(),
+                fixture.Name,
+                Arg.Is<IReadOnlyList<ApplicationPortMapping>>(mappings =>
+                    mappings.SequenceEqual(new[] { new ApplicationPortMapping(8203, 18203) })
+                ),
                 Arg.Any<CancellationToken>()
             );
     }

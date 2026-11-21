@@ -56,8 +56,6 @@ public sealed class AppPorts(ISbxClient sbx, IConsole console, SandboxHttps http
         if (occurrences.Count == 0)
         {
             console.WriteLine("No explicit application ports found; nothing published.");
-            if (plan.HasDotnetProjects)
-                await https.ConfigureAsync(sandbox, cancellationToken);
             return;
         }
 
