@@ -80,6 +80,8 @@ public static class AboxServiceCollection
         services.AddSingleton<Preflight>();
         services.AddSingleton<SquadResolver>();
         services.AddSingleton<SecretValues>();
+        services.AddSingleton(SbxCredentialBindings.Create());
+        services.AddSingleton<SquadCredentials>();
         services.AddSingleton<BuildStore>();
         services.AddSingleton<SandboxRecordStore>();
         services.AddSingleton<CreateRecoveryHints>();
