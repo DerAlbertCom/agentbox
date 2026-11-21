@@ -30,10 +30,14 @@ public sealed class LegacySandboxInventoryTests
         var otherName = OperatingSystem.IsWindows()
             ? "case_name-ai-sbx-0c1bf5"
             : "case_name-ai-sbx-e14841";
-        cli.Sbx.FindSandboxAsync(LegacySandboxFixture.Name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(LegacySandboxFixture.Name, "running", null));
-        cli.Sbx.FindSandboxAsync(otherName, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(otherName, "running", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                new[]
+                {
+                    new SandboxInfo(LegacySandboxFixture.Name, "running", null),
+                    new SandboxInfo(otherName, "running", null),
+                }
+            );
 
         // Act
         var exitCode = await cli.Invoke(explicitLocation ? ["run", "--location", other] : ["run"]);
@@ -112,13 +116,11 @@ public sealed class LegacySandboxInventoryTests
     }
 
     [Theory]
-    [InlineData(false, 7, "", "permission denied")]
-    [InlineData(false, 0, "{broken", "")]
-    [InlineData(false, 0, "{}", "")]
-    [InlineData(true, 7, "", "communication failed")]
-    [InlineData(true, 0, "null", "")]
+    [InlineData(7, "", "permission denied")]
+    [InlineData(0, "{broken", "")]
+    [InlineData(0, "{}", "")]
+    [InlineData(0, "null", "")]
     public async Task InventoryFailuresAreNotAbsenceOrPermissionToFallback(
-        bool legacyLookup,
         int exit,
         string output,
         string error
@@ -130,9 +132,10 @@ public sealed class LegacySandboxInventoryTests
         var requests = UseRealSbx(
             cli,
             _ =>
-                ++count == 1 && legacyLookup
-                    ? new ProcessResult(0, "[]", "")
-                    : new ProcessResult(exit, output, error)
+            {
+                count++;
+                return new ProcessResult(exit, output, error);
+            }
         );
 
         // Act
@@ -140,7 +143,7 @@ public sealed class LegacySandboxInventoryTests
 
         // Assert
         exitCode.Should().Be(1);
-        count.Should().Be(legacyLookup ? 2 : 1);
+        count.Should().Be(1);
         cli.Console.AllText.Should().Contain("sbx ls").And.NotContain("Create it with");
         requests
             .Where(request => request.FileName == "sbx")

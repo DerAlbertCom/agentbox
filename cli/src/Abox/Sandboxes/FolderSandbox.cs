@@ -1,45 +1,76 @@
+using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.Naming;
 using Abox.Sbx;
 
 namespace Abox.Sandboxes;
 
-/// <summary>Finds a folder's existing sandbox, preferring current names over exact legacy names.</summary>
-public sealed class SandboxResolver(ISbxClient sbx, IProcessRunner runner)
+/// <summary>
+/// Answers "this folder's Sandbox": current names win over exact legacy names, matched
+/// against one sandbox listing. Without one, it gives the create-recovery hint.
+/// </summary>
+public sealed class FolderSandbox(ISbxClient sbx, IProcessRunner runner, CreateRecoveryHints hints)
 {
     /// <summary>Returns the actual identity, or null when no supported identity exists. Discovery errors propagate.</summary>
     public async Task<SandboxInfo?> FindAsync(string location, CancellationToken cancellationToken)
     {
-        var current = await sbx.FindSandboxAsync(SandboxName.For(location), cancellationToken);
+        var sandboxes = await sbx.ListSandboxesAsync(cancellationToken);
+        SandboxInfo? Named(string name) =>
+            sandboxes.FirstOrDefault(sandbox =>
+                sandbox.Name.Equals(name, StringComparison.Ordinal)
+            );
+
+        var current = Named(SandboxName.For(location));
         if (current is not null)
             return current;
         var withoutSeparator = Path.TrimEndingDirectorySeparator(location);
         if (OperatingSystem.IsWindows() && withoutSeparator != location)
         {
-            current = await sbx.FindSandboxAsync(
-                SandboxName.For(withoutSeparator),
-                cancellationToken
-            );
+            current = Named(SandboxName.For(withoutSeparator));
             if (current is not null)
                 return current;
         }
         var realPath = await LegacyRealPathAsync(location, cancellationToken);
-        var legacy = await sbx.FindSandboxAsync(
-            LegacySandboxName.For(location, realPath),
-            cancellationToken
-        );
+        var legacy = Named(LegacySandboxName.For(location, realPath));
         if (legacy is not null || !OperatingSystem.IsWindows())
             return legacy;
-        return await FindWindowsWorkspaceAsync(location, cancellationToken);
+        return await FindWindowsWorkspaceAsync(sandboxes, location, cancellationToken);
+    }
+
+    /// <summary>
+    /// Returns the folder's Sandbox, or fails with the create-recovery hint. The note, such as
+    /// "ports never creates or replaces one", follows the missing-sandbox sentence.
+    /// </summary>
+    public async Task<SandboxInfo> RequireAsync(
+        string location,
+        FolderConfig? folderConfig,
+        string? note,
+        CancellationToken cancellationToken
+    )
+    {
+        var sandbox = await FindAsync(location, cancellationToken);
+        if (sandbox is not null)
+            return sandbox;
+
+        var hint = hints.Resolve(SandboxName.For(location), location, folderConfig);
+        string[] lines =
+        [
+            note is null
+                ? $"There is no sandbox for '{location}'."
+                : $"There is no sandbox for '{location}'; {note}.",
+            .. hint.Lines("Create it with: "),
+        ];
+        throw new MissingFolderSandboxException(string.Join(Environment.NewLine, lines));
     }
 
     private async Task<SandboxInfo?> FindWindowsWorkspaceAsync(
+        IReadOnlyList<SandboxInfo> sandboxes,
         string location,
         CancellationToken cancellationToken
     )
     {
         var matches = new List<SandboxInfo>();
-        foreach (var sandbox in await sbx.ListSandboxesAsync(cancellationToken))
+        foreach (var sandbox in sandboxes)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var workspace = sandbox.Workspaces.FirstOrDefault();
@@ -102,3 +133,6 @@ public sealed class SandboxResolver(ISbxClient sbx, IProcessRunner runner)
         return result.ExitCode == 0 && output.Length > 0 ? output.Split('\n')[^1] : location;
     }
 }
+
+/// <summary>The folder has no Sandbox; the message carries the create-recovery hint.</summary>
+public sealed class MissingFolderSandboxException(string message) : AboxException(message);

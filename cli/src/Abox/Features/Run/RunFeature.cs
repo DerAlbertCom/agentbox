@@ -11,7 +11,7 @@ public static class RunFeature
 {
     public static IServiceCollection AddRunFeature(this IServiceCollection services)
     {
-        services.AddSingleton<RunService>();
+        services.AddSingleton<RunFlow>();
         services.AddSingleton<ILauncher, ShellLauncher>();
         services.AddSingleton<ILauncher, HerdrAppLauncher>();
         services.AddSingleton<LauncherRegistry>();

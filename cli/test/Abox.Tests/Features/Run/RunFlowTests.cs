@@ -14,13 +14,13 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class RunServiceTests
+public sealed class RunFlowTests
 {
-    private readonly RunServiceFixture _fixture = new();
+    private readonly RunFlowFixture _fixture = new();
     private TempDirectory _root => _fixture.Root;
     private TestConsole _console => _fixture.Console;
     private ISbxClient _sbx => _fixture.Sbx;
-    private RunService _service => _fixture.Service;
+    private RunFlow _service => _fixture.Service;
     private BuildStore _store => _fixture.Store;
     private SandboxRecordStore _records => _fixture.Records;
     private SandboxCreator _create => _fixture.Create;
@@ -30,8 +30,8 @@ public sealed class RunServiceTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>())
             .Returns("/home/agent/workspace");
 
@@ -59,8 +59,8 @@ public sealed class RunServiceTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>()).Returns((string?)null);
 
         // Act
@@ -79,8 +79,8 @@ public sealed class RunServiceTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
 
         // Act
         await _service.RunAsync(
@@ -162,15 +162,16 @@ public sealed class RunServiceTests
             new SandboxRecord { Squad = "ac", Tag = "release" }
         );
         var config = new AboxConfig();
-        var service = new RunService(
-            new LauncherRegistry([new ShellLauncher(_sbx)]),
-            config,
+        var service = new RunFlow(
+            new LauncherRegistry([new ShellLauncher()]),
             new SquadResolver(config),
             _store,
             _records,
             _create,
             _sbx,
-            SandboxFactory.Resolver(_sbx),
+            SandboxFactory.Https(_sbx, _console),
+            SandboxFactory.Resolver(_sbx, SandboxFactory.Hints(config, _store, _records)),
+            SandboxFactory.Hints(config, _store, _records),
             Substitute.For<IHostPrograms>(),
             _console
         );
@@ -249,8 +250,8 @@ public sealed class RunServiceTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _sbx.HasProgramAsync(name, Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(false);
         _records.Save(
             name,
@@ -288,15 +289,16 @@ public sealed class RunServiceTests
             _records.Save(SandboxName.For(_root.Path), new SandboxRecord());
         }
 
-        var service = new RunService(
-            new LauncherRegistry([new ShellLauncher(_sbx)]),
-            new AboxConfig(),
+        var service = new RunFlow(
+            new LauncherRegistry([new ShellLauncher()]),
             new SquadResolver(new AboxConfig()),
             _store,
             _records,
             _create,
             _sbx,
-            SandboxFactory.Resolver(_sbx),
+            SandboxFactory.Https(_sbx, _console),
+            SandboxFactory.Resolver(_sbx, SandboxFactory.Hints(new AboxConfig(), _store, _records)),
+            SandboxFactory.Hints(new AboxConfig(), _store, _records),
             Substitute.For<IHostPrograms>(),
             _console
         );
@@ -338,8 +340,8 @@ public sealed class RunServiceTests
         using var sources = new TempDirectory();
         var sourceRoot = separateSources ? sources : _root;
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _sbx.RemoveSandboxAsync(name, Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, string.Empty));
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
@@ -394,8 +396,8 @@ public sealed class RunServiceTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _records.Save(
             name,
             new SandboxRecord
@@ -436,8 +438,8 @@ public sealed class RunServiceTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _records.Save(
             name,
             new SandboxRecord
@@ -479,8 +481,8 @@ public sealed class RunServiceTests
         // Arrange
         var name = SandboxName.For(_root.Path);
         _console.Answer = false;
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _root.File("teams/sample/ac.abox", "workload: sample\n");
         _records.Save(
             name,

@@ -90,8 +90,8 @@ public sealed class PublishedSquadSourceMcpTests
         _metadata["Mcp"] = JsonSerializer.SerializeToNode(manifest.Mcp);
         _metadata["State"] = new JsonArray();
         var name = SandboxName.For(root.Path);
-        sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.UtcNow) });
         var records = new SandboxRecordStore(paths);
         var creator = TestServiceGraphs.Creator(
             records,

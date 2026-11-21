@@ -14,7 +14,7 @@ public sealed class UserSecretsCommand : Command
         Lazy<AboxConfig> config,
         Preflight preflight,
         Lazy<UserSecretsCopy> copy,
-        SandboxResolver sandboxes,
+        Lazy<FolderSandbox> sandboxes,
         IConsole console
     )
         : base(
@@ -50,11 +50,14 @@ public sealed class UserSecretsCommand : Command
                         );
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                             return 1;
-                        var sandbox =
-                            (await sandboxes.FindAsync(folder, cancellationToken))?.Name
-                            ?? throw new AboxException(
-                                $"There is no sandbox for '{folder}'. Run 'abox create' for this folder first; user-secrets never creates or replaces one."
-                            );
+                        var sandbox = (
+                            await sandboxes.Value.RequireAsync(
+                                folder,
+                                folderConfig,
+                                "user-secrets never creates or replaces one",
+                                cancellationToken
+                            )
+                        ).Name;
                         UserSecretsReport report;
                         try
                         {

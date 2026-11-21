@@ -7,13 +7,13 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class RunServiceTeamTests
+public sealed class RunFlowTeamTests
 {
-    private readonly RunServiceFixture _fixture = new();
+    private readonly RunFlowFixture _fixture = new();
     private TempDirectory _root => _fixture.Root;
     private TestConsole _console => _fixture.Console;
     private ISbxClient _sbx => _fixture.Sbx;
-    private RunService _service => _fixture.Service;
+    private RunFlow _service => _fixture.Service;
     private BuildStore _store => _fixture.Store;
     private SandboxRecordStore _records => _fixture.Records;
 
@@ -28,8 +28,8 @@ public sealed class RunServiceTeamTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _records.Save(
             name,
             new SandboxRecord
@@ -92,8 +92,8 @@ public sealed class RunServiceTeamTests
         var otherImage = LocalWorkloadFactory.Artifact(otherSources);
         var name = SandboxName.For(_root.Path);
         _root.File("teams/sample/ac.abox", "workload: sample\n");
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _sbx.RemoveSandboxAsync(name, Arg.Any<CancellationToken>()).Returns(new SbxOutcome(0, ""));
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));

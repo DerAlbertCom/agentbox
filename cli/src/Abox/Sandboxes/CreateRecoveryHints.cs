@@ -3,10 +3,10 @@ using Abox.Kits;
 using Abox.LocalState;
 using Abox.Naming;
 
-namespace Abox.Features.Run;
+namespace Abox.Sandboxes;
 
 /// <summary>Resolves recovery provenance without writing diagnostics while rendering a command.</summary>
-internal sealed class CreateRecoveryHints(
+public sealed class CreateRecoveryHints(
     AboxConfig config,
     SquadResolver resolver,
     BuildStore store,
@@ -94,4 +94,9 @@ internal sealed class CreateRecoveryHints(
 }
 
 /// <summary>A rendered recovery instruction and any safe, nonfatal build-provenance diagnostic.</summary>
-internal sealed record CreateRecoveryHint(string Command, string? Diagnostic);
+public sealed record CreateRecoveryHint(string Command, string? Diagnostic)
+{
+    /// <summary>The diagnostic, if any, then the command after the prefix.</summary>
+    public IEnumerable<string> Lines(string prefix) =>
+        Diagnostic is null ? [prefix + Command] : [Diagnostic, prefix + Command];
+}

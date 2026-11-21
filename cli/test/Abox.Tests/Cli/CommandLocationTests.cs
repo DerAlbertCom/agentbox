@@ -65,8 +65,7 @@ public sealed class CommandLocationTests
                 Arg.Is<SbxCreateRequest>(request => request.Location == expected),
                 Arg.Any<CancellationToken>()
             );
-        await sbx.Received(2)
-            .FindSandboxAsync(SandboxName.For(expected), Arg.Any<CancellationToken>());
+        await sbx.Received(2).ListSandboxesAsync(Arg.Any<CancellationToken>());
         console
             .Errors.Should()
             .Contain(line => line.Contains($"There is no sandbox for '{expected}'"));

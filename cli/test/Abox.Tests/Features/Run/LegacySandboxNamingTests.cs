@@ -36,8 +36,8 @@ public sealed class LegacySandboxNamingTests
     {
         // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
-        cli.Sbx.FindSandboxAsync(expectedName, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(expectedName, "running", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(expectedName, "running", null) });
 
         // Act
         var exitCode = await cli.Invoke("run", "--location", location);
@@ -71,8 +71,8 @@ public sealed class LegacySandboxNamingTests
             );
             var expectedName =
                 "alias_name-ai-sbx-" + Convert.ToHexString(digest)[..6].ToLowerInvariant();
-            cli.Sbx.FindSandboxAsync(expectedName, Arg.Any<CancellationToken>())
-                .Returns(new SandboxInfo(expectedName, "running", null));
+            cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+                .Returns(new[] { new SandboxInfo(expectedName, "running", null) });
 
             // Act
             var exitCode = await cli.Invoke("run", "--location", link);

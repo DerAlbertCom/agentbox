@@ -28,7 +28,7 @@ public sealed class DevelopmentCertificateReceiverTests
                 Xunit.v3.DynamicSkipToken.Value
                     + "The private receiver requires non-root Linux and Python 3."
             );
-        var captured = await CaptureStageRequest();
+        var captured = await CaptureActivationRequest();
         var arguments = captured.Arguments.SkipWhile(value => value != "python3").ToArray();
 
         // Act: every input is invalid before open_root; no runtime or host trust is touched.
@@ -48,22 +48,25 @@ public sealed class DevelopmentCertificateReceiverTests
         result.StandardError.Should().BeEmpty();
     }
 
-    private static async Task<ProcessRequest> CaptureStageRequest()
+    private static async Task<ProcessRequest> CaptureActivationRequest()
     {
         using var root = new CertificateTestDirectory();
+        using var identity = new SyntheticDevelopmentCertificate();
         var runner = Substitute.For<IProcessRunner>();
         ProcessRequest? captured = null;
         runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
-                captured = call.Arg<ProcessRequest>();
-                return new ProcessResult(0, "", "");
+                var request = call.Arg<ProcessRequest>();
+                if (request.Arguments.Contains("activate"))
+                    captured = request;
+                return new ProcessResult(0, request.Arguments.Contains("id") ? "1000\n" : "", "");
             });
         var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
-        await client.StageDevelopmentCertificateAsync(
+        await client.ActivateDevelopmentCertificateAsync(
             "synthetic",
-            new byte[] { 1 },
+            identity.Export("synthetic-private-password"),
             "synthetic-private-password",
             CancellationToken.None
         );

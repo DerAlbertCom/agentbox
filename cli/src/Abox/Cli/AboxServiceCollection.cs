@@ -75,12 +75,13 @@ public static class AboxServiceCollection
         services.AddSingleton<UserSecretsCopy>();
         services.AddSingleton<AppPorts>();
         services.AddSingleton<HostDevelopmentCertificate>();
-        services.AddSingleton<DevelopmentHttps>();
+        services.AddSingleton<SandboxHttps>();
         services.AddSingleton<Preflight>();
         services.AddSingleton<SquadResolver>();
         services.AddSingleton<BuildStore>();
         services.AddSingleton<SandboxRecordStore>();
-        services.AddSingleton<SandboxResolver>();
+        services.AddSingleton<CreateRecoveryHints>();
+        services.AddSingleton<FolderSandbox>();
         services.AddSingleton<PersonalConfigurations>();
         services.AddSingleton<LocalWorkloadImages>();
         services.AddSingleton<SandboxCreator>();

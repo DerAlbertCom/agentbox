@@ -31,9 +31,7 @@ public sealed class LegacySandboxExecPipeTests
                 ),
                 Arg.Any<CancellationToken>()
             );
-        await cli
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await cli.Sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
         await cli.Sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
     }
 }

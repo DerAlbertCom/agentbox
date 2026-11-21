@@ -35,7 +35,7 @@ public sealed record SandboxCreationRequest(
 public sealed class SandboxCreator(
     SandboxRecordStore records,
     AboxPaths paths,
-    SandboxResolver sandboxes,
+    FolderSandbox sandboxes,
     ISbxClient sbx,
     IConsole console,
     LocalSquadSource local,

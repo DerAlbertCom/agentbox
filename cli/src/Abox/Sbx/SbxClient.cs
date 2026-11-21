@@ -27,13 +27,6 @@ public sealed partial class SbxClient : ISbxClient
         _kitSources = new SbxKitSources(_invoker, paths);
     }
 
-    public Task StageDevelopmentCertificateAsync(
-        string sandbox,
-        ReadOnlyMemory<byte> pfx,
-        string password,
-        CancellationToken cancellationToken
-    ) => _certificates.StageDevelopmentCertificateAsync(sandbox, pfx, password, cancellationToken);
-
     public Task ActivateDevelopmentCertificateAsync(
         string sandbox,
         ReadOnlyMemory<byte> pfx,
@@ -145,18 +138,6 @@ public sealed partial class SbxClient : ISbxClient
                 Workspaces = sandbox.Workspaces ?? [],
             })
             .ToList();
-    }
-
-    /// <summary>Whether a sandbox with this name exists.</summary>
-    public async Task<SandboxInfo?> FindSandboxAsync(
-        string name,
-        CancellationToken cancellationToken
-    )
-    {
-        var sandboxes = await ListSandboxesAsync(cancellationToken);
-        return sandboxes.FirstOrDefault(sandbox =>
-            sandbox.Name.Equals(name, StringComparison.Ordinal)
-        );
     }
 
     /// <summary>The template images the local runtime holds.</summary>

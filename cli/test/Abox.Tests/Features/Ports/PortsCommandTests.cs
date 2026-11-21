@@ -248,8 +248,8 @@ public sealed class PortsCommandTests
         var link = Path.Combine(fixture.Root.Path, "selected-root");
         await links.Add(link, fixture.Location);
         fixture
-            .Sbx.FindSandboxAsync(SandboxName.For(link), Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo("linked-root-identity", "running", null));
+            .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(SandboxName.For(link), "running", null) });
 
         // Act
         var exit = await fixture.Run("--location", link);
@@ -260,7 +260,7 @@ public sealed class PortsCommandTests
         await fixture
             .Sbx.Received(1)
             .EnsureApplicationPortsAsync(
-                "linked-root-identity",
+                SandboxName.For(link),
                 Arg.Any<IReadOnlyList<ApplicationPortMapping>>(),
                 Arg.Any<CancellationToken>()
             );
@@ -395,19 +395,18 @@ public sealed class PortsCommandTests
     {
         // Arrange
         using var fixture = new PortsCommandFixture();
+        var legacyName = LegacySandboxName.For(fixture.Location, fixture.Location);
         fixture.Root.File(
             "folder/Properties/launchSettings.json",
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
         );
         fixture
-            .Sbx.FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>())
-            .Returns(legacy ? null : new SandboxInfo("selected-current-identity", "running", null));
-        fixture
-            .Sbx.FindSandboxAsync(
-                Arg.Is<string>(name => name.Contains("-ai-sbx-")),
-                Arg.Any<CancellationToken>()
-            )
-            .Returns(new SandboxInfo("selected-legacy-identity", "stopped", null));
+            .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                legacy
+                    ? new[] { new SandboxInfo(legacyName, "stopped", null) }
+                    : new[] { new SandboxInfo(fixture.Name, "running", null) }
+            );
 
         // Act
         var exit = await fixture.Run();
@@ -417,17 +416,10 @@ public sealed class PortsCommandTests
         await fixture
             .Sbx.Received(1)
             .EnsureApplicationPortsAsync(
-                legacy ? "selected-legacy-identity" : "selected-current-identity",
+                legacy ? legacyName : fixture.Name,
                 Arg.Any<IReadOnlyList<ApplicationPortMapping>>(),
                 Arg.Any<CancellationToken>()
             );
-        if (!legacy)
-            await fixture
-                .Sbx.DidNotReceive()
-                .FindSandboxAsync(
-                    Arg.Is<string>(name => name.Contains("-ai-sbx-")),
-                    Arg.Any<CancellationToken>()
-                );
     }
 
     [Fact]
@@ -441,8 +433,8 @@ public sealed class PortsCommandTests
             """{"profiles":{"app":{"applicationUrl":"http://localhost:8203"}}}"""
         );
         fixture
-            .Sbx.FindSandboxAsync(SandboxName.For(other), Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo("explicit-identity", "running", null));
+            .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(SandboxName.For(other), "running", null) });
 
         // Act
         var exit = await fixture.Run("--location", other);
@@ -452,13 +444,10 @@ public sealed class PortsCommandTests
         await fixture
             .Sbx.Received(1)
             .EnsureApplicationPortsAsync(
-                "explicit-identity",
+                SandboxName.For(other),
                 Arg.Any<IReadOnlyList<ApplicationPortMapping>>(),
                 Arg.Any<CancellationToken>()
             );
-        await fixture
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -472,15 +461,10 @@ public sealed class PortsCommandTests
 
         // Assert
         exit.Should().Be(1);
-        await fixture
-            .Sbx.Received(1)
-            .FindSandboxAsync(
-                SandboxName.For(Environment.CurrentDirectory),
-                Arg.Any<CancellationToken>()
-            );
+        await fixture.Sbx.Received(1).ListSandboxesAsync(Arg.Any<CancellationToken>());
         fixture
             .Console.AllText.Should()
-            .Contain("abox create --location")
+            .Contain("Create it with: abox create")
             .And.Contain("never creates or replaces");
         await fixture.NoPublishing();
         await fixture
@@ -499,9 +483,9 @@ public sealed class PortsCommandTests
         // Arrange
         using var fixture = new PortsCommandFixture();
         fixture
-            .Sbx.FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>())
+            .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
             .Returns(
-                Task.FromException<SandboxInfo?>(
+                Task.FromException<IReadOnlyList<SandboxInfo>>(
                     cancel
                         ? new OperationCanceledException()
                         : new AboxException("runtime discovery unavailable")
@@ -513,12 +497,6 @@ public sealed class PortsCommandTests
 
         // Assert
         exit.Should().Be(expected);
-        await fixture
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(
-                Arg.Is<string>(name => name.Contains("-ai-sbx-")),
-                Arg.Any<CancellationToken>()
-            );
         await fixture.NoPublishing();
     }
 
@@ -560,9 +538,7 @@ public sealed class PortsCommandTests
         // Assert
         exit.Should().Be(1);
         await fixture.NoPublishing();
-        await fixture
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await fixture.Sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
     }
 
     [Theory]

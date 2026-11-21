@@ -101,8 +101,8 @@ internal sealed class AppPortsLifecycleFixture : IDisposable
                 BuildCreatedAt = OldBuild,
             }
         );
-        Sbx.FindSandboxAsync(Name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(Name, "running", OldBuild));
+        Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(Name, "running", OldBuild) });
     }
 
     public Task<int> Replace(string entry) =>

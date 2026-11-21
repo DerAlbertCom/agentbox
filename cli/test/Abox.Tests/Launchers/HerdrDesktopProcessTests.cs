@@ -33,7 +33,7 @@ public sealed class HerdrDesktopProcessTests
         try
         {
             // Act
-            var result = await fixture.Launcher.RunAsync(fixture.Context, deadline.Token);
+            var result = await fixture.Launcher.RunAsync(fixture.Session, deadline.Token);
 
             // Assert
             result.Should().Be(0);
@@ -74,7 +74,7 @@ public sealed class HerdrDesktopProcessTests
         try
         {
             // Act
-            var action = () => fixture.Launcher.RunAsync(fixture.Context, deadline.Token);
+            var action = () => fixture.Launcher.RunAsync(fixture.Session, deadline.Token);
 
             // Assert
             (await action.Should().ThrowAsync<AboxException>())

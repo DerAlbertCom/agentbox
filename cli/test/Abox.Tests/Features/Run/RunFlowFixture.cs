@@ -11,23 +11,23 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-internal sealed class RunServiceFixture
+internal sealed class RunFlowFixture
 {
     internal TempDirectory Root { get; } = new();
     internal TestConsole Console { get; } = new();
     internal ISbxClient Sbx { get; } = Substitute.For<ISbxClient>();
-    internal RunService Service { get; }
+    internal RunFlow Service { get; }
     internal AboxPaths Paths { get; }
     internal BuildStore Store { get; }
     internal SandboxRecordStore Records { get; }
     internal SandboxCreator Create { get; }
     internal AboxConfig Config { get; } = new() { DefaultTeam = "sample" };
 
-    internal RunServiceFixture()
+    internal RunFlowFixture()
     {
         var launchers = new LauncherRegistry([
-            new ShellLauncher(Sbx),
-            new HerdrAppLauncher(Substitute.For<IProcessRunner>(), Sbx, Console),
+            new ShellLauncher(),
+            new HerdrAppLauncher(Substitute.For<IProcessRunner>(), Console),
         ]);
         var hostPrograms = Substitute.For<IHostPrograms>();
         hostPrograms.Exists(Arg.Any<string>()).Returns(true);
@@ -43,15 +43,16 @@ internal sealed class RunServiceFixture
             new RemoteSquadSource(Config, Sbx, PublishedSquadFactory.Source()),
             new UserSecretsCopy(Config, new UserSecretsHost(null, null), Sbx)
         );
-        Service = new RunService(
+        Service = new RunFlow(
             launchers,
-            Config,
             new SquadResolver(Config),
             Store,
             Records,
             Create,
             Sbx,
-            SandboxFactory.Resolver(Sbx),
+            SandboxFactory.Https(Sbx, Console),
+            SandboxFactory.Resolver(Sbx, SandboxFactory.Hints(Config, Store, Records)),
+            SandboxFactory.Hints(Config, Store, Records),
             hostPrograms,
             Console
         );

@@ -26,15 +26,14 @@ public sealed class AppPortsLifecycleSelectionTests
             fixture.Configure("""{"portOffset":20000}""");
         if (entry == "run")
             fixture
-                .Sbx.FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>())
+                .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
                 .Returns(_ =>
                 {
                     fixture.Configure("""{"portOffset":30000}""");
-                    return new SandboxInfo(
-                        fixture.Name,
-                        "running",
-                        AppPortsLifecycleFixture.OldBuild
-                    );
+                    return new[]
+                    {
+                        new SandboxInfo(fixture.Name, "running", AppPortsLifecycleFixture.OldBuild),
+                    };
                 });
         else
             fixture
@@ -80,11 +79,10 @@ public sealed class AppPortsLifecycleSelectionTests
             .Returns(_ =>
             {
                 fixture
-                    .Sbx.FindSandboxAsync(
-                        SandboxName.For(fixture.Location),
-                        Arg.Any<CancellationToken>()
-                    )
-                    .Returns(new SandboxInfo("another-current-candidate", "running", null));
+                    .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+                    .Returns(
+                        new[] { new SandboxInfo("another-current-candidate", "running", null) }
+                    );
                 return new SbxOutcome(0, "");
             });
 

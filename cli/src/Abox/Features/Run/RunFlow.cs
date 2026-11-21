@@ -1,4 +1,5 @@
 using Abox.Configuration;
+using Abox.Https;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Launchers;
@@ -16,23 +17,23 @@ namespace Abox.Features.Run;
 public sealed record RunRequest(string LauncherId, string Location, IReadOnlyList<string> Argv);
 
 /// <summary>
-/// Starts a launcher for the sandbox of a folder.
+/// Starts a launcher for the sandbox of a folder: the common Launcher steps in order, then
+/// the launcher itself with a Launcher session.
 /// </summary>
-public sealed class RunService(
+public sealed class RunFlow(
     LauncherRegistry launchers,
-    AboxConfig config,
     SquadResolver resolver,
     BuildStore store,
     SandboxRecordStore records,
     SandboxCreator create,
     ISbxClient sbx,
-    SandboxResolver sandboxes,
+    SandboxHttps https,
+    FolderSandbox sandboxes,
+    CreateRecoveryHints recoveryHints,
     IHostPrograms hostPrograms,
     IConsole console
 )
 {
-    private readonly CreateRecoveryHints _recoveryHints = new(config, resolver, store, records);
-
     /// <summary>Starts the launcher and returns the exit code of the command.</summary>
     public async Task<int> RunAsync(RunRequest request, CancellationToken cancellationToken)
     {
@@ -55,12 +56,19 @@ public sealed class RunService(
         var location = Path.GetFullPath(request.Location);
         var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
 
-        var sandbox = await sandboxes.FindAsync(location, cancellationToken);
-        if (sandbox is null)
+        SandboxInfo sandbox;
+        try
         {
-            var name = SandboxName.For(location);
-            console.WriteError($"There is no sandbox for '{location}'.");
-            WriteCreateHint("Create it with: ", name, location, folderConfig);
+            sandbox = await sandboxes.RequireAsync(
+                location,
+                folderConfig,
+                note: null,
+                cancellationToken
+            );
+        }
+        catch (MissingFolderSandboxException exception)
+        {
+            console.WriteError(exception.Message);
             return 1;
         }
 
@@ -88,14 +96,16 @@ public sealed class RunService(
             return 1;
         }
 
-        var context = new LauncherContext(
+        var session = new LauncherSession(
             location,
             sandbox.Name,
             await WorkspaceOfAsync(sandbox.Name, location, cancellationToken),
-            request.Argv
+            request.Argv,
+            sbx,
+            https
         );
 
-        return await launcher.RunAsync(context, cancellationToken);
+        return await launcher.RunAsync(session, cancellationToken);
     }
 
     private void WriteCreateHint(
@@ -105,10 +115,8 @@ public sealed class RunService(
         FolderConfig? folderConfig
     )
     {
-        var hint = _recoveryHints.Resolve(name, location, folderConfig);
-        if (hint.Diagnostic is not null)
-            console.WriteError(hint.Diagnostic);
-        console.WriteError(prefix + hint.Command);
+        foreach (var line in recoveryHints.Resolve(name, location, folderConfig).Lines(prefix))
+            console.WriteError(line);
     }
 
     /// <summary>

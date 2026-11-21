@@ -42,8 +42,8 @@ public sealed class RunRecoveryHintTests
                 }
             );
         fixture
-            .Cli.Sbx.FindSandboxAsync(legacy, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(legacy, "running", null));
+            .Cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(legacy, "running", null) });
 
         // Act
         var exitCode = await fixture.Run(true);

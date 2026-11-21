@@ -16,7 +16,7 @@ public sealed class RunCommand : Command
         Lazy<AboxConfig> config,
         LauncherRegistry launchers,
         Preflight preflight,
-        Lazy<RunService> run,
+        Lazy<RunFlow> run,
         TrailingArguments trailing,
         IConsole console
     )
