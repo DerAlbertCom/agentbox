@@ -1,7 +1,5 @@
 files:
   - template: sbox.tmTheme.liquid
     target: ~/.config/bat/themes/sbox.tmTheme
-  - template: config
-    target: ~/.config/bat/config
 run:
   - if command -v bat >/dev/null; then bat cache --build; fi

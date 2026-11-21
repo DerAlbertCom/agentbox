@@ -90,15 +90,20 @@ The apps it themes today:
 | OpenCode | `~/.config/opencode/themes/sbox.json` | `theme` in `~/.config/opencode/cli.json` (merged) |
 | Claude Code | `~/.claude/themes/sbox.json` | `theme: custom:sbox` in `~/.claude/settings.json` (merged) |
 | pi | `~/.pi/agent/themes/sbox.json` | `theme: sbox` in `~/.pi/agent/settings.json` (merged) |
-| bat | `~/.config/bat/themes/sbox.tmTheme` | `--theme=sbox` in `~/.config/bat/config`; the switch rebuilds bat's cache |
-| delta | `~/.config/git/config` (only `[delta]`) | `syntax-theme = sbox` there, bat's theme |
+| bat | `~/.config/bat/themes/sbox.tmTheme` | `BAT_THEME=sbox`, set by the kit; the switch rebuilds bat's cache |
+| delta | `~/.config/git/sbox.gitconfig` (only `[delta]`) | an `[include]` of it in `~/.config/git/config` (added once); `syntax-theme = sbox`, bat's theme |
 | fzf | `~/.config/fzf/sbox` | `FZF_DEFAULT_OPTS_FILE`, set by the kit arg `THEMES_FZF_OPTS_FILE` |
-| lazygit | `~/.config/lazygit/config.yml` | the file itself |
+| lazygit | `~/.config/lazygit/sbox.yml` | `LG_CONFIG_FILE`, set by the kit: `config.yml`, then `sbox.yml` (an empty `config.yml` is created when there is none) |
 | yazi | `~/.config/yazi/theme.toml` | the file itself |
 
 The terminal tools pick up a switch on their next run, so the restart notice names
-only the agents. A switch owns each file it renders and overwrites it; the git
-settings of other kits belong in `~/.gitconfig`, which git reads as well.
+only the agents. A switch overwrites only the theme files it renders (the `sbox` files
+and yazi's `theme.toml`) and merges its keys into the settings files. The apps' other
+config files, such as `~/.config/git/config`, `~/.config/bat/config` and lazygit's
+`config.yml`, stay the user's: the first switch only adds the `[include]` to the git
+config and an empty `config.yml` when there is none. The theme comes after the user's
+settings in those files, so it wins for the keys it sets; `~/.gitconfig` is read last
+and wins over both.
 
 ### Adding a theme
 

@@ -165,9 +165,10 @@ describe("sbox theme <name> for pi", () => {
 
 
 describe("sbox theme <name> for the terminal tools", () => {
-  test("renders the bat theme sbox, selects it and rebuilds bat's cache with it", async () => {
+  test("renders the bat theme sbox and rebuilds bat's cache with it, leaving bat's config to the user", async () => {
     // Arrange
     await home.install();
+    await home.write(".config/bat/config", "--style=plain\n");
 
     // Act
     const result = await home.run(["nord"]);
@@ -179,12 +180,12 @@ describe("sbox theme <name> for the terminal tools", () => {
     expect(theme).toContain("<key>background</key>\n\t\t\t\t<string>#2e3440</string>");
     expect(theme).toContain("<key>lineHighlight</key>\n\t\t\t\t<string>#383e4a</string>");
     expect(theme).toContain("<key>gutterForeground</key>\n\t\t\t\t<string>#616773</string>");
-    expect(await home.file(".config/bat/config")).toBe("--theme=sbox\n");
+    expect(await home.file(".config/bat/config")).toBe("--style=plain\n");
     expect(await home.file("bat.log")).toBe(`${home.path}: bat cache --build\n`);
     expect(await home.file("bat.cache")).toBe(theme);
   });
 
-  test("renders delta's git config with the bat theme sbox and the palette's diff colors", async () => {
+  test("renders delta's theme into its own git config with the bat theme sbox and the palette's diff colors", async () => {
     // Arrange
     await home.install();
 
@@ -192,14 +193,31 @@ describe("sbox theme <name> for the terminal tools", () => {
     await home.run(["nord"]);
 
     // Assert
-    const config = await home.file(".config/git/config");
-    expect(config).toStartWith("[delta]\n\tsyntax-theme = sbox\n");
-    expect(config).toContain('\tminus-style = syntax "#443b46"\n');
-    expect(config).toContain('\tminus-emph-style = syntax "#5c424d"\n');
-    expect(config).toContain('\tplus-style = syntax "#40494b"\n');
-    expect(config).toContain('\tplus-emph-style = syntax "#536058"\n');
-    expect(config).toContain('\tline-numbers-minus-style = "#bf616a"\n');
-    expect(config).toContain('\tline-numbers-zero-style = "#616773"\n');
+    const theme = await home.file(".config/git/sbox.gitconfig");
+    expect(theme).toStartWith("[delta]\n\tsyntax-theme = sbox\n");
+    expect(theme).toContain('\tminus-style = syntax "#443b46"\n');
+    expect(theme).toContain('\tminus-emph-style = syntax "#5c424d"\n');
+    expect(theme).toContain('\tplus-style = syntax "#40494b"\n');
+    expect(theme).toContain('\tplus-emph-style = syntax "#536058"\n');
+    expect(theme).toContain('\tline-numbers-minus-style = "#bf616a"\n');
+    expect(theme).toContain('\tline-numbers-zero-style = "#616773"\n');
+    expect(await home.file(".config/git/config")).toBe("[include]\n\tpath = sbox.gitconfig\n");
+  });
+
+  test("includes delta's theme once in the git config and keeps the user's settings", async () => {
+    // Arrange
+    await home.install();
+    await home.write(".config/git/config", "[user]\n\tname = Someone\n[delta]\n\tside-by-side = true\n");
+
+    // Act
+    await home.run(["nord"]);
+    await home.run(["white"]);
+
+    // Assert
+    expect(await home.file(".config/git/config")).toBe(
+      "[user]\n\tname = Someone\n[delta]\n\tside-by-side = true\n[include]\n\tpath = sbox.gitconfig\n",
+    );
+    expect(await home.file(".config/git/sbox.gitconfig")).toContain('\tline-numbers-minus-style = "#2a2a2a"\n');
   });
 
   test("renders fzf's options file with the palette's colors", async () => {
@@ -220,7 +238,7 @@ describe("sbox theme <name> for the terminal tools", () => {
     );
   });
 
-  test("renders lazygit's theme config with the palette's colors", async () => {
+  test("renders lazygit's theme into its own config file with the palette's colors", async () => {
     // Arrange
     await home.install();
 
@@ -228,7 +246,7 @@ describe("sbox theme <name> for the terminal tools", () => {
     await home.run(["nord"]);
 
     // Assert
-    const theme = Bun.YAML.parse(await home.file(".config/lazygit/config.yml")) as {
+    const theme = Bun.YAML.parse(await home.file(".config/lazygit/sbox.yml")) as {
       gui: { theme: Record<string, string[]> };
     };
     expect(theme.gui.theme.activeBorderColor).toEqual(["#81a1c1", "bold"]);
@@ -237,6 +255,21 @@ describe("sbox theme <name> for the terminal tools", () => {
     expect(theme.gui.theme.selectedLineBgColor).toEqual(["#434c5e"]);
     expect(theme.gui.theme.inactiveViewSelectedLineBgColor).toEqual(["#3f4551"]);
     expect(theme.gui.theme.defaultFgColor).toEqual(["#d8dee9"]);
+  });
+
+  test("leaves lazygit's config.yml to the user and creates an empty one for LG_CONFIG_FILE", async () => {
+    // Arrange
+    await home.install();
+
+    // Act
+    await home.run(["nord"]);
+    const created = await home.file(".config/lazygit/config.yml");
+    await home.write(".config/lazygit/config.yml", "gui:\n  showIcons: true\n");
+    await home.run(["white"]);
+
+    // Assert
+    expect(created).toBe("");
+    expect(await home.file(".config/lazygit/config.yml")).toBe("gui:\n  showIcons: true\n");
   });
 
   test("renders yazi's theme with the palette's colors", async () => {
