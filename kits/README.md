@@ -38,7 +38,8 @@ actions. It runs on Bun, which the workload must install through mise (`bun@1.4.
 `sbox --help` lists the installed commands; with no command kit it lists none. The
 bundle is produced by the kit's [build step](../docs/authoring.md#kit-build-step)
 (`kits/sbox/build`) when `abox build` runs, so it is not committed. The build runs
-Docker and keeps Bun's package cache in the volume `agentic-box-bun-cache`.
+Bun in Docker through `sbox-cli/bundle` and keeps Bun's package cache in the volume
+`agentic-box-bun-cache`.
 
 ### Command kits
 
@@ -47,6 +48,97 @@ into `command.js`, and its recipe copies that file, with any data the command re
 into `~/.local/share/sbox/commands/<command>/`. The module default-exports a `Command`
 (`summary` and `run(args, ctx)`) from the command API in `sbox-cli/src/api.ts`; see
 the [TypeScript coding standards](../CODING_STANDARDS.md#typescript).
+
+## themes
+
+The `themes` kit installs the `sbox theme` command (from `sbox-themes/`) with every
+theme and app template. It needs the `sbox` kit. The apps are switched together and
+at once, without recreating the sandbox:
+
+| Command | What it does |
+|---|---|
+| `sbox theme <name>` | renders every app with the theme, saves the choice, tells which apps to restart |
+| `sbox theme --list` | lists the themes, the current one marked with `*`; also `sbox theme` alone |
+| `sbox theme --current` | prints the current theme |
+| `sbox theme --apply` | renders the current theme again; the install and startup hooks run it |
+
+The current theme is the saved choice, then the kit arg `THEME` (`SBOX_THEME`,
+`tokyo-night` by default), then `tokyo-night`. A saved theme that no longer exists
+gets a warning and the fallback, and stays saved.
+
+```yaml
+kits:
+  - sbox
+  - name: themes
+    args:
+      THEME: nord          # the team's default; the user's choice wins
+```
+
+The choice is saved in `~/.local/state/sbox/theme/current`. It survives a restart; to
+keep it when the sandbox is recreated, the squad needs the sbox state folder as state:
+
+```yaml
+state:
+  - ~/.local/state/sbox
+```
+
+The apps it themes today:
+
+| App | File in the sandbox | Selected by |
+|---|---|---|
+| OpenCode | `~/.config/opencode/themes/sbox.json` | `theme` in `~/.config/opencode/cli.json` (merged) |
+
+### Adding a theme
+
+A theme is a folder `sbox-themes/themes/<name>/` with a `colors.toml`, and its
+`LICENSE` if it has its own; `sbox-themes/themes/LICENSE` is the license of the
+upstream collection. The palettes come unchanged from
+[Omarchy](https://github.com/basecamp/omarchy) (`themes/*/colors.toml`), plus
+`osaka-jade` from its own repository. Refresh them with:
+
+```sh
+cd sbox-themes && bun run sync-themes
+```
+
+It adds new themes and updates changed ones, never deletes, and reports the themes
+upstream removed. Review the diff before committing. A theme of your own is a new
+folder with a `colors.toml` of the same format. Keys it leaves out get upstream's
+fallbacks: `orange` falls back to `yellow`, the `bright_*` colors are their base
+color mixed 20% with white, `dark_background`/`darker_background` are the
+background mixed 25%/50% with black, `color0`–`color15` and the short names
+(`bg`, `fg`, …) are aliases, and `mode` is derived from the background.
+
+### Adding an app
+
+An app is a folder `sbox-themes/apps/<app>/` with an `app.yaml` and Liquid templates;
+no TypeScript changes. Every app uses one fixed theme named `sbox`, so a switch only
+rewrites its content.
+
+```yaml
+files:                          # templates rendered to files, relative to the app folder
+  - template: sbox.json.liquid
+    target: ~/.config/opencode/themes/sbox.json
+settings:                       # merged into JSON files on every apply; strings are Liquid
+  - file: ~/.config/opencode/cli.json
+    merge:
+      theme: { name: sbox, mode: "{{ mode }}" }
+run:                            # shell commands run from the home folder afterwards
+  - bat cache --build
+restart: OpenCode               # named in the restart notice; leave out if the app
+                                # picks up changes on its next run
+```
+
+Every key is optional and an unknown key is an error. Targets start with `~/`. A
+template sees every palette key, after the fallbacks, and `mode` (`dark` or `light`):
+
+| Filter | Example | Result |
+|---|---|---|
+| `mix` | `{{ background \| mix: foreground, 30 }}` | the color 30% of the way to `foreground`; also `"30%"` |
+| `strip` | `{{ accent \| strip }}` | `7aa2f7` |
+| `rgb` | `{{ accent \| rgb }}` | `122,162,247` |
+
+A template that names a key the palette lacks fails the switch. A `run` command
+that fails is reported and fails the command after everything is rendered.
 
 ## Color schemes
 

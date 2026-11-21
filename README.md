@@ -190,6 +190,7 @@ Only store IDs, key names/counts and safe recovery messages are reported.
 │   ├── src/Abox/              the command line
 │   └── test/Abox.Tests/       the tests
 ├── sbox-cli/                  the core of sbox, the command line inside the sandbox
+├── sbox-themes/               the theme command of sbox, with the palettes and app templates
 ├── package.json               the Bun workspace of the TypeScript packages
 └── bun.lock
 ```

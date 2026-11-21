@@ -1153,6 +1153,15 @@ sbox-cli/           sbox, the command line inside the sandbox (TypeScript on Bun
   src/sbox.ts       the core: options, help, routing to the commands folder
   src/main.ts       the bundle entry: process arguments, environment and streams
   launcher/sbox     the launcher on PATH; finds Bun through the mise shims
+  bundle            bundles a workspace module with the pinned Bun in a container
+
+sbox-themes/        the theme command of sbox, installed by the themes kit
+  src/command.ts    the command: options, theme resolution, the saved choice
+  src/palette.ts    colors.toml and upstream's fallbacks; mix
+  src/apps.ts       app.yaml, the Liquid templates and their filters, settings, run
+  src/sync-themes.ts  the manual palette refresh from upstream (src/sync.ts)
+  themes/<theme>/   the palettes, unchanged from upstream, and their licenses
+  apps/<app>/       the app templates
 ```
 
 For architecture and coding conventions, see the

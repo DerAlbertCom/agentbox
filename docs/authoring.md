@@ -213,8 +213,9 @@ mkdir -p "$staged/files/home/.local/share/example"
 cp ../../example/tool.sh "$staged/files/home/.local/share/example/"
 ```
 
-`kits/sbox/build` is a real one: it bundles the `sbox-cli` TypeScript package with
-Bun in a pinned `oven/bun` container, so the host needs only Docker.
+`kits/sbox/build` and `kits/themes/build` are real ones: they bundle a TypeScript
+package of the Bun workspace with `sbox-cli/bundle`, which runs Bun in a pinned
+`oven/bun` container, so the host needs only Docker.
 
 - A non-zero exit fails `abox build` and shows the script's output.
 - The descriptor format is unchanged; sbx sees an ordinary kit.
