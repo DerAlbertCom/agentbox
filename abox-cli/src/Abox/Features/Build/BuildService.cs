@@ -33,6 +33,7 @@ public sealed class BuildService(
     PersonalConfigurations personalConfigurations,
     BuildStore store,
     LocalWorkloadImages images,
+    KitBuildStep kitBuildStep,
     ISbxClient sbx,
     IConsole console
 )
@@ -86,7 +87,8 @@ public sealed class BuildService(
             stateGenerator.Generate(squad.State, stateDirectory);
         }
 
-        var manifest = Manifest(team.Name, squad, request, workloadDirectory, stateDirectory);
+        var kits = await kitBuildStep.BuildAsync(squad.Kits, buildDirectory, cancellationToken);
+        var manifest = Manifest(team.Name, squad, kits, request, workloadDirectory, stateDirectory);
         manifest.IncludesPersonalConfigurations = personalFiles.Count > 0;
         if (!request.IncludePersonalConfigurations)
         {
@@ -96,7 +98,7 @@ public sealed class BuildService(
         {
             if (request.Verify)
             {
-                await VerifyAsync(squad, stateDirectory, cancellationToken);
+                await VerifyAsync(kits, stateDirectory, cancellationToken);
             }
 
             manifest.LocalWorkload = await images.BuildAsync(
@@ -136,7 +138,7 @@ public sealed class BuildService(
     }
 
     private async Task VerifyAsync(
-        ResolvedSquad squad,
+        IReadOnlyList<KitSource> squadKits,
         string? stateDirectory,
         CancellationToken cancellationToken
     )
@@ -149,8 +151,8 @@ public sealed class BuildService(
             )>();
 
         kits.AddRange(
-            squad
-                .Kits.Where(kit => kit.IsLocal)
+            squadKits
+                .Where(kit => kit.IsLocal)
                 .Select(kit => (kit.Name, kit.Directory!, kit.Arguments))
         );
 
@@ -177,6 +179,7 @@ public sealed class BuildService(
     private static BuildManifest Manifest(
         string teamName,
         ResolvedSquad squad,
+        IReadOnlyList<KitSource> kits,
         BuildRequest request,
         string workloadDirectory,
         string? stateDirectory
@@ -197,7 +200,7 @@ public sealed class BuildService(
             StateMixinDirectory = stateDirectory,
         };
 
-        foreach (var kit in squad.Kits)
+        foreach (var kit in kits)
         {
             manifest.Kits.Add(
                 new ManifestKit

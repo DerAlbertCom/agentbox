@@ -27,6 +27,7 @@ internal static class TestServiceGraphs
             personal,
             store,
             images,
+            new KitBuildStep(new ProcessRunner(), console),
             sbx,
             console
         );
