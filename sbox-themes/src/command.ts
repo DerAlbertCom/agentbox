@@ -4,7 +4,8 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { Command, CommandContext } from "sbox-cli";
 import { readApps, renderApps, type Rendered } from "./apps";
-import { readPalette } from "./palette";
+import { readPalette, type Palette } from "./palette";
+import { preview } from "./picker";
 
 const fallbackTheme = "tokyo-night";
 
@@ -17,6 +18,7 @@ export default {
         list: { type: "boolean" },
         current: { type: "boolean" },
         apply: { type: "boolean" },
+        preview: { type: "string" },
       },
       allowPositionals: true,
     });
@@ -25,6 +27,12 @@ export default {
 
     if (values.current) {
       ctx.stdout.write(themes.resolve().name + "\n");
+      return 0;
+    }
+    if (values.preview !== undefined) {
+      if (!themes.exists(values.preview)) return themes.unknown(values.preview);
+      const width = Number.parseInt(ctx.env.FZF_PREVIEW_COLUMNS ?? "", 10) || 60;
+      ctx.stdout.write(preview(values.preview, themes.palette(values.preview), width));
       return 0;
     }
     if (values.apply) {
@@ -42,11 +50,7 @@ export default {
       }
       return 0;
     }
-    if (!themes.names().includes(name)) {
-      ctx.stderr.write(`sbox theme: there is no theme '${name}'. The themes are:\n`);
-      for (const theme of themes.names()) ctx.stderr.write(`  ${theme}\n`);
-      return 1;
-    }
+    if (!themes.exists(name)) return themes.unknown(name);
     const rendered = await themes.render(name);
     await themes.save(name);
     const restart = rendered.restart.length ? ` Restart ${listing(rendered.restart)} to see it.` : "";
@@ -72,6 +76,21 @@ class Themes {
       .sort();
   }
 
+  exists(name: string): boolean {
+    return this.names().includes(name);
+  }
+
+  /** Reports an unknown theme with the available ones and returns the exit code. */
+  unknown(name: string): number {
+    this.ctx.stderr.write(`sbox theme: there is no theme '${name}'. The themes are:\n`);
+    for (const theme of this.names()) this.ctx.stderr.write(`  ${theme}\n`);
+    return 1;
+  }
+
+  palette(name: string): Palette {
+    return readPalette(join(this.themes, name));
+  }
+
   /** The saved choice, then the kit's default `SBOX_THEME`, then tokyo-night. */
   resolve(): { name: string; warning?: string } {
     const names = this.names();
@@ -85,7 +104,7 @@ class Themes {
 
   /** Renders every app with the theme and reports the failed run commands. */
   async render(name: string): Promise<Rendered> {
-    const palette = readPalette(join(this.themes, name));
+    const palette = this.palette(name);
     const apps = readApps(join(this.ctx.paths.data, "apps"));
     const rendered = await renderApps(apps, palette, this.ctx.env, this.ctx.paths.home);
     for (const failure of rendered.failures) this.ctx.stderr.write(`sbox theme: ${failure}\n`);
