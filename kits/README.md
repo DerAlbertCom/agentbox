@@ -57,8 +57,8 @@ at once, without recreating the sandbox:
 
 | Command | What it does |
 |---|---|
-| `sbox theme <name>` | renders every app with the theme, saves the choice, notes that some apps show it only after a restart |
-| `sbox theme` | in a terminal, opens an `fzf` picker with a color preview of each theme, the current one selected; otherwise like `--list` |
+| `sbox theme <name>` | renders every app with the theme, saves the choice, recolors the terminal (see [Terminal colors](#terminal-colors)), notes that some apps show it only after a restart |
+| `sbox theme` | in a terminal, opens an `fzf` picker with a color preview of each theme, the current one selected, and switches like `<name>`; Esc changes nothing; otherwise like `--list` |
 | `sbox theme --list` | lists the themes, the current one marked with `*` |
 | `sbox theme --current` | prints the current theme |
 | `sbox theme --apply` | renders the current theme again; the install and startup hooks run it |
@@ -96,6 +96,7 @@ The apps it themes today:
 | fzf | `~/.config/fzf/sbox` | `FZF_DEFAULT_OPTS_FILE`, set by the kit |
 | lazygit | `~/.config/lazygit/sbox.yml` | `LG_CONFIG_FILE`, set by the kit: `config.yml`, then `sbox.yml` (an empty `config.yml` is created when there is none) |
 | yazi | `~/.config/yazi/theme.toml` | the file itself |
+| terminal | `~/.config/sbox/terminal-colors.sh`, the terminal color script | the login script and `sbox theme`, see [Terminal colors](#terminal-colors) |
 
 The terminal tools pick up a switch on their next run; some apps, such as the agents,
 may show it only after a restart. A switch overwrites only the theme files it renders
@@ -106,6 +107,34 @@ config files, such as `~/.config/git/config`, `~/.config/bat/config` and lazygit
 config and an empty `config.yml` when there is none. The theme comes after the user's
 settings in those files, so it wins for the keys it sets; `~/.gitconfig` is read last
 and wins over both.
+
+### Terminal colors
+
+The `terminal` app renders the **terminal color script**, a small `sh` script that
+prints OSC 4 (the colors 0–15), OSC 10 (foreground), OSC 11 (background) and OSC 12
+(cursor) with the theme's colors. They change only the live terminal session, never
+the host terminal's configuration. The script prints whenever it runs, so you can run
+it by hand, for example after a program reset the colors:
+`sh ~/.config/sbox/terminal-colors.sh`.
+
+The terminal is recolored only when `SBOX_TERMINAL_THEME=1` is set, which `abox run`
+does unless the user turned it off, and only in a terminal:
+
+- **Login.** The kit installs `/etc/profile.d/sbox-terminal-theme.sh` for login shells
+  (`bash -l`). With the variable, a terminal on stdout and a rendered terminal color
+  script, it runs the script, errors suppressed, and prints the resets (OSC 104, 110,
+  111, 112) when the shell exits (`exit`, Ctrl+D, `logout`). Otherwise it does nothing.
+  Login does not start `sbox`; a login before the first render, while the startup hook
+  still runs on a fresh sandbox, gets no colors.
+- **Switch.** `sbox theme <name>` and a picker selection run the freshly rendered
+  script after rendering. Esc, `--apply`, `--list`, `--current` and `--preview` never
+  recolor.
+
+Only the terminal that runs `sbox theme` is recolored; other terminals of the sandbox
+get the new colors at their next login. Try it without `abox run` with
+`sbx exec -it -e SBOX_TERMINAL_THEME=1 <sandbox> bash -l`. Terminals that ignore the
+reset sequences keep the theme's colors after exit. See
+[ADR 0002](../docs/adr/0002-terminal-colors-from-the-sandbox.md).
 
 ### Adding a theme
 

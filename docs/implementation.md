@@ -1184,6 +1184,7 @@ sbox-themes/        the theme command of sbox, installed by the themes kit
   src/sync-themes.ts  the manual palette refresh from upstream (src/sync.ts)
   themes/<theme>/   the palettes, unchanged from upstream, and their licenses
   apps/<app>/       the app templates
+  profile/          the login script that sets the terminal colors (/etc/profile.d)
 ```
 
 For architecture and coding conventions, see the
