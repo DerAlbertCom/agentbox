@@ -18,6 +18,11 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 - **Workload**: a `.workload` file. Builds the squad's v3 workload kit: the base image, the mise tools, and the scripts.
 - **Base image**: the image built from a workload. Maintainers build it; users get it through their squad's layers.
 - **Kit**: a v3 kit, either a workload (full root filesystem) or a mixin (layers added on top). Used for team and squad customization, agent configuration, and auth. Spec: https://github.com/docker/sandbox-kit-spec
+- **Kit build step**: an executable `build` file in a local kit folder. `abox build` copies the kit into the build's staging folder, runs `build <stagedKitDir>` from the kit's folder in the repository, and uses the staged copy everywhere sbx sees the kit. Kits without one pass through unchanged; a `build` file that cannot run (not executable, or on a Windows host) fails the build. See [ADR 0001](adr/0001-kit-build-step.md).
+- **sbox**: the command line inside a sandbox for user-facing actions, such as switching the theme. Its core (`sbox-cli`, installed by the `sbox` kit) routes `sbox <command>` to an installed command kit; `sbox --help` lists them. Not to be confused with `sbx`, the Docker Sandboxes CLI on the host.
+- **Command kit**: a kit that installs one `sbox` command as a bundled module into the commands folder, `~/.local/share/sbox/commands/<command>/`. A squad chooses the commands of its sandboxes by choosing command kits.
+- **Theme**: a named, app-agnostic palette: one `colors.toml` in the flat format of Omarchy (`mode`, `accent`, the background and foreground variants, the 8 colors and their `bright_*` variants). `sbox theme <name>` renders every app template with it. Installed by the `themes` kit.
+- **App template**: the definition of how one app is themed, a folder with an `app.yaml` and Liquid templates. `app.yaml` names the files to render, the JSON settings to merge, the commands to run afterwards and the app to restart. Every app gets one fixed theme named `sbox`, so switching only rewrites its content.
 - **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, `state`, and `secrets`.
 - **Sandbox**: one per folder.
 - **Workspace**: the folder's files inside the sandbox, at the runtime-provided `WORKSPACE_DIR`.
@@ -240,9 +245,9 @@ Same rule for every XDG directory: use the variable if it is set, otherwise the 
 
 ## Implementation notes *(proposed)*
 
-- `cli/` is a .NET 10 console app using System.CommandLine. It builds one executable, `abox`, for Windows, Linux, and macOS. Tests go in `cli/test`.
+- `abox-cli/` is a .NET 10 console app using System.CommandLine. It builds one executable, `abox`, for Windows, Linux, and macOS. Tests go in `abox-cli/test`.
 - One wrapper class makes every `sbx` call, so flags and version checks live in one place. Arguments come from the table below and are passed as argument lists, never as shell strings.
-- Each launcher is one class implementing one launcher interface, in `cli/src/Abox/Launchers/`.
+- Each launcher is one class implementing one launcher interface, in `abox-cli/src/Abox/Launchers/`.
 - Two hidden internal helpers are not user commands: `exec` (run a command in a sandbox, starting it if stopped) and `pipe` (used by `hc`).
 
 ### `sbx` mapping (internal)

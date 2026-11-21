@@ -34,8 +34,8 @@ not execution evidence. Discovery and execution are separate commands below.
 repo="$PWD"
 evidence="$HOME/abox-test-evidence-$(date +%Y%m%d%H%M%S)"
 mkdir -p "$evidence"
-dotnet build cli/agentic-box.slnx
-ordinary="$repo/cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll"
+dotnet build abox-cli/agentic-box.slnx
+ordinary="$repo/abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll"
 dotnet "$ordinary" -noColor -list tests/json -preEnumerateTheories > "$evidence/ordinary-inventory.json"
 dotnet "$ordinary" -noColor -result-xml "$evidence/ordinary.xml"
 ```
@@ -52,7 +52,7 @@ the checkout; do not create fixture-discovery links back to the repository.
 
 ```sh
 artifacts="$evidence/artifacts"
-dotnet build "$repo/cli/agentic-box.slnx" --artifacts-path "$artifacts"
+dotnet build "$repo/abox-cli/agentic-box.slnx" --artifacts-path "$artifacts"
 isolated="$artifacts/bin/Abox.Tests/debug/Abox.Tests.dll"
 cd "$evidence"
 dotnet "$isolated" -noColor -list tests/json -preEnumerateTheories > isolated-inventory.json

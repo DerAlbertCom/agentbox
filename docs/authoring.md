@@ -18,7 +18,7 @@ feature is built is in [implementation.md](implementation.md).
 ├── kits/
 │   └── pi-config/             a kit: a directory with a descriptor
 │       └── pi-config.yaml
-└── cli/                       the abox command line
+└── abox-cli/                  the abox command line
 ```
 
 A team is a folder under `teams`: it holds the `.abox` files of its squads, its
@@ -154,8 +154,8 @@ configuration directory. They add to a squad, they never replace it.
 
 A kit gives every agent of the sandbox a capability: a configuration file for the
 agent, an accessible host, or a credential. The descriptor of a kit follows the
-[kit spec](https://github.com/docker/sandbox-kit-spec); abox builds a local kit as it
-is and passes it to sbx.
+[kit spec](https://github.com/docker/sandbox-kit-spec); abox passes a local kit to
+sbx as it is, unless the kit has a [build step](#kit-build-step).
 
 A kit of the `kits` folder is a directory with the descriptor of the same name in it:
 
@@ -188,6 +188,52 @@ capabilities:
 - This repository keeps working kits to copy from: `kits/pi-config` writes an agent
   configuration, `kits/github-enterprise-auth` reaches a host through a credential the
   host holds.
+- A squad's color theme comes from the `sbox` and `themes` kits, with the kit arg
+  `THEME` as the team's default and `~/.local/state/sbox` as state to keep the user's
+  choice; see [themes](../kits/README.md#themes).
+
+### Kit build step
+
+A local kit whose folder contains an executable `build` file is built by `abox build`
+before sbx sees it. Use it for payload that is compiled, such as TypeScript, so that
+no build output is committed:
+
+1. abox copies the kit folder into the build's staging folder,
+   `<state dir>/builds/<team>/<squad>/<tag>/kits/<kit>/`, keeping the folder name and
+   the file modes.
+2. abox runs `build <stagedKitDir>` with the kit's folder in the repository as the
+   working directory, so the script can reach sibling top-level packages. The script
+   writes its output into the staged folder.
+3. The staged copy replaces the kit for `sbx kit inspect`, `create --local` and
+   `publish`. The kit's folder in the repository stays unchanged.
+
+```sh
+#!/bin/sh
+# kits/example/build
+set -eu
+staged="$1"
+mkdir -p "$staged/files/home/.local/share/example"
+cp ../../example/tool.sh "$staged/files/home/.local/share/example/"
+```
+
+`kits/sbox/build` and `kits/themes/build` are real ones: they bundle a TypeScript
+package of the Bun workspace with `sbox-cli/bundle`, which runs Bun in a pinned
+`oven/bun` container, so the host needs only Docker.
+
+- A non-zero exit fails `abox build` and shows the script's output.
+- The `build` file must be executable (`chmod +x`, and committed with that mode). A
+  `build` file that is not executable fails `abox build` instead of letting the kit
+  pass through unbuilt.
+- Kit build steps run on Linux and macOS hosts. On Windows `abox build` fails for a
+  kit with a `build` file; build such squads on Linux, macOS or in WSL.
+- The descriptor format is unchanged; sbx sees an ordinary kit.
+- `--metadata-only` builds run the step too, because publishing uses the staged copy.
+- Publication fingerprints the staged copy, not the sources the script reads: rebuild
+  with `--no-personal` after changing them, before publishing.
+- The staged output must not contain symbolic links, or publication rejects it.
+- The step needs an executable file, so it is not recognized on Windows hosts.
+
+See [ADR 0001](adr/0001-kit-build-step.md) for why.
 
 ## MCP servers
 

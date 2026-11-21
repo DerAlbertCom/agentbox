@@ -1,0 +1,30 @@
+#!/bin/sh
+# Usage: bundle <entry> <outFile>
+# Bundles <entry>, a module of the root Bun workspace given relative to the repository,
+# into one file for Bun. Runs the pinned Bun in a container, so the host needs only
+# Docker. The Bun version matches bun in the mise tools of the workload.
+set -eu
+
+bun_image="oven/bun:1.4.4"
+repo="$(cd "$(dirname "$0")/.." && pwd)"
+entry="$1"
+out_dir="$(mkdir -p "$(dirname "$2")" && cd "$(dirname "$2")" && pwd)"
+out_name="$(basename "$2")"
+
+docker run --rm \
+  --volume "$repo:/src:ro" \
+  --volume "$out_dir:/out" \
+  --volume agentic-box-bun-cache:/root/.bun/install/cache \
+  --env OWNER="$(id -u):$(id -g)" \
+  --env ENTRY="$entry" \
+  --env OUT_NAME="$out_name" \
+  "$bun_image" sh -euc '
+    mkdir /work
+    cd /src
+    workspaces="$(bun -e "console.log(require(\"/src/package.json\").workspaces.join(\" \"))")"
+    tar --exclude=node_modules -cf - package.json bun.lock tsconfig.json $workspaces | tar -xf - -C /work
+    cd /work
+    bun install --frozen-lockfile
+    bun build --target=bun "$ENTRY" --outfile "/out/$OUT_NAME"
+    chown "$OWNER" "/out/$OUT_NAME"
+  '

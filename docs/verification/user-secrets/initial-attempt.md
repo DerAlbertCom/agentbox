@@ -310,10 +310,10 @@ experimental specification are different evidence.
 
 ## Repository verification
 
-- `dotnet test --solution cli/agentic-box.slnx`: **452 passed**, no failures/skips.
+- `dotnet test --solution abox-cli/agentic-box.slnx`: **452 passed**, no failures/skips.
 - Release builds of the CLI solution, `Probe`, and `TransportProbe`: succeeded
   with zero warnings/errors.
-- `dotnet csharpier check cli docs/verification/user-secrets` and
+- `dotnet csharpier check abox-cli docs/verification/user-secrets` and
   `git diff --check`: passed.
 - Opt-in fixture runs: staged-file presence/absence, .NET red/green reads,
   Windows explicit UTF-8 bytes/hash, CP850 corruption and ASCII-escaped recovery,

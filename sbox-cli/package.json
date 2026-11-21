@@ -1,0 +1,8 @@
+{
+  "name": "sbox-cli",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/api.ts"
+  }
+}

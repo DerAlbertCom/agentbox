@@ -1,0 +1,11 @@
+#!/bin/sh
+# The kit build step of sbox, run by abox build as `build <stagedKitDir>` from this folder.
+# Bundles the sbox core into the staged kit; see sbox-cli/bundle.
+set -eu
+
+staged="$(cd "$1" && pwd)"
+repo="$(cd ../.. && pwd)"
+
+mkdir -p "$staged/files/home/.local/bin"
+cp "$repo/sbox-cli/launcher/sbox" "$staged/files/home/.local/bin/sbox"
+"$repo/sbox-cli/bundle" sbox-cli/src/main.ts "$staged/files/home/.local/share/sbox/sbox.js"

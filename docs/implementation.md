@@ -52,23 +52,29 @@ does not skip the workload image build.
    (the recipe) in the build directory, with the scripts of the workload and the
    bundled CA certificates copied into it.
 6. Writes the state mixin: one `host-mount@1` per state directory.
-7. Optionally checks additional local kit declarations with `sbx kit inspect`,
+7. Runs the [kit build step](authoring.md#kit-build-step) of every local kit with a
+   `build` file: copies the kit into `kits/<kit>/` of the build directory,
+   runs `build <stagedKitDir>` from the kit's repository folder and uses the staged
+   copy from here on. A failing script fails the build with its output, and so does
+   a `build` file that is not executable or that is found on Windows. This also
+   runs with `--metadata-only`.
+8. Optionally checks additional local kit declarations with `sbx kit inspect`,
    passing their resolved arguments, unless `--no-verify` is given. Inspection
    **does not build images**. sbx 0.51.0 cannot inspect recipe-based local kits;
    those require `--no-verify` and are processed by sbx at creation.
-8. Builds the generated workload through the v3 frontend with host
+9. Builds the generated workload through the v3 frontend with host
    `docker buildx build --file workload.yaml --load --provenance=false`, using the
    current Docker context's docker-driver builder. Workload apt, mise, scripts
    and certificate setup run here, not at every sandbox create. BuildKit reuses
    unchanged instruction/layer caches. No images are pushed. A unique local tag
    `docker.io/library/abox-workload:<id>` and its actual immutable Docker image
    content ID are reported; source changes during building fail the build.
-9. Writes a separate versioned thin runtime kit: the same v3 workload descriptor
+10. Writes a separate versioned thin runtime kit: the same v3 workload descriptor
    and a companion Dockerfile containing only `FROM <unique-local-image>`.
    The original generated sources remain unchanged for publication. The versioned
    runtime directory keeps an unsuccessful rebuild from overwriting the previous
    build's runtime kit.
-10. Writes the manifest of the build: `build.json` in the build directory. It records
+11. Writes the manifest of the build: `build.json` in the build directory. It records
    whether personal configuration was included and the resolved workload's
    `publishRepository`. Only `--no-personal` builds capture SHA-256 fingerprints of
    configuration files (including the `.workload`) and local source trees (including
@@ -113,7 +119,8 @@ Published reference naming and tag promotion are unchanged.
 generated workload/state sources and saves the manifest, but skips sbx preflight,
 all kit inspection and all Docker/Buildx/image operations. `LocalWorkload` is
 always null. No sbx or Docker installation/daemon/authentication is required for
-this maintainer preparation. Remote `create` does not use it: it reads published
+this maintainer preparation by abox itself; kit build steps still run, and their
+scripts may need such tools. Remote `create` does not use it: it reads published
 metadata with Docker/Buildx and creates the sandbox with sbx.
 The command reports that no image was built/selected and prints the remote create
 command. `--no-personal` still excludes personal declarations and captures source
@@ -1048,7 +1055,7 @@ so a failed download stops that build step instead of being hidden by a shell
 pipeline and causing `mise: not found` in the next step.
 
 Every generated workload (including one without tools) installs the approved
-`cli/src/Abox/Assets/rwe_inspection_certificate_chain.pem` bundle before any apt,
+`abox-cli/src/Abox/Assets/rwe_inspection_certificate_chain.pem` bundle before any apt,
 mise or script downloads. This is the supplied RWE inspection CA bundle: public
 certificates and CA metadata comments, not private keys. It is embedded in the
 CLI assembly, so global tool installations do not need the repository or
@@ -1070,7 +1077,7 @@ After updating the approved repository bundle, rebuild the CLI/tool and workload
 ## The code
 
 ```
-cli/src/Abox/
+abox-cli/src/Abox/
   Program.cs        runs the command line
   AboxException.cs  the safe application error reported by command handling
   Assets/           embedded workload certificate assets
@@ -1139,6 +1146,25 @@ cli/src/Abox/
     TcpPort.cs              shared TCP parsing and the 1–65535 range
     WindowsDeviceName.cs    shared reserved device-name validation
     SquadBuildIdentity.cs  validated team/squad/tag and shared repository naming
+```
+
+```
+sbox-cli/           sbox, the command line inside the sandbox (TypeScript on Bun)
+  src/api.ts        the command API that command kits import type-only
+  src/sbox.ts       the core: options, help, routing to the commands folder
+  src/main.ts       the bundle entry: process arguments, environment and streams;
+                    a closed stdout pipe ends sbox quietly
+  launcher/sbox     the launcher on PATH; finds Bun through the mise shims
+  bundle            bundles a workspace module with the pinned Bun in a container
+
+sbox-themes/        the theme command of sbox, installed by the themes kit
+  src/command.ts    the command: options, theme resolution, the saved choice
+  src/palette.ts    colors.toml and upstream's fallbacks; mix
+  src/apps.ts       app.yaml, the Liquid templates and their filters, settings, run
+  src/folders.ts    the theme and app template folders
+  src/sync-themes.ts  the manual palette refresh from upstream (src/sync.ts)
+  themes/<theme>/   the palettes, unchanged from upstream, and their licenses
+  apps/<app>/       the app templates
 ```
 
 For architecture and coding conventions, see the

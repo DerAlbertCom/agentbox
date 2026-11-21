@@ -257,7 +257,7 @@ below cover the Python receiver, not host forwarding or application availability
 ### Retained receiver checks
 
 [ReceiverChecks.py](application-ports/ReceiverChecks.py) now loads the production
-`cli/src/Abox/Sbx/application_ports.py` directly. Run in a disposable Linux checkout
+`abox-cli/src/Abox/Sbx/application_ports.py` directly. Run in a disposable Linux checkout
 with Python 3.8+ as a non-root user (no .NET project, sbx or npm needed):
 
 ```sh
@@ -277,7 +277,7 @@ discovery. It requires Linux, a non-root user and `/usr/bin/python3`; other plat
 explicitly skip it. After building, run the focused executable tests with:
 
 ```sh
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noColor -class '*ApplicationPortsReceiverTests' -class '*ApplicationPortsTests' -class '*AppPortsLifecycle*'
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noColor -class '*ApplicationPortsReceiverTests' -class '*ApplicationPortsTests' -class '*AppPortsLifecycle*'
 ```
 
 The readiness failure fixture substitutes only the detached executable. Production
@@ -293,19 +293,19 @@ the corresponding implementation. Adapter tests first failed on unimplemented
 publishing, then on invalid mapping/inventory/conflict protection. Tests observe
 the composed CLI seam and `SbxClient` process seam, not private parser methods.
 
-Run `dotnet test cli/agentic-box.slnx -c Debug`, `dotnet csharpier check cli` and
+Run `dotnet test abox-cli/agentic-box.slnx -c Debug`, `dotnet csharpier check abox-cli` and
 `git diff --check`. No Release verification is needed for this slice.
 
 Original native-only Debug verification: **1752 passed, 15 platform skips, zero
 failed** (1767 total); solution build **zero warnings/errors**. The skips are 14 existing
 Windows filesystem/link-privilege cases plus the new launchSettings file-symlink
 case; they are not claimed as passing. Descendant/root directory-link coverage
-ran successfully using native Windows junctions. CSharpier passed for `cli` and
+ran successfully using native Windows junctions. CSharpier passed for `abox-cli` and
 the checked-in verification programs; `git diff --check` passed.
 
 Historical relay-fix Debug verification: **1765 passed, 15 platform skips, zero failed** (1780
 total). Focused ports command/adapter tests: **61 passed, one platform skip** (62
-total). Debug solution build: **zero warnings/errors**. CSharpier passed for `cli`
+total). Debug solution build: **zero warnings/errors**. CSharpier passed for `abox-cli`
 and the checked-in verification programs; `git diff --check` passed. New tests
 cover relay prerequisite/confirmation failures, cancellation, separate listener
 targets, exact native upgrade and full-plan conflict checking. Receiver process/TCP
@@ -328,7 +328,7 @@ intentionally unimplemented.
 ## Probe-removal verification (2026-11-16)
 
 The cleanup removes all nine PR-added .NET probe projects and the Angular npm
-fixture; `cli/src`, `cli/test/Abox.Tests` and pre-existing user-secrets probes are
+fixture; `abox-cli/src`, `abox-cli/test/Abox.Tests` and pre-existing user-secrets probes are
 unchanged. Both solution builds passed with zero warnings/errors; the complete
 direct xUnit Debug and Release runs each had **2026 passed, 21 explicit skips,
 zero failures/errors**. CSharpier checked **252 CLI files**.

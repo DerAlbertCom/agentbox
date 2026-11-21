@@ -38,7 +38,7 @@ runner/API/relay, host key export helper or manual trust entries.
    manual runtime/environment or trust import may supply the success condition.
 
 2. Set `$workspace` to that printed path; `$abox` to the absolute candidate
-   `cli/src/Abox/bin/Release/net10.0/abox.dll`. Confirm host **18443** is free.
+   `abox-cli/src/Abox/bin/Release/net10.0/abox.dll`. Confirm host **18443** is free.
    Never remove an existing binding/listener or touch Deals' **18203** to free it.
    If necessary select a free host port and compute `offset = hostPort - 8443`.
    Record the changed port; exact 18203 remains a separate required gate on an

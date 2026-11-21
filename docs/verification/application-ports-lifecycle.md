@@ -16,7 +16,7 @@ production-flow evidence. Existing Deals and the user's root script must not cha
 
 ## Behavioral matrix
 
-`cli/test/Abox.Tests/ApplicationPorts/AppPortsLifecycle*` currently covers 53 cases:
+`abox-cli/test/Abox.Tests/ApplicationPorts/AppPortsLifecycle*` currently covers 53 cases:
 
 - Local and published creation without folder configuration; automatic table and
   default offset after record save; no host certificate access for Angular-only,

@@ -1,2 +1,0 @@
-FROM scratch
-COPY --chown=1000:1000 files/home/ /home/agent/

@@ -38,7 +38,7 @@ The Debug test executable was run before and after the changes with
 
 ## Verification
 
-- `dotnet build cli/agentic-box.slnx -c Debug -m:1`: zero warnings/errors.
+- `dotnet build abox-cli/agentic-box.slnx -c Debug -m:1`: zero warnings/errors.
 - Direct executable runner, all `Sandboxes`/`LocalState` classes: **219 passed**,
   zero failures/skips.
 - Direct executable runner, full Debug suite before and after: **1,557 passed**,
@@ -46,7 +46,7 @@ The Debug test executable was run before and after the changes with
 - The unchanged Windows skips are one case-distinct-store filesystem case, four
   receiver symlink cases and two project-file symlink cases requiring native
   privileges. They are not counted as passes.
-- `dotnet csharpier check cli` and `git diff --check`: passed.
+- `dotnet csharpier check abox-cli` and `git diff --check`: passed.
 
 All inputs and external tools were synthetic. No live sandbox, host-secret store,
 registry publication, issue modification or production behavior change was needed.
@@ -71,14 +71,14 @@ On 2026-11-15, merged ticket commit
   pre-existing duplicate display-name groups are unchanged; none were introduced.
 - Fact/theory/data attribute text and assertion/received-call counts are unchanged
   in all twelve changed or moved C# files. All later integration tests remain.
-- `dotnet build cli/agentic-box.slnx -c Debug -m:1`: **0 warnings, 0 errors**.
+- `dotnet build abox-cli/agentic-box.slnx -c Debug -m:1`: **0 warnings, 0 errors**.
 - Focused executable Debug run across all eleven sandbox/local-state test classes,
   including their partial files: **244 passed, 0 skipped, 0 failed**.
 - Full executable Debug run before the merge (completing #30 verification) and
   after conflict resolution: **1,646 passed, 7 skipped, 0 failed/errors** in each
   run. The seven skip identities and reasons match exactly: the same unavailable
   case-distinct filesystem and native symlink capabilities described above.
-- `dotnet csharpier check cli`: **205 files clean**. Both staged and unstaged
+- `dotnet csharpier check abox-cli`: **205 files clean**. Both staged and unstaged
   `git diff --check` checks passed.
 
 No production files or user launcher changes are included. Release verification

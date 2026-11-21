@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  sbox:
+    name: sbox (Bun)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # Matches bun in the mise tools of the workload and the image of kits/sbox/build.
+          bun-version: 1.4.4
+      - run: bun install --frozen-lockfile
+      - run: bun test
+      - run: bun run typecheck
+
+  abox:
+    name: abox (.NET)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - run: dotnet tool restore
+      - run: dotnet csharpier check abox-cli
+      - run: dotnet build abox-cli/agentic-box.slnx
+      # The xUnit v3 executable runs the suite; see docs/verification/synthetic-cli-tests.md.
+      - run: dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noColor

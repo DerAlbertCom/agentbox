@@ -1,0 +1,3 @@
+files:
+  - template: sbox.liquid
+    target: ~/.config/fzf/sbox

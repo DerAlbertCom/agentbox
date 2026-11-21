@@ -11,4 +11,4 @@ root="$(git rev-parse --show-toplevel)"
 cd "$root"
 
 echo "abox: checking the formatting"
-exec dotnet csharpier check cli
+exec dotnet csharpier check abox-cli

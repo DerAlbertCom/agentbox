@@ -1,0 +1,7 @@
+# lazygit reads the user's config.yml and then this theme through LG_CONFIG_FILE (set by the
+# themes kit), and fails when a listed file is missing.
+files:
+  - template: sbox.yml.liquid
+    target: ~/.config/lazygit/sbox.yml
+run:
+  - test -e .config/lazygit/config.yml || touch .config/lazygit/config.yml

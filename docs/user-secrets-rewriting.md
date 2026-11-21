@@ -197,8 +197,8 @@ the xUnit executable directly:
 
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
-dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.SplitSettingsCommandTests -noLogo -maxThreads 2
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.SplitSettingsCommandTests -noLogo -maxThreads 2
 ```
 
 The synthetic-only `RewriteProbe` below can exercise production discovery/copy in
@@ -255,11 +255,11 @@ and Debug probe build. The focused rewrite/policy/CLI suite passed **101 tests**
 with no skips. Those builds had zero warnings/errors; CSharpier and
 `git diff --check` passed. No Release test run was performed for #8.
 
-The earlier #8 post-review integrated run, `dotnet test cli/agentic-box.slnx -c Debug`,
+The earlier #8 post-review integrated run, `dotnet test abox-cli/agentic-box.slnx -c Debug`,
 passed **756 tests**, with **4 explicit native-symlink privilege skips** (760 total),
 zero failures. The focused user-secrets/create/run regression set passed **366
 tests**, with the same **4 skips** (370 total). The Debug solution build had zero
-warnings/errors; `dotnet csharpier check cli` and `git diff --check` passed. No
+warnings/errors; `dotnet csharpier check abox-cli` and `git diff --check` passed. No
 Release build or test run, live sandbox changes, publication or global setting
 changes were performed for this final-review change. Native Windows symlink
 regression tests explicitly skip when this host lacks link-creation privileges;

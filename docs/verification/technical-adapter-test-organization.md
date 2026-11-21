@@ -90,8 +90,8 @@ f4b71167d93d489e4e873fa6d72c8625d685821127540bea447e41b295c3dd77
 
 ## Verification
 
-Restored with `dotnet restore cli/agentic-box.slnx --disable-parallel` and built with
-`dotnet build cli/agentic-box.slnx -c Debug --no-restore -m:1`; builds completed with
+Restored with `dotnet restore abox-cli/agentic-box.slnx --disable-parallel` and built with
+`dotnet build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1`; builds completed with
 zero warnings/errors. Tests ran through the executable xUnit runner, not a
 discovery-only `dotnet test` invocation, with a 30-minute outer timeout and
 `-longRunning 120` diagnostics.
@@ -131,7 +131,7 @@ and both `LinkedProjectFilesAreNeverReadAndDoNotPreventSelectedStores` rows.
 This host lacks the native symlink privileges and case-distinct filesystem
 support those synthetic fixtures require. None is claimed as passing coverage.
 
-`dotnet csharpier check cli` passed for all 209 C# files, as did staged/unstaged
+`dotnet csharpier check abox-cli` passed for all 209 C# files, as did staged/unstaged
 `git diff --check` checks.
 Raw discovery, run logs, XML and source/discovery comparison reports are retained
 under `C:/Users/UI520628/AppData/Local/Temp/11/opencode/ticket-36/`; final run
@@ -143,7 +143,7 @@ was involved. No Release verification is claimed for this bounded test-only batc
 
 A repository-wide syntax inspection found no remaining missing phase markers in
 the technical-module batch. At that checkpoint it found two endpoint-generation
-lifecycle methods left in root `cli/test/Abox.Tests/UserSecretsLifecycleTests.cs`:
+lifecycle methods left in root `abox-cli/test/Abox.Tests/UserSecretsLifecycleTests.cs`:
 
 - `EveryCreationAndReplacementPathGeneratesCurrentProjectOverridesWithoutAHostFile`
   (five theory rows).
@@ -198,8 +198,8 @@ the staged result, then committed the conflict-free merge as
 | Working/staged/baseline diff whitespace checks | Passed |
 
 Restore/build used `dotnet 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'`
-with `restore cli/agentic-box.slnx --disable-parallel` and
-`build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal`.
+with `restore abox-cli/agentic-box.slnx --disable-parallel` and
+`build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal`.
 Discovery was captured as raw stdout bytes with
 `-preEnumerateTheories -list full/json -noColor`. Tests used the Debug
 `Abox.Tests.exe` directly with `-noLogo -noColor -maxThreads 2 -longRunning 120

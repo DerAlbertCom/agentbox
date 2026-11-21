@@ -7,6 +7,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../../../cli/src/Abox/Abox.csproj" />
+    <ProjectReference Include="../../../../abox-cli/src/Abox/Abox.csproj" />
   </ItemGroup>
 </Project>

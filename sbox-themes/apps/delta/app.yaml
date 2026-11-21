@@ -1,0 +1,7 @@
+files:
+  - template: sbox.gitconfig.liquid
+    target: ~/.config/git/sbox.gitconfig
+run:
+  - >-
+    grep -qE '^[[:space:]]*path = sbox\.gitconfig$' .config/git/config 2>/dev/null
+    || printf '[include]\n\tpath = sbox.gitconfig\n' >> .config/git/config

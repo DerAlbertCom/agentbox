@@ -4,7 +4,7 @@
 
 Selection/filtering, store-prefix expansion, preparation/copy snapshots, deny-list
 safety, force accounting and create/run lifecycle tests now live under
-`cli/test/Abox.Tests/UserSecrets/`, beside the shared feature they protect. The
+`abox-cli/test/Abox.Tests/UserSecrets/`, beside the shared feature they protect. The
 existing `UserSecretsCliHarness` moved there unchanged; behavior-specific fixtures
 remain private to their suites. All 76 test methods in this batch have explicit
 Arrange, Act and Assert markers, including repeated phases for multi-step cases.
@@ -39,10 +39,10 @@ endpoint/adapter cases or change production behavior or public testing APIs.
 
 ## Verification
 
-The solution was restored with `dotnet restore cli/agentic-box.slnx --disable-parallel`
-and built with `dotnet build cli/agentic-box.slnx -c Debug --no-restore -m:1`, with zero
+The solution was restored with `dotnet restore abox-cli/agentic-box.slnx --disable-parallel`
+and built with `dotnet build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1`, with zero
 warnings/errors.
-Tests ran through `cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe`, not a
+Tests ran through `abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe`, not a
 discovery-only `dotnet test` invocation.
 
 | Check | Passed | Skipped | Failed |
@@ -69,7 +69,7 @@ additionally skips both `LinkedProjectFilesAreNeverReadAndDoNotPreventSelectedSt
 rows (`generate: false/true`: native file-link privileges unavailable). They are
 platform limitations, not passing coverage.
 
-`dotnet csharpier check cli` and `git diff --check` passed. No live sandbox, host
+`dotnet csharpier check abox-cli` and `git diff --check` passed. No live sandbox, host
 secret store, registry publication or production service was used. No Release
 verification was performed for this test-only batch.
 
@@ -98,7 +98,7 @@ On 2026-11-15, merged ticket commit
 - Full-run XML confirms identical skipped case identities and nonempty reasons;
   the focused skips are the same five-case subset. The native symlink and
   case-distinct filesystem limitations described above are unchanged.
-- `dotnet csharpier check cli`: **207 files clean**. Staged and unstaged
+- `dotnet csharpier check abox-cli`: **207 files clean**. Staged and unstaged
   `git diff --check` checks passed.
 
 No production files, live runtime/registry/secret operations, issue/PR edits or

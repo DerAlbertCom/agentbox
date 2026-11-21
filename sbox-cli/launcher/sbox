@@ -1,0 +1,8 @@
+#!/bin/sh
+# Runs the bundled sbox core with the Bun runtime that the workload installs through mise.
+PATH="$HOME/.local/share/mise/shims:$PATH"
+if ! command -v bun >/dev/null 2>&1; then
+  echo "sbox: the Bun runtime was not found. sbox runs on Bun; add bun to the mise tools of the sandbox's workload." >&2
+  exit 127
+fi
+exec bun "$HOME/.local/share/sbox/sbox.js" "$@"

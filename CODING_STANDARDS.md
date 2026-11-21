@@ -92,6 +92,32 @@ class.
   command and its subcommands together, and group shared-feature tests by shared
   feature, following the architecture rules above.
 
+## TypeScript
+
+The in-sandbox CLI `sbox` and its commands are TypeScript on Bun, in one Bun
+workspace at the repository root with one lockfile (`bun.lock`).
+
+- Put each package in a top-level folder: `sbox-cli` is the core, command packages
+  are named `sbox-<name>` after what they hold, such as `sbox-themes` for the `theme`
+  command. A package lists its folder in the root `workspaces`.
+- Commands depend on the core only through the command API in `sbox-cli/src/api.ts`,
+  with type-only imports (`import type { Command } from "sbox-cli"`), so nothing of
+  the core is bundled into a command. Keep that API small; change it only in
+  backward-compatible ways, because installed commands and the core evolve apart.
+- A command's module default-exports its `Command` and checks it with
+  `satisfies Command`. It writes through `ctx.stdout`/`ctx.stderr` and reads
+  `ctx.env` and `ctx.paths`, never `process` directly, so tests can run it.
+- Parse options with `util.parseArgs`. Add a CLI or TUI library only when a command
+  needs one.
+- Every package is bundled with `bun build --target=bun` into one file by its kit's
+  build step, so the sandbox never runs `bun install` and nothing built is committed.
+- Test through the entry point (`sbox(argv, io)`) with `bun test`, against a
+  temporary home with its own commands folder, and assert on output, exit codes and
+  files. Keep tests in a `test` folder next to `src`, mirroring it, with the same
+  `// Arrange`, `// Act` and `// Assert` comments.
+- `tsc` checks the types in strict mode: `bun run typecheck`. Run it and `bun test`
+  from the repository root; CI runs both.
+
 ## Domain language
 
 Follow the [domain documentation rules](docs/agents/domain.md) for vocabulary and
@@ -103,8 +129,8 @@ The code is formatted with [CSharpier](https://csharpier.com), which comes with 
 repository as a local tool:
 
 ```sh
-dotnet csharpier format cli     # format the code
-dotnet csharpier check cli      # check the formatting
+dotnet csharpier format abox-cli  # format the code
+dotnet csharpier check abox-cli   # check the formatting
 ```
 
 The hook in `.githooks/pre-commit` checks the formatting before every commit. Enable

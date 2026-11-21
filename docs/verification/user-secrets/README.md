@@ -201,10 +201,10 @@ from Python inside the disposable sandbox verifies TCP only, not authentication.
 
 ## Repository verification
 
-- `dotnet test --solution cli/agentic-box.slnx` in Debug and Release: **452 passed**
+- `dotnet test --solution abox-cli/agentic-box.slnx` in Debug and Release: **452 passed**
   each, no failures/skips.
 - Release solution and all three probe builds: zero warnings/errors.
-- `dotnet csharpier check cli docs/verification/user-secrets` and `git diff --check`.
+- `dotnet csharpier check abox-cli docs/verification/user-secrets` and `git diff --check`.
 - New live red/green checks above: local and published UTF-8 reads, short/corrupt
   frame rejection preserving prior bytes, uid/modes, scalar failure suppression,
   representative Unix APPDATA reads, invalid existing-target rejection (exit 2),
@@ -239,7 +239,7 @@ sources). Both were removed in `finally`; every check passed in both:
 
 Repository verification for #6: **517 passed** each in Debug and Release, no
 failures/skips; Release solution and `CopyProbe` builds had zero warnings/errors.
-`dotnet csharpier check cli docs/verification/user-secrets` and `git diff --check`
+`dotnet csharpier check abox-cli docs/verification/user-secrets` and `git diff --check`
 passed. The full automated run is a Windows-host run; the Unix shell transfer is
 representative, not a separately installed Unix sbx-host verification.
 

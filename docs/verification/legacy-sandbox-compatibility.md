@@ -97,11 +97,11 @@ service and run service tests passed **260 tests** both before and after the edi
 Use the Microsoft.Testing.Platform/xUnit syntax configured by this repository:
 
 ```sh
-dotnet test --solution cli/agentic-box.slnx -- --filter-class '*LegacySandboxCompatibilityTests' --filter-class '*LegacySandboxNamingTests' --filter-class '*LegacySandboxInventoryTests'
-dotnet test --solution cli/agentic-box.slnx
-dotnet build cli/agentic-box.slnx --no-restore
-dotnet build cli/agentic-box.slnx --configuration Release --no-restore
-dotnet csharpier check cli
+dotnet test --solution abox-cli/agentic-box.slnx -- --filter-class '*LegacySandboxCompatibilityTests' --filter-class '*LegacySandboxNamingTests' --filter-class '*LegacySandboxInventoryTests'
+dotnet test --solution abox-cli/agentic-box.slnx
+dotnet build abox-cli/agentic-box.slnx --no-restore
+dotnet build abox-cli/agentic-box.slnx --configuration Release --no-restore
+dotnet csharpier check abox-cli
 git diff --check
 ```
 
@@ -136,7 +136,7 @@ external sbx. No live user command, actual host store or user sandbox was access
 Red command, before editing production code:
 
 ```sh
-dotnet test --project cli/test/Abox.Tests -- --filter-method '*OnDemandCopyDoesNotRequireASandboxSquadRecord*'
+dotnet test --project abox-cli/test/Abox.Tests -- --filter-method '*OnDemandCopyDoesNotRequireASandboxSquadRecord*'
 ```
 
 The one test failed in about one second, exposing the exact reported error:
@@ -198,8 +198,8 @@ unchanged.
 Regression commands:
 
 ```sh
-dotnet test --project cli/test/Abox.Tests -- --filter-method '*LegacyWorkspaceLookupSurvivesWindowsDriveCaseAtTheComposedCli*' --filter-method '*RecordedRweLegacyInventoryIsRecognizedByTheComposedPortsLookup*'
-dotnet test --project cli/test/Abox.Tests -- --filter-class '*LegacySandboxInventoryTests' --filter-class '*LegacySandboxNamingTests' --filter-class '*LegacySandboxCompatibilityTests'
+dotnet test --project abox-cli/test/Abox.Tests -- --filter-method '*LegacyWorkspaceLookupSurvivesWindowsDriveCaseAtTheComposedCli*' --filter-method '*RecordedRweLegacyInventoryIsRecognizedByTheComposedPortsLookup*'
+dotnet test --project abox-cli/test/Abox.Tests -- --filter-class '*LegacySandboxInventoryTests' --filter-class '*LegacySandboxNamingTests' --filter-class '*LegacySandboxCompatibilityTests'
 ```
 
 The first command now passes **8 cases**. The second passes **67 cases**, with

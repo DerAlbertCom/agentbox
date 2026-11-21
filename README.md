@@ -185,10 +185,14 @@ Only store IDs, key names/counts and safe recovery messages are reported.
 │   │   └── pi-config.yaml
 │   └── opencode-config/
 │       └── opencode-config.yaml
-└── cli/
-    ├── agentic-box.slnx
-    ├── src/Abox/              the command line
-    └── test/Abox.Tests/       the tests
+├── abox-cli/
+│   ├── agentic-box.slnx
+│   ├── src/Abox/              the command line
+│   └── test/Abox.Tests/       the tests
+├── sbox-cli/                  the core of sbox, the command line inside the sandbox
+├── sbox-themes/               the theme command of sbox, with the palettes and app templates
+├── package.json               the Bun workspace of the TypeScript packages
+└── bun.lock
 ```
 
 The `.abox` files and the workloads live in the team folders under `teams`, the kits in
@@ -227,7 +231,7 @@ Use `create --local --root <project>` when the sandbox location is outside that 
 ## Building and running the command line
 
 ```sh
-cd cli
+cd abox-cli
 dotnet build
 dotnet test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noColor
 dotnet run --project src/Abox -- build --team sample --root .. --no-verify
@@ -243,10 +247,10 @@ From the repository root, pack and install into a fresh isolated directory witho
 changing your global tools or publishing anything:
 
 ```sh
-dotnet pack cli/src/Abox/Abox.csproj --configuration Release --output cli/src/Abox/bin/packages
-dotnet tool install rwest-agentic-box --source ./cli/src/Abox/bin/packages --tool-path ./cli/src/Abox/bin/tool-test
-./cli/src/Abox/bin/tool-test/abox --help
-dotnet tool uninstall rwest-agentic-box --tool-path ./cli/src/Abox/bin/tool-test
+dotnet pack abox-cli/src/Abox/Abox.csproj --configuration Release --output abox-cli/src/Abox/bin/packages
+dotnet tool install rwest-agentic-box --source ./abox-cli/src/Abox/bin/packages --tool-path ./abox-cli/src/Abox/bin/tool-test
+./abox-cli/src/Abox/bin/tool-test/abox --help
+dotnet tool uninstall rwest-agentic-box --tool-path ./abox-cli/src/Abox/bin/tool-test
 ```
 
 `--source` restricts installation to the local package directory. The package and
@@ -688,6 +692,20 @@ ordinary local builds retain their previous linked-input support.
 `publish` needs Docker/Buildx, but does not need sbx running or signed in.
 Registry credentials stay in Docker's host credential store; `abox secrets` does not
 configure publishing credentials. See [the publishing details](docs/implementation.md#abox-publish---team-name---root-dir---tag-tag---builder-name).
+
+## Building and testing sbox
+
+`sbox` and its commands are TypeScript packages in the Bun workspace at the
+repository root. With [Bun](https://bun.sh) 1.4.4 installed:
+
+```sh
+bun install --frozen-lockfile
+bun test
+bun run typecheck
+```
+
+`abox build` bundles them through the kits' build steps in a Bun container, so a
+build needs only Docker; see [the sbox kit](kits/README.md#sbox).
 
 ## The formatting and the hooks
 

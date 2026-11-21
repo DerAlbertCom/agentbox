@@ -164,7 +164,7 @@ default-input run; it is not mislabelled as another full CLI setup or an agent U
 After the pinned run had finished and its evidence was committed as `9ed3aa0`,
 the verifier **normally merged** integration
 `13a5f4024eca18e1fe8cafbfaed989cad2f61b2f` into its own branch. The resulting
-tested merge SHA was **`4f5719e09e8946a311c93e0cc77a20bbd20052bc`**. Its `cli/`
+tested merge SHA was **`4f5719e09e8946a311c93e0cc77a20bbd20052bc`**. Its `abox-cli/`
 tree is identical to that integration tip, including production recovery fix
 **`cc41935596e96ba782120e6507b8ac7c7364cd73`**. No reset/discard, product edit,
 host store patch or manual certificate setup was used. This new result, not the
