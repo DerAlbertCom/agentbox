@@ -4,7 +4,8 @@ kits:
   - git-user
   - rwe-ghec
   - azure-devops
-  - colorscheme-tokyo-night
+  - sbox
+  - themes
 state:
   - ~/.local/share/opencode
   - ~/.local/state/opencode
@@ -14,6 +15,7 @@ state:
   - ~/.config/codeburn
   - ~/.local/state/bash
   - ~/.local/share/powershell/PSReadLine
+  - ~/.local/state/sbox
 secrets:
   - service: azure-devops
     inputs:
