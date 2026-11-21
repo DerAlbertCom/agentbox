@@ -57,59 +57,59 @@ const legacyNames = [
 ] as const;
 
 // The cascade of upstream's theme color resolution: every step only fills keys that are still empty.
-function resolve(c: Palette, lightModeFile: boolean): Palette {
+function resolve(palette: Palette, lightModeFile: boolean): Palette {
   const fill = (key: string, ...sources: (string | undefined)[]) => {
-    if (c[key]) return;
+    if (palette[key]) return;
     const value = sources.find((source) => source);
-    if (value) c[key] = value;
+    if (value) palette[key] = value;
   };
-  for (const [canonical, short] of legacyNames) fill(canonical, c[short]);
+  for (const [canonical, short] of legacyNames) fill(canonical, palette[short]);
 
-  fill("background", c.color0);
-  fill("foreground", c.color7);
-  if (c.background) c.color0 = c.background;
-  if (c.foreground) c.color7 = c.foreground;
+  fill("background", palette.color0);
+  fill("foreground", palette.color7);
+  if (palette.background) palette.color0 = palette.background;
+  if (palette.foreground) palette.color7 = palette.foreground;
 
   const ansi = ["", "red", "green", "yellow", "blue", "magenta", "cyan"];
   ansi.forEach((name, i) => {
     if (!name) return;
-    fill(name, c[`color${i}`]);
-    fill(`bright_${name}`, c[`color${i + 8}`]);
+    fill(name, palette[`color${i}`]);
+    fill(`bright_${name}`, palette[`color${i + 8}`]);
   });
-  fill("magenta", c.purple);
-  fill("bright_magenta", c.bright_purple);
+  fill("magenta", palette.purple);
+  fill("bright_magenta", palette.bright_purple);
 
-  fill("light_foreground", c.color7, c.foreground);
-  fill("bright_foreground", c.color15, c.foreground);
-  if (c.bright_foreground) c.cursor = c.bright_foreground;
-  fill("lighter_background", c.color0, c.background);
-  fill("dark_foreground", c.color8, c.foreground);
-  fill("muted", c.color8, c.dark_foreground);
-  fill("selection", c.selection_background, c.color8, c.color0, c.background);
-  fill("selection_background", c.selection);
-  fill("selection_foreground", c.bright_foreground);
-  fill("orange", c.yellow);
-  fill("brown", mixed(c.orange, "#000000", 50));
+  fill("light_foreground", palette.color7, palette.foreground);
+  fill("bright_foreground", palette.color15, palette.foreground);
+  if (palette.bright_foreground) palette.cursor = palette.bright_foreground;
+  fill("lighter_background", palette.color0, palette.background);
+  fill("dark_foreground", palette.color8, palette.foreground);
+  fill("muted", palette.color8, palette.dark_foreground);
+  fill("selection", palette.selection_background, palette.color8, palette.color0, palette.background);
+  fill("selection_background", palette.selection);
+  fill("selection_foreground", palette.bright_foreground);
+  fill("orange", palette.yellow);
+  fill("brown", mixed(palette.orange, "#000000", 50));
 
-  fill("dark_background", mixed(c.background, "#000000", 25));
-  fill("darker_background", mixed(c.background, "#000000", 50));
-  for (const name of ansi.slice(1)) fill(`bright_${name}`, mixed(c[name], "#ffffff", 20));
-  fill("purple", c.magenta);
-  fill("bright_purple", c.bright_magenta);
+  fill("dark_background", mixed(palette.background, "#000000", 25));
+  fill("darker_background", mixed(palette.background, "#000000", 50));
+  for (const name of ansi.slice(1)) fill(`bright_${name}`, mixed(palette[name], "#ffffff", 20));
+  fill("purple", palette.magenta);
+  fill("bright_purple", palette.bright_magenta);
 
   const aliases = ["background", "red", "green", "yellow", "blue", "magenta", "cyan", "foreground", "muted"];
-  aliases.forEach((name, i) => fill(`color${i}`, c[name]));
+  aliases.forEach((name, i) => fill(`color${i}`, palette[name]));
   ["red", "green", "yellow", "blue", "magenta", "cyan"].forEach((name, i) =>
-    fill(`color${i + 9}`, c[`bright_${name}`]),
+    fill(`color${i + 9}`, palette[`bright_${name}`]),
   );
-  fill("color15", c.bright_foreground);
-  fill("accent", c.color4);
+  fill("color15", palette.bright_foreground);
+  fill("accent", palette.color4);
 
-  for (const [canonical, short] of legacyNames) if (c[canonical]) c[short] = c[canonical];
+  for (const [canonical, short] of legacyNames) if (palette[canonical]) palette[short] = palette[canonical];
 
-  fill("mode", c.theme_type, lightModeFile ? "light" : undefined, modeOf(c.background));
-  c.theme_type = c.mode!;
-  return c;
+  fill("mode", palette.theme_type, lightModeFile ? "light" : undefined, modeOf(palette.background));
+  palette.theme_type = palette.mode!;
+  return palette;
 }
 
 function mixed(color: string | undefined, other: string, amount: number): string | undefined {
