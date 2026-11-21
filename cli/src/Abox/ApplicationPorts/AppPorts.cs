@@ -14,7 +14,7 @@ internal sealed record PreparedAppPorts(
 );
 
 /// <summary>Shared discovery, reporting and runtime publishing for an already selected sandbox.</summary>
-public sealed class AppPorts(ISbxClient sbx, IConsole console, DevelopmentHttps https)
+public sealed class AppPorts(ISbxClient sbx, IConsole console, SandboxHttps https)
 {
     public async Task PublishAsync(
         string location,

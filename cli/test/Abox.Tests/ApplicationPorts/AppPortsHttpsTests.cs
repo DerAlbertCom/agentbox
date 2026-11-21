@@ -33,7 +33,7 @@ public sealed class AppPortsHttpsTests
             .Returns(new string('a', 64));
         var console = new TestConsole();
         var exporter = new HostDevelopmentCertificate(runner, console, root.Path, [new("tool", 6)]);
-        var ports = new AppPorts(sbx, console, new DevelopmentHttps(exporter, sbx, console));
+        var ports = new AppPorts(sbx, console, new SandboxHttps(exporter, sbx, console));
 
         // Act
         var action = () => ports.PublishAsync(root.Path, "actual", 10000, CancellationToken.None);

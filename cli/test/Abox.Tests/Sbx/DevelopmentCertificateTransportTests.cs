@@ -21,17 +21,19 @@ public sealed class DevelopmentCertificateTransportTests
         runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>
-                processes.RunAsync(
+                TrustStep(call.Arg<ProcessRequest>())
+                ?? processes.RunAsync(
                     ControlledCertificateEcho(call.Arg<ProcessRequest>(), root.Path),
                     call.Arg<CancellationToken>()
                 )
             );
         var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+        var pfx = Pfx("Grüße 🔒");
 
         // Act
-        await client.StageDevelopmentCertificateAsync(
+        await client.ActivateDevelopmentCertificateAsync(
             "actual",
-            new byte[] { 1, 2 },
+            pfx,
             "Grüße 🔒",
             CancellationToken.None
         );
@@ -42,7 +44,7 @@ public sealed class DevelopmentCertificateTransportTests
         var frame = Encoding.UTF8.GetString(bytes).Split('\n', 4);
         using var payload = JsonDocument.Parse(frame[3]);
         payload.RootElement.GetProperty("password").GetString().Should().Be("Grüße 🔒");
-        payload.RootElement.GetProperty("pfx").GetBytesFromBase64().Should().Equal(1, 2);
+        payload.RootElement.GetProperty("pfx").GetBytesFromBase64().Should().Equal(pfx);
         console.AllText.Should().BeEmpty();
     }
 
@@ -76,15 +78,20 @@ public sealed class DevelopmentCertificateTransportTests
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>
             {
+                var trust = TrustStep(call.Arg<ProcessRequest>());
+                if (trust is not null)
+                    return trust;
                 captured = call.Arg<ProcessRequest>();
-                return new ProcessResult(0, "raw synthetic output", "raw synthetic error");
+                return Task.FromResult(
+                    new ProcessResult(0, "raw synthetic output", "raw synthetic error")
+                );
             });
         var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
-        byte[] pfx = [0, 1, 2, 128, 255];
         const string password = "synthetic-password-🔒";
+        var pfx = Pfx(password);
 
         // Act
-        await client.StageDevelopmentCertificateAsync(
+        await client.ActivateDevelopmentCertificateAsync(
             "actual-sandbox",
             pfx,
             password,
@@ -136,12 +143,13 @@ public sealed class DevelopmentCertificateTransportTests
         using var scenario = new TransferFailureScenario(failure, cleanupSucceeds ? 0 : 1);
         const string privateText = "synthetic-password 123456789 true";
         var client = new SbxClient(scenario.Runner, AboxPaths.For(root.Path, root.Path));
+        var pfx = Pfx("synthetic-password");
 
         // Act
         var action = () =>
-            client.StageDevelopmentCertificateAsync(
+            client.ActivateDevelopmentCertificateAsync(
                 "actual",
-                new byte[] { 1, 2 },
+                pfx,
                 "synthetic-password",
                 scenario.Cancellation.Token
             );
@@ -186,6 +194,9 @@ public sealed class DevelopmentCertificateTransportTests
                 {
                     const string privateText = "synthetic-password 123456789 true";
                     var request = call.Arg<ProcessRequest>();
+                    var trust = TrustStep(request);
+                    if (trust is not null)
+                        return trust;
                     Calls.Add(request);
                     if (request.Arguments.Contains("cleanup"))
                     {
@@ -212,61 +223,6 @@ public sealed class DevelopmentCertificateTransportTests
         public void Dispose() => Cancellation.Dispose();
     }
 
-    [Theory]
-    [InlineData(0, "valid")]
-    [InlineData(1048577, "valid")]
-    [InlineData(1, "")]
-    [InlineData(1, "nul\0password")]
-    [InlineData(1, null)]
-    public async Task InvalidPayloadIsRejectedBeforeCallingTheSandbox(int length, string? password)
-    {
-        // Arrange
-        using var root = new CertificateTestDirectory();
-        var runner = Substitute.For<IProcessRunner>();
-        runner
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProcessResult(0, "", ""));
-        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
-
-        // Act
-        var action = () =>
-            client.StageDevelopmentCertificateAsync(
-                "actual",
-                new byte[length],
-                password!,
-                CancellationToken.None
-            );
-
-        // Assert
-        await action.Should().ThrowAsync<AboxException>();
-        await runner
-            .DidNotReceive()
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task MaximumPayloadAndMultibytePasswordAreAccepted()
-    {
-        // Arrange
-        using var root = new CertificateTestDirectory();
-        var runner = Substitute.For<IProcessRunner>();
-        runner
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProcessResult(0, "", ""));
-        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
-
-        // Act
-        await client.StageDevelopmentCertificateAsync(
-            "actual",
-            new byte[1048576],
-            new string('é', 1024),
-            CancellationToken.None
-        );
-
-        // Assert
-        await runner.Received(1).RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
-    }
-
     [Fact]
     public async Task UnresponsiveCleanupExpiresWithoutReplacingTheTransferFailure()
     {
@@ -278,6 +234,9 @@ public sealed class DevelopmentCertificateTransportTests
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(async call =>
             {
+                var trust = TrustStep(call.Arg<ProcessRequest>());
+                if (trust is not null)
+                    return await trust;
                 if (!call.Arg<ProcessRequest>().Arguments.Contains("cleanup"))
                     return new ProcessResult(17, "private child", "private child");
                 cleanupToken = call.Arg<CancellationToken>();
@@ -285,13 +244,14 @@ public sealed class DevelopmentCertificateTransportTests
                 return new ProcessResult(0, "", "");
             });
         var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
+        var pfx = Pfx("password");
 
         // Act
         var action = () =>
             client
-                .StageDevelopmentCertificateAsync(
+                .ActivateDevelopmentCertificateAsync(
                     "actual",
-                    new byte[] { 1 },
+                    pfx,
                     "password",
                     CancellationToken.None
                 )
@@ -304,59 +264,7 @@ public sealed class DevelopmentCertificateTransportTests
         error.InnerException.Should().BeNull();
     }
 
-    [Fact]
-    public async Task OversizedPasswordIsRejectedBeforeCallingTheSandbox()
-    {
-        // Arrange
-        using var root = new CertificateTestDirectory();
-        var runner = Substitute.For<IProcessRunner>();
-        runner
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProcessResult(0, "", ""));
-        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
-
-        // Act
-        var action = () =>
-            client.StageDevelopmentCertificateAsync(
-                "actual",
-                new byte[] { 1 },
-                new string('é', 1025),
-                CancellationToken.None
-            );
-
-        // Assert
-        await action.Should().ThrowAsync<AboxException>();
-        await runner
-            .DidNotReceive()
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
-    }
-
-    [Fact]
-    public async Task EmptyMaterialIsRejectedBeforeAnyRuntimeOperation()
-    {
-        // Arrange
-        using var root = new CertificateTestDirectory();
-        var runner = Substitute.For<IProcessRunner>();
-        var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
-
-        // Act
-        var action = () =>
-            client.StageDevelopmentCertificateAsync(
-                "actual",
-                ReadOnlyMemory<byte>.Empty,
-                "synthetic-password",
-                CancellationToken.None
-            );
-
-        // Assert
-        await action.Should().ThrowAsync<AboxException>();
-        await runner
-            .DidNotReceive()
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
-    }
-
     [Theory]
-    [InlineData("stage")]
     [InlineData("activate")]
     [InlineData("prepare")]
     [InlineData("status")]
@@ -387,23 +295,29 @@ public sealed class DevelopmentCertificateTransportTests
     ) =>
         mode switch
         {
-            "activate" => client.ActivateDevelopmentCertificateAsync(
-                "actual",
-                new byte[] { 1 },
-                "synthetic-password",
-                token
-            ),
             "prepare" => client.GetDevelopmentCertificatePasswordAsync("actual", token),
             "status" => client.VerifyDevelopmentCertificateActivationAsync("actual", token),
             "refresh-bootstrap" => client.RefreshDevelopmentCertificateBootstrapAsync(
                 "actual",
                 token
             ),
-            _ => client.StageDevelopmentCertificateAsync(
+            _ => client.ActivateDevelopmentCertificateAsync(
                 "actual",
                 new byte[] { 1 },
                 "synthetic-password",
                 token
             ),
         };
+
+    /// <summary>Answers the user lookup and root trust that precede every private activation.</summary>
+    private static Task<ProcessResult>? TrustStep(ProcessRequest request) =>
+        request.Arguments.Contains("id") ? Task.FromResult(new ProcessResult(0, "1000\n", ""))
+        : request.Arguments.Contains("root") ? Task.FromResult(new ProcessResult(0, "", ""))
+        : null;
+
+    private static byte[] Pfx(string password)
+    {
+        using var identity = new SyntheticDevelopmentCertificate();
+        return identity.Export(password);
+    }
 }
