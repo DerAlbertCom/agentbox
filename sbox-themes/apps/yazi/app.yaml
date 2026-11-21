@@ -1,0 +1,3 @@
+files:
+  - template: theme.toml.liquid
+    target: ~/.config/yazi/theme.toml

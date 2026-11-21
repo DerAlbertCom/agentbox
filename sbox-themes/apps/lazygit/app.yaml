@@ -1,0 +1,3 @@
+files:
+  - template: config.yml.liquid
+    target: ~/.config/lazygit/config.yml
