@@ -150,8 +150,8 @@ public sealed class UserSecretsDiscoveryCommandTests
         await links.Add(entry, cli.Location, symbolic);
         var location = Path.Combine(entry, "src");
         var name = SandboxName.For(location);
-        cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", null) });
         cli.Sbx.GetUserSecretsHostPortsAsync(name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
 

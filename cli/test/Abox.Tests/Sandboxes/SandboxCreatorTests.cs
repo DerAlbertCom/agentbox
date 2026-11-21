@@ -127,8 +127,7 @@ public sealed class SandboxCreatorTests
             (await action.Should().ThrowAsync<AboxException>()).WithMessage(
                 "*mode*pi-config*other-kit*"
             );
-            await _sbx.DidNotReceive()
-                .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+            await _sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
             await _sbx.DidNotReceive()
                 .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
         }
@@ -241,8 +240,7 @@ public sealed class SandboxCreatorTests
         await _sbx.DidNotReceive()
             .EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         _published.ReceivedCalls().Should().BeEmpty();
-        await _sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
@@ -350,8 +348,8 @@ public sealed class SandboxCreatorTests
         // Arrange
         SaveBuild();
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
 
         // Act
         var exitCode = await _service.CreateAsync(Request(), CancellationToken.None);
@@ -369,8 +367,8 @@ public sealed class SandboxCreatorTests
         SaveBuild();
         _console.Answer = false;
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
 
         // Act
         var action = () => _service.CreateAsync(Request(), CancellationToken.None);
@@ -401,8 +399,8 @@ public sealed class SandboxCreatorTests
         );
         _console.Answer = false;
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.UtcNow) });
 
         // Act
         var action = () =>
@@ -425,8 +423,8 @@ public sealed class SandboxCreatorTests
         // Arrange
         SaveBuild([new ManifestMcp { Name = "elastic", Url = "https://example.com/mcp" }]);
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.UtcNow) });
         _sbx.AddMcpServerAsync("elastic", Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
@@ -471,8 +469,7 @@ public sealed class SandboxCreatorTests
             .WithMessage(error)
             .Which.Message.Should()
             .NotContain("password");
-        await _sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .AddMcpServerAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
         Directory
@@ -576,8 +573,7 @@ public sealed class SandboxCreatorTests
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*no prebuilt local workload*abox build*without --metadata-only*"
         );
-        await _sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
     }
@@ -599,8 +595,7 @@ public sealed class SandboxCreatorTests
 
         // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*runtime kit changed*");
-        await _sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -768,8 +763,8 @@ public sealed class SandboxCreatorTests
                 throw new AboxException("Invalid bundled metadata; republish the set.")
             );
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.UtcNow) });
 
         // Act
         var action = () =>
@@ -822,8 +817,13 @@ public sealed class SandboxCreatorTests
                 client.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             )
             .Do(_ => calls.Add("create"));
-        _sbx.FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo("existing", "running", DateTimeOffset.UtcNow));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(
+                new[]
+                {
+                    new SandboxInfo(SandboxName.For(_root.Path), "running", DateTimeOffset.UtcNow),
+                }
+            );
 
         // Act
         await _service.CreateAsync(
@@ -844,8 +844,8 @@ public sealed class SandboxCreatorTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.UtcNow) });
         _sbx.EnsureKitSourceAllowedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
             .Returns(_ =>
                 throw new AboxException("Administrator policy denies kit.allowedSources update.")
@@ -867,8 +867,7 @@ public sealed class SandboxCreatorTests
             "*Administrator policy*kit.allowedSources*"
         );
         _published.ReceivedCalls().Should().BeEmpty();
-        await _sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
@@ -907,8 +906,7 @@ public sealed class SandboxCreatorTests
 
         // Assert
         (await action.Should().ThrowAsync<AboxException>()).WithMessage("*not registered*");
-        await _sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await _sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
@@ -918,8 +916,8 @@ public sealed class SandboxCreatorTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.UtcNow) });
         _root.File($"state/{name}/.published", "a file blocks the state directory");
 
         // Act
@@ -937,7 +935,7 @@ public sealed class SandboxCreatorTests
         (await action.Should().ThrowAsync<AboxException>()).WithMessage(
             "*state director*not replaced*"
         );
-        await _sbx.Received(1).FindSandboxAsync(name, Arg.Any<CancellationToken>());
+        await _sbx.Received(1).ListSandboxesAsync(Arg.Any<CancellationToken>());
         await _sbx.DidNotReceive()
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }

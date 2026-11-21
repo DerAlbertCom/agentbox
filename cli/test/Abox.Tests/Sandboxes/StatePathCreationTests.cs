@@ -78,8 +78,8 @@ public sealed class StatePathCreationTests : IDisposable
             "*",
             SearchOption.AllDirectories
         );
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.UtcNow));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.UtcNow) });
 
         // Act
         var action = () =>

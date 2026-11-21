@@ -80,7 +80,8 @@ public static class AboxServiceCollection
         services.AddSingleton<SquadResolver>();
         services.AddSingleton<BuildStore>();
         services.AddSingleton<SandboxRecordStore>();
-        services.AddSingleton<SandboxResolver>();
+        services.AddSingleton<CreateRecoveryHints>();
+        services.AddSingleton<FolderSandbox>();
         services.AddSingleton<PersonalConfigurations>();
         services.AddSingleton<LocalWorkloadImages>();
         services.AddSingleton<SandboxCreator>();

@@ -33,8 +33,8 @@ public sealed class LegacySandboxCompatibilityTests
         Exception error = cancelled
             ? new OperationCanceledException()
             : new AboxException("runtime discovery failed");
-        cli.Sbx.FindSandboxAsync(failureName, Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<SandboxInfo?>(error));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(Task.FromException<IReadOnlyList<SandboxInfo>>(error));
 
         // Act
         var exitCode = await cli.Invoke([
@@ -46,8 +46,6 @@ public sealed class LegacySandboxCompatibilityTests
 
         // Assert
         exitCode.Should().Be(cancelled ? 130 : 1);
-        if (!legacyLookup)
-            await cli.Sbx.DidNotReceive().FindSandboxAsync(legacy, Arg.Any<CancellationToken>());
         await cli
             .Sbx.DidNotReceive()
             .CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>());
@@ -67,8 +65,8 @@ public sealed class LegacySandboxCompatibilityTests
         // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var legacy = LegacyFolderFixture(cli.Location);
-        cli.Sbx.FindSandboxAsync(legacy, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(legacy, "stopped", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(legacy, "stopped", null) });
         cli.Sbx.HasProgramAsync(legacy, "hc", Arg.Any<CancellationToken>()).Returns(true);
         cli.Sbx.GetWorkspaceDirectoryAsync(legacy, Arg.Any<CancellationToken>())
             .Returns("/legacy/workspace");
@@ -116,8 +114,8 @@ public sealed class LegacySandboxCompatibilityTests
         // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var legacy = LegacyFolderFixture(cli.Location);
-        cli.Sbx.FindSandboxAsync(legacy, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(legacy, "running", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(legacy, "running", null) });
         cli.Configure("""{"userSecrets":["sample"]}""");
         cli.Store("sample", """{"Password":"synthetic-only"}""");
         cli.Sbx.ValidateUserSecretsDestinationAsync(
@@ -175,13 +173,19 @@ public sealed class LegacySandboxCompatibilityTests
         cli.Console.Answer = consent;
         if (consent)
             cli.Store("sample", "{}");
-        cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 // A second candidate appearing after selection must not redirect consent.
-                cli.Sbx.FindSandboxAsync(cli.Name, Arg.Any<CancellationToken>())
-                    .Returns(new SandboxInfo(cli.Name, "running", null));
-                return new SandboxInfo(name, "running", null);
+                cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+                    .Returns(
+                        new[]
+                        {
+                            new SandboxInfo(name, "running", null),
+                            new SandboxInfo(cli.Name, "running", null),
+                        }
+                    );
+                return new[] { new SandboxInfo(name, "running", null) };
             });
         cli.Sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));
@@ -243,8 +247,8 @@ public sealed class LegacySandboxCompatibilityTests
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var name = LegacyFolderFixture(cli.Location);
         cli.Services.AddSingleton(PublishedSquadFactory.Source());
-        cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", null) });
         cli.Sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));
         cli.Sbx.RemoveSandboxAsync(name, Arg.Any<CancellationToken>())
@@ -322,8 +326,8 @@ public sealed class LegacySandboxCompatibilityTests
         // Arrange
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var name = LegacyFolderFixture(cli.Location);
-        cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "stopped", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "stopped", null) });
         cli.Configure(
             hasSquad
                 ? """{"squad":"ac","userSecrets":["sample"]}"""
@@ -393,8 +397,8 @@ public sealed class LegacySandboxCompatibilityTests
         using var cli = new UserSecretsCliHarness(existingSandbox: false);
         var location = LegacySandboxFixture.Location;
         var name = LegacySandboxFixture.Name;
-        cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, status, null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, status, null) });
         cli.Sbx.GetWorkspaceDirectoryAsync(name, Arg.Any<CancellationToken>())
             .Returns("/legacy/workspace");
 

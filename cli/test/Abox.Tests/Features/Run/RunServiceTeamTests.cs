@@ -28,8 +28,8 @@ public sealed class RunServiceTeamTests
     {
         // Arrange
         var name = SandboxName.For(_root.Path);
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _records.Save(
             name,
             new SandboxRecord
@@ -92,8 +92,8 @@ public sealed class RunServiceTeamTests
         var otherImage = LocalWorkloadFactory.Artifact(otherSources);
         var name = SandboxName.For(_root.Path);
         _root.File("teams/sample/ac.abox", "workload: sample\n");
-        _sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", DateTimeOffset.Now));
+        _sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", DateTimeOffset.Now) });
         _sbx.RemoveSandboxAsync(name, Arg.Any<CancellationToken>()).Returns(new SbxOutcome(0, ""));
         _sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));

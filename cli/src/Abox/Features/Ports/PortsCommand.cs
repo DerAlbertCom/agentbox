@@ -14,7 +14,7 @@ public sealed class PortsCommand : Command
     public PortsCommand(
         Lazy<AboxConfig> config,
         Preflight preflight,
-        SandboxResolver sandboxes,
+        Lazy<FolderSandbox> sandboxes,
         AppPorts ports,
         ISbxClient sbx,
         IConsole console
@@ -58,11 +58,12 @@ public sealed class PortsCommand : Command
                         );
                         if (!await preflight.EnsureReadyAsync(cancellationToken))
                             return 1;
-                        var sandbox =
-                            await sandboxes.FindAsync(folder, cancellationToken)
-                            ?? throw new AboxException(
-                                $"There is no sandbox for '{folder}'. Run 'abox create --location \"{folder}\" --team <name> --squad <name>' first; ports never creates or replaces one."
-                            );
+                        var sandbox = await sandboxes.Value.RequireAsync(
+                            folder,
+                            folderConfig,
+                            "ports never creates or replaces one",
+                            cancellationToken
+                        );
                         if (refresh)
                         {
                             await sbx.RefreshDevelopmentCertificateBootstrapAsync(

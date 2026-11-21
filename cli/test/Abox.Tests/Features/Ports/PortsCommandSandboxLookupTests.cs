@@ -67,10 +67,7 @@ public sealed class PortsCommandSandboxLookupTests
 
         // Assert
         exit.Should().Be(0, cli.Console.AllText);
-        cli.Console.AllText.Should()
-            .NotContain(
-                $"There is no sandbox for '{location}'. Run 'abox create --location \"{location}\" --team <name> --squad <name>' first; ports never creates or replaces one."
-            );
+        cli.Console.AllText.Should().NotContain($"There is no sandbox for '{location}'");
         calls
             .Single(call => call.Arguments[0] == "exec")
             .Arguments.Should()

@@ -19,9 +19,7 @@ public sealed class UserSecretsCommandTests
 
         // Assert
         exitCode.Should().Be(0);
-        await fixture
-            .Sbx.Received(1)
-            .FindSandboxAsync(SandboxName.For(fixture.Location), Arg.Any<CancellationToken>());
+        await fixture.Sbx.Received(1).ListSandboxesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -39,9 +37,7 @@ public sealed class UserSecretsCommandTests
         // Assert
         exitCode.Should().Be(1);
         await fixture.NoWrites();
-        await fixture
-            .Sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        await fixture.Sbx.DidNotReceive().ListSandboxesAsync(Arg.Any<CancellationToken>());
     }
 
     [Fact]
@@ -85,8 +81,8 @@ public sealed class UserSecretsCommandTests
         fixture.Root.File("folder/abox.json", """{"userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
         fixture
-            .Sbx.FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns((SandboxInfo?)null);
+            .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<SandboxInfo>());
 
         // Act
         var exitCode = await fixture.Run();

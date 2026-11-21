@@ -27,9 +27,6 @@ public sealed class LegacySandboxPruneTests
             await cli.Sbx.Received(1).StopSandboxAsync(name, Arg.Any<CancellationToken>());
         await cli
             .Sbx.DidNotReceive()
-            .FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
-        await cli
-            .Sbx.DidNotReceive()
             .RemoveSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 }

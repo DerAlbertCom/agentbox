@@ -230,12 +230,19 @@ legacy `spec.yaml` packager does not understand these v3 descriptors; see
 
 ### Shared existing-sandbox resolution (#10)
 
-`Sandboxes/SandboxResolver.FindAsync(location, token)` is the single location-to-existing-
-sandbox rule for run, on-demand user secrets, ports and create/replacement checks.
-It returns the actual `SandboxInfo` or null: current `SandboxName.For` first (also
-without an optional trailing directory separator on Windows), then the exact
-cape-agent-sandbox generated name only after a genuine null/not-found. Discovery
-exceptions and cancellation propagate, never enabling fallback or creation.
+`Sandboxes/FolderSandbox` is the single location-to-existing-sandbox rule ("this
+folder's Sandbox") for run, on-demand user secrets, ports and create/replacement checks.
+`FindAsync(location, token)` lists sandboxes through sbx once and matches every
+candidate name against that list. It returns the actual `SandboxInfo` or null: current
+`SandboxName.For` first (also without an optional trailing directory separator on
+Windows), then the exact cape-agent-sandbox generated name only after a genuine
+not-found. `FallbackName` is the name a new Sandbox gets. `RequireAsync` is used by
+run, ports and user-secrets: without a Sandbox it fails with
+`MissingFolderSandboxException`, whose message carries the full create-recovery hint
+(`Sandboxes/CreateRecoveryHints`: team, squad, tag, local flags and the diagnostic for
+broken local build metadata) and a command note such as "ports never creates or
+replaces one". Create keeps using `FindAsync`. Discovery exceptions and cancellation
+propagate, never enabling fallback or creation.
 Current naming and effective-location precedence are unchanged; both-present
 inventories select the current candidate without touching the legacy one.
 
@@ -250,7 +257,7 @@ actionable ambiguity error; exact current/legacy matches still win. Missing usab
 workspace metadata does not enable this fallback. Unix retains exact historical
 lookup and case sensitivity.
 
-`Naming/LegacySandboxName` keeps sanitization and hashing pure; `SandboxResolver`
+`Naming/LegacySandboxName` keeps sanitization and hashing pure; `FolderSandbox`
 privately resolves the historical real path before calling it. The contract is
 verified against
 cape-agent-sandbox `1512ff71c31c6bfa7e923a43683c6d80624c40d0`:
@@ -1072,8 +1079,6 @@ cli/src/Abox/
     Publish/        abox publish: v3 frontend builds, JFrog pushes and set assembly
     Create/         abox create: the command and its slice registration
     Run/            abox run: the command and the service that does its work
-      CreateRecoveryHints.cs  renders run's create hint for a missing sandbox or
-                              an image that lacks a launcher's required program
     Secrets/        abox secrets: the command and the service that does its work
     UserSecrets/    abox user-secrets: on-demand command only
     Ports/          abox ports: on-demand command only
@@ -1104,7 +1109,9 @@ cli/src/Abox/
                            launcher services are constructor-injected
   Sandboxes/        orchestration and resolution shared by create, run, ports and user-secrets
     SandboxCreator.cs       the create operation shared by create and run
-    SandboxResolver.cs      current-first, exact legacy fallback for existing sandboxes
+    FolderSandbox.cs        this folder's Sandbox: one listing, current-first, exact legacy fallback
+    CreateRecoveryHints.cs  renders the create hint for a missing sandbox or an image
+                            that lacks a launcher's required program
     PublishedSquadSource.cs reads the published set's bundled squad metadata
     PublishedConfigArchive.cs safely reads squad metadata from Docker-save archives
     PublishedRuntimeMetadata.cs validates bundled state and MCP runtime declarations
