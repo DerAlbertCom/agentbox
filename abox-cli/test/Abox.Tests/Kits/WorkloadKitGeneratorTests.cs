@@ -415,13 +415,14 @@ public sealed class WorkloadKitGeneratorTests
     }
 
     [Fact]
-    public void TheToolsAreInstalledInReverseOrderSoTheLastOneIsTheDefault()
+    public void TheToolsAreInstalledInTheOrderOfTheWorkload()
     {
         // Arrange
         var workload = WriteWorkload(
             """
             mise:
               - nodejs@24.4.3
+              - npm:@opencode/cli@2.3.0
               - dotnet@10.0.403
             """
         );
@@ -431,10 +432,10 @@ public sealed class WorkloadKitGeneratorTests
 
         // Assert
         var dockerfile = File.ReadAllText(Path.Combine(_root.Path, "kit", "workload.dockerfile"));
-        dockerfile
-            .IndexOf("dotnet@10.0.403", StringComparison.Ordinal)
-            .Should()
-            .BeLessThan(dockerfile.IndexOf("nodejs@24.4.3", StringComparison.Ordinal));
+        var steps = Regex
+            .Matches(dockerfile, @"(?m)mise use -g -y (\S+)$")
+            .Select(match => match.Groups[1].Value);
+        steps.Should().Equal("nodejs@24.4.3", "npm:@opencode/cli@2.3.0", "dotnet@10.0.403");
     }
 
     [Fact]

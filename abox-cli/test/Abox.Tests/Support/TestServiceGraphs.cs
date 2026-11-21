@@ -1,4 +1,5 @@
 using Abox.Configuration;
+using Abox.Credentials;
 using Abox.Features.Build;
 using Abox.Infrastructure;
 using Abox.Kits;
@@ -53,6 +54,25 @@ internal static class TestServiceGraphs
             local,
             remote,
             copy,
-            SandboxFactory.Ports(sbx, console)
+            SandboxFactory.Ports(sbx, console),
+            Credentials(paths, sbx, console)
         );
+
+    /// <summary>The credential check, with the bindings of sbx in the state directory of the test.</summary>
+    internal static SquadCredentials Credentials(
+        AboxPaths paths,
+        ISbxClient sbx,
+        IConsole console
+    ) =>
+        new(
+            new SquadResolver(new AboxConfig()),
+            new PersonalConfigurations(paths),
+            sbx,
+            new SbxCredentialBindings(BindingsFile(paths)),
+            new SecretValues(sbx, console),
+            console
+        );
+
+    internal static string BindingsFile(AboxPaths paths) =>
+        Path.Combine(paths.StateDirectory, "sbx", "credentials.yaml");
 }

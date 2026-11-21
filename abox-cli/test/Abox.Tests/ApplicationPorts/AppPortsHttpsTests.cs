@@ -16,14 +16,41 @@ public sealed class AppPortsHttpsTests
         "<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup></Project>",
         true
     )]
-    public async Task OnlyExplicitApplicableProjectsTriggerCertificateSetupEvenWithoutLaunchPorts(
+    public async Task OnlyExplicitApplicableProjectsWithLaunchPortsTriggerCertificateSetup(
         string project,
         bool applicable
+    )
+    {
+        await AssertCertificateSetupAsync(project, launchPorts: true, expected: applicable);
+    }
+
+    [Theory]
+    [InlineData("<Project Sdk=\"Microsoft.NET.Sdk.Web\" />")]
+    [InlineData(
+        "<Project Sdk=\"Microsoft.NET.Sdk\"><ItemGroup><FrameworkReference Include=\"Microsoft.AspNetCore.App\" /></ItemGroup></Project>"
+    )]
+    public async Task ProjectsWithoutLaunchPortsTriggerNoCertificateSetup(string project)
+    {
+        await AssertCertificateSetupAsync(project, launchPorts: false, expected: false);
+    }
+
+    private static async Task AssertCertificateSetupAsync(
+        string project,
+        bool launchPorts,
+        bool expected
     )
     {
         // Arrange
         using var root = new CertificateTestDirectory();
         await File.WriteAllTextAsync(Path.Combine(root.Path, "App.csproj"), project);
+        if (launchPorts)
+        {
+            Directory.CreateDirectory(Path.Combine(root.Path, "Properties"));
+            await File.WriteAllTextAsync(
+                Path.Combine(root.Path, "Properties", "launchSettings.json"),
+                """{"profiles":{"app":{"applicationUrl":"https://localhost:8203"}}}"""
+            );
+        }
         var runner = Substitute.For<IProcessRunner>();
         runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
@@ -39,7 +66,7 @@ public sealed class AppPortsHttpsTests
         var action = () => ports.PublishAsync(root.Path, "actual", 10000, CancellationToken.None);
 
         // Assert
-        if (applicable)
+        if (expected)
         {
             await action.Should().ThrowAsync<AboxException>();
             await sbx.Received(1)

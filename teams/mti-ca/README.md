@@ -32,7 +32,7 @@ Do not publish without a successful image build and an authorized smoke test.
 The workload retains all **41 mise tools and exact versions**, including npm
 build permissions, Linux architecture mappings/checksums, Azure CLI's pip pin,
 and tig's source build. Advanced entries use mise's `--tool-option`/`--postinstall`
-flags. abox installs the list in reverse order. .NET remains dotnetup-managed:
+flags. abox installs the list in its order. .NET remains dotnetup-managed:
 manager `0.3.0-preview.1.26554.3`, SDKs `10.0.404` and `11.0.100`, checked after
 channel installation. A newer channel release requires reviewing these pins.
 MOD's tfswitch seed follows Terraform `1.17.2`, replacing the stale v2 `1.16.6` label.

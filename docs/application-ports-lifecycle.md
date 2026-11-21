@@ -27,8 +27,9 @@ global setting or app-source edit is required. Apps themselves are not started.
    Its existing deny-list, destination, policy and all-store safeguards are unchanged.
 6. Publish the shared table/warnings and distinct offset mappings, then configure
    [development HTTPS](https-development-certificates.md) for statically detected
-   ASP.NET Core projects, including Web projects without explicit launch ports.
-   Angular-only, non-Web .NET and empty folders perform no host certificate operation.
+   ASP.NET Core projects when ports were published. Web projects without explicit
+   launch ports, Angular-only, non-Web .NET and empty folders perform no host
+   certificate operation.
 7. Only complete required setup permits full creation success and a replacement
    `run` launcher. Cancellation is checked between stages and before full success.
 

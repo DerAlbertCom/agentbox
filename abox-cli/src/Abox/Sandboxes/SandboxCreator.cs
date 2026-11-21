@@ -1,5 +1,6 @@
 using Abox.ApplicationPorts;
 using Abox.Configuration;
+using Abox.Credentials;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
@@ -41,7 +42,8 @@ public sealed class SandboxCreator(
     LocalSquadSource local,
     RemoteSquadSource remote,
     UserSecretsCopy userSecrets,
-    AppPorts appPorts
+    AppPorts appPorts,
+    SquadCredentials credentials
 )
 {
     /// <summary>Creates the sandbox and returns the exit code of the command.</summary>
@@ -94,6 +96,13 @@ public sealed class SandboxCreator(
         var name = existing?.Name ?? SandboxName.For(location);
         var replace = ConfirmReplacement(existing, location, request.AssumeYes);
         cancellationToken.ThrowIfCancellationRequested();
+        await credentials.PrepareAsync(
+            request.Team.RootDirectory,
+            request.Team.Name,
+            selection.Identity.Squad,
+            cancellationToken
+        );
+        cancellationToken.ThrowIfCancellationRequested();
         await RegisterMcpServersAsync(mcpToRegister, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         var mounts = CreateStateDirectories(name, state);
@@ -125,6 +134,8 @@ public sealed class SandboxCreator(
                 $"sbx could not create the sandbox '{name}'.{Environment.NewLine}{outcome.Output.Trim()}"
             );
         }
+
+        WriteNotes(outcome);
 
         records.Save(
             name,
@@ -319,6 +330,19 @@ public sealed class SandboxCreator(
                 throw new AboxException(
                     $"The MCP server '{server.Name}' could not be registered." + Detail(outcome)
                 );
+            }
+        }
+    }
+
+    /// <summary>The notes of sbx, such as a credential it did not inject; its other output stays captured.</summary>
+    private void WriteNotes(SbxOutcome outcome)
+    {
+        foreach (var line in outcome.Output.Split('\n'))
+        {
+            var note = line.Trim();
+            if (note.StartsWith("Note:", StringComparison.Ordinal))
+            {
+                console.WriteLine(note);
             }
         }
     }

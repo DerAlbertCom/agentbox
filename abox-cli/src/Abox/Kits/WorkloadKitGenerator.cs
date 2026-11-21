@@ -156,10 +156,10 @@ public sealed class WorkloadKitGenerator
         {
             dockerfile
                 .AppendLine(
-                    "# One install step per tool, so a tool that runs into a rate limit does not hold up the others."
+                    "# One install step per tool, in the order of the workload, so a tool that runs into a rate limit does not hold up the others."
                 )
                 .AppendLine(
-                    "# The versions of a tool are installed in one step, in reverse order, because mise activates the first entry of its list."
+                    "# The versions of a tool are installed in one step, the last one first, because mise activates the first entry of its list."
                 );
 
             foreach (var (tool, versions) in GroupTools(workload.Mise))
@@ -198,9 +198,10 @@ public sealed class WorkloadKitGenerator
     }
 
     /// <summary>
-    /// The tools of a workload, grouped by tool. The versions of one tool are installed in
-    /// one step, so mise keeps them all, and the list is reversed, so the version that
-    /// comes last in the workload is the one mise activates.
+    /// The tools of a workload, grouped by tool in the order of their first entry. The
+    /// versions of one tool are installed in one step, so mise keeps them all, and they
+    /// are reversed, so the version that comes last in the workload is the one mise
+    /// activates.
     /// </summary>
     internal static IReadOnlyList<(string Tool, IReadOnlyList<string> Versions)> GroupTools(
         IReadOnlyList<string> specs
@@ -223,11 +224,7 @@ public sealed class WorkloadKitGenerator
             versions.Add(spec);
         }
 
-        // The groups come in reverse order too, so the tool of the last entry of the
-        // workload is the one mise activates.
         return groups
-            .AsEnumerable()
-            .Reverse()
             .Select(group =>
                 (
                     group.Tool,

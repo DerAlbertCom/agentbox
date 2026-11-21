@@ -22,7 +22,7 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 - **sbox**: the command line inside a sandbox for user-facing actions, such as switching the theme. Its core (`sbox-cli`, installed by the `sbox` kit) routes `sbox <command>` to an installed command kit; `sbox --help` lists them. Not to be confused with `sbx`, the Docker Sandboxes CLI on the host.
 - **Command kit**: a kit that installs one `sbox` command as a bundled module into the commands folder, `~/.local/share/sbox/commands/<command>/`. A squad chooses the commands of its sandboxes by choosing command kits.
 - **Theme**: a named, app-agnostic palette: one `colors.toml` in the flat format of Omarchy (`mode`, `accent`, the background and foreground variants, the 8 colors and their `bright_*` variants). `sbox theme <name>` renders every app template with it. Installed by the `themes` kit.
-- **App template**: the definition of how one app is themed, a folder with an `app.yaml` and Liquid templates. `app.yaml` names the files to render, the JSON settings to merge, the commands to run afterwards and the app to restart. Every app gets one fixed theme named `sbox`, so switching only rewrites its content.
+- **App template**: the definition of how one app is themed, a folder with an `app.yaml` and Liquid templates. `app.yaml` names the files to render, the JSON settings to merge, and the commands to run afterwards. Every app gets one fixed theme named `sbox`, so switching only rewrites its content.
 - **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, `state`, and `secrets`.
 - **Sandbox**: one per folder.
 - **Workspace**: the folder's files inside the sandbox, at the runtime-provided `WORKSPACE_DIR`.
@@ -40,6 +40,7 @@ Exit codes: 0 on success, 1 on an `abox` error, 130 on cancellation. `run` passe
   - `create`, `run`, `user-secrets` and `ports` resolve `--location`, then the user config `defaultLocation`, then the current folder. The team name defaults to `defaultTeam`. Only `--local` resolves team sources from the `teams` folder at the location or its parents; `--root` selects a separate source project. Without `--squad`, local create asks which squad of the team to use, when there is more than one; remote create requires it. `--tag` can be combined with `--local` to select a local build tag.
   - Creates the sandbox from the squad's kit set in JFrog, under `rwest.jfrog.io/<pullRepository>`. The user setting `pullRepository` defaults to `mtiae-docker-release` and is independent of the workload's publish repository. The default tag is `latest`, pulled with `--pull always`, because sbx's default for kit sets is `missing`, which never refreshes a tag. `--tag` selects another tag. `--local` uses a prebuilt local workload image and its runtime kits with `--pull never`. Remote create needs no source repository or local build metadata: state and MCP settings come from the published set's bundled `squad.json`. Personal `.abox` kit customizations currently require `--local`.
   - A sandbox that already exists for the location is replaced after confirmation. The confirmation lists what will be lost. State directories are kept: the sandbox name does not change, so their host paths do not change either.
+  - Before it replaces a sandbox, local create checks the credentials the squad's local kits ask for: a stored value and sbx's approval for every domain. On a terminal it asks for what is missing; without one it warns and goes on. sbx never asks itself (`--no-input`), and its `Note:` lines are shown after creation. See [the authoring guide](authoring.md#secrets).
   - An existing sandbox keeps the image it was created from. A newer `latest` reaches only sandboxes created after it (inferred; verify).
 - **`abox run [<launcher>] [--location <path>] [-- <argv>...]`** starts a launcher for the folder's sandbox. The default launcher is `shell`. See Launchers.
   - Starts the sandbox if it is stopped. Never creates a sandbox: if none exists, prints the `abox create` command to run.
@@ -140,7 +141,7 @@ References never include a file extension. The teams of a project live in a fold
 - `template`: container image to build on, as in `sbx run --template`. Default `docker.io/sbx/shell-docker-image`, a shell image with Docker Engine inside (`docker.io/sbx/shell-image` is the variant without it). Pin a tag or digest rather than `latest`. *(proposed)* Named `template` so `base` only means the parent `.abox`. *(name proposed)*
 - `publishRepository`: JFrog repository name on `rwest.jfrog.io`, required for publishing but optional for local builds. One lowercase registry path segment, without a host, slash or tag. Inherited with the root config's workload, recorded in the build manifest, and revalidated before publishing; changing it requires a rebuild. The included workloads use `mtiae-developer-container-images-local`.
 - `apt`: package names, installed with one `apt-get install` before the tools.
-- `mise`: tools. The last entry is the default. The generator writes each tool's list reversed, because mise activates the first entry.
+- `mise`: tools, installed in the order of the list, so runtimes come before the tools that need them. Of several versions of a tool, the last one is active; the generator passes a tool's versions to mise reversed, because mise activates the first entry.
 - `scripts`: run as the last steps of the generated Dockerfile, during the image build.
 
 **`.abox`** (YAML)
@@ -168,7 +169,7 @@ publishRepository: mtiae-developer-container-images-local
 mise:
   - nodejs@24.4.3
   - dotnet@9.0.303
-  - dotnet@10.0.403        # default: last entry
+  - dotnet@10.0.403        # active: last version
 scripts:
   - enable-fzf.sh
 ```
@@ -206,7 +207,7 @@ state:                         # directories; ~ is /home/agent
 - The workspace is the folder at the path selected by the runtime. The generated image's default `WORKDIR` is not a guarantee of where the runtime mounts a folder.
 - The runtime sets `WORKSPACE_DIR` to the actual workspace path, plus `SANDBOX_NAME` and `SANDBOX_ID` (sbx@1). Agents and launchers read `WORKSPACE_DIR` rather than assuming a fixed path.
 - Agents and tools use `~/worktrees` by default. It is not mounted from the host, so its contents are lost when a sandbox is replaced (open question 9).
-- Proxy credentials stay on the host. Kits configure the Docker Sandbox credentials proxy; the values come from `abox secrets`. Separately, the opt-in .NET `user-secrets` flow copies explicitly selected values into runtime files inside the sandbox. These are sensitive application files, not proxy credentials or image contents.
+- Proxy credentials stay on the host. Kits configure the Docker Sandbox credentials proxy; the values come from `abox secrets`, and `abox create` approves them for the kits' domains in sbx's `credentials.yaml`. Separately, the opt-in .NET `user-secrets` flow copies explicitly selected values into runtime files inside the sandbox. These are sensitive application files, not proxy credentials or image contents.
 
 ## Naming
 

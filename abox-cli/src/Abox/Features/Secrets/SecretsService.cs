@@ -1,3 +1,4 @@
+using Abox.Credentials;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.LocalState;
@@ -25,6 +26,7 @@ public sealed class SecretsService(
     SquadResolver resolver,
     PersonalConfigurations personalConfigurations,
     ISbxClient sbx,
+    SecretValues values,
     IConsole console
 )
 {
@@ -51,7 +53,7 @@ public sealed class SecretsService(
                 : "-";
             var declaration = squad.Secrets.FirstOrDefault(secret => secret.Service == name);
             var declared = declaration is not null;
-            var state = IsStored(name, declaration, stored) ? "stored" : "not set";
+            var state = SecretValues.IsStored(name, declaration, stored) ? "stored" : "not set";
 
             console.WriteLine(
                 $"{name.PadRight(20)} {kits.PadRight(20)} {state.PadRight(10)} {(declared ? "" : "not declared")}".TrimEnd()
@@ -97,7 +99,7 @@ public sealed class SecretsService(
                 console.WriteLine($"Note: no kit of the squad asks for the service '{name}'.");
             }
 
-            var value = ReadValue(declaration);
+            var value = values.Ask(declaration);
             if (value is null)
             {
                 console.WriteError($"The service '{name}' was not set.");
@@ -105,14 +107,7 @@ public sealed class SecretsService(
                 continue;
             }
 
-            var outcome = declaration.IsCustom
-                ? await sbx.SetCustomSecretAsync(
-                    declaration.Host,
-                    declaration.EnvironmentVariable,
-                    value,
-                    cancellationToken
-                )
-                : await sbx.SetSecretAsync(declaration.Service, value, cancellationToken);
+            var outcome = await values.StoreAsync(declaration, value, cancellationToken);
 
             if (!outcome.Succeeded)
             {
@@ -159,102 +154,17 @@ public sealed class SecretsService(
         return failed ? 1 : 0;
     }
 
-    /// <summary>
-    /// Whether the value of a service is on the host. A service sbx does not know is
-    /// stored under its host or environment variable, not under its service name.
-    /// </summary>
-    private static bool IsStored(string name, SecretDeclaration? declaration, HostSecrets stored)
-    {
-        var (kind, value) = (declaration ?? new SecretDeclaration(name)).Identity;
-        return kind switch
-        {
-            SecretIdentityKind.Host => stored.Custom.Any(custom => custom.Targets.Contains(value)),
-            SecretIdentityKind.EnvironmentVariable => stored.Custom.Any(custom =>
-                custom.EnvironmentVariable == value
-            ),
-            _ => stored.Services.Contains(value),
-        };
-    }
-
-    /// <summary>
-    /// Asks for the value of a secret: one value, or the parts it is built from.
-    /// </summary>
-    private string? ReadValue(SecretDeclaration declaration)
-    {
-        var parts = new List<string>();
-
-        if (declaration.Inputs is { Count: > 0 })
-        {
-            foreach (var input in declaration.Inputs)
-            {
-                var prompt = input.Prompt ?? $"The {input.Name} of '{declaration.Service}'";
-                var part = console.ReadSecret($"{prompt}: ");
-                if (part is null)
-                {
-                    return null;
-                }
-
-                parts.Add(part);
-            }
-        }
-        else
-        {
-            var prompt = declaration.Prompt ?? $"The secret '{declaration.Service}'";
-            var value = console.ReadSecret($"{prompt}: ");
-            if (value is null)
-            {
-                return null;
-            }
-
-            parts.Add(value);
-        }
-
-        var joined = string.Join(declaration.Separator, parts);
-
-        return declaration.Encoding == SecretEncoding.Base64
-            ? Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(joined))
-            : joined;
-    }
-
-    /// <summary>The services the kits of the squad ask for, with the kits that ask.</summary>
-    private IReadOnlyDictionary<string, IReadOnlyList<string>> ServicesOf(ResolvedSquad squad)
-    {
-        var services = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-
-        foreach (var kit in squad.Kits)
-        {
-            if (!kit.IsLocal)
-            {
-                continue;
-            }
-
-            var descriptor = KitDescriptor.Load(kit.Directory!);
-            if (descriptor is null)
-            {
-                continue;
-            }
-
-            foreach (var service in descriptor.Services)
-            {
-                if (!services.TryGetValue(service.Service, out var kits))
-                {
-                    kits = [];
-                    services[service.Service] = kits;
-                }
-
-                if (!kits.Contains(kit.Name))
-                {
-                    kits.Add(kit.Name);
-                }
-            }
-        }
-
-        return services.ToDictionary(
-            entry => entry.Key,
-            entry => (IReadOnlyList<string>)entry.Value,
-            StringComparer.Ordinal
-        );
-    }
+    /// <summary>The services the local kits of the squad ask for, with the kits that ask.</summary>
+    private static IReadOnlyDictionary<string, IReadOnlyList<string>> ServicesOf(
+        ResolvedSquad squad
+    ) =>
+        CredentialRequest
+            .Of(squad)
+            .ToDictionary(
+                request => request.Service,
+                request => request.Kits,
+                StringComparer.Ordinal
+            );
 
     private ResolvedSquad Resolve(SecretsRequest request) =>
         resolver.Resolve(

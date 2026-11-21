@@ -1,6 +1,7 @@
 using Abox.Cli;
 using Abox.Configuration;
 using Abox.Infrastructure;
+using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Abox.Tests;
@@ -14,6 +15,7 @@ internal sealed class CliTestApplication : IDisposable
     {
         Services = new ServiceCollection().AddAbox(console, trailing);
         Services.AddSingleton(paths);
+        Services.AddSingleton(new SbxCredentialBindings(TestServiceGraphs.BindingsFile(paths)));
     }
 
     internal IServiceCollection Services { get; }

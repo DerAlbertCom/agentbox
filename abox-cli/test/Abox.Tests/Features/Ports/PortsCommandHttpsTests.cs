@@ -131,6 +131,7 @@ public sealed class PortsCommandHttpsTests
     {
         private readonly LifecycleCertificateCli certificate;
         private readonly Action<string> onStep;
+        private string published = "[]";
 
         public HttpsScenario(
             Action<string>? onStep = null,
@@ -145,6 +146,10 @@ public sealed class PortsCommandHttpsTests
             certificate = new LifecycleCertificateCli(console) { Exported = () => Step("export") };
             Fixture = new PortsCommandFixture(runner: runner, exporter: certificate.Exporter);
             Fixture.Root.File("folder/Web.csproj", "<Project Sdk=\"Microsoft.NET.Sdk.Web\" />");
+            Fixture.Root.File(
+                "folder/Properties/launchSettings.json",
+                """{"profiles":{"https":{"applicationUrl":"https://localhost:8203"}}}"""
+            );
             runner
                 .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
                 .Returns(call =>
@@ -155,6 +160,13 @@ public sealed class PortsCommandHttpsTests
                         "version" => Result(0, """{"client":{"version":"0.51.0"}}"""),
                         "diagnose" => Result(0, """{"checks":[]}"""),
                         "ls" => Result(0, $$"""[{"name":"{{Fixture.Name}}","status":"running"}]"""),
+                        "ports" when arguments.Contains("--publish") => Publish(arguments),
+                        "ports" => Result(0, published),
+                        "exec" when arguments is [_, _, "true"] => Result(0, ""),
+                        "exec"
+                            when arguments.Any(argument =>
+                                argument.Contains("<abox-application-ports>")
+                            ) => Result(0, """[{"application_port":8203,"relay_port":60044}]"""),
                         "exec" when arguments.Contains("id") => Step("id", 0, "1000\n"),
                         "exec" when arguments.Contains("root") => Step("root trust", 0),
                         "exec" when arguments.Contains("prepare") => Step(
@@ -180,6 +192,14 @@ public sealed class PortsCommandHttpsTests
         {
             Steps.Add(step);
             onStep(step);
+        }
+
+        private ProcessResult Publish(IReadOnlyList<string> arguments)
+        {
+            var binding = arguments[arguments.ToList().IndexOf("--publish") + 1].Split(':', '/');
+            published =
+                $$"""[{"host_ip":"{{binding[0]}}","host_port":{{binding[1]}},"sandbox_port":{{binding[2]}},"protocol":"{{binding[3]}}"}]""";
+            return Result(0, "[]");
         }
 
         private ProcessResult Step(string step, int exitCode, string output = "")

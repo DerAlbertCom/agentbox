@@ -356,7 +356,7 @@ describe("app templates", () => {
 
   test("reject an app template with an unknown key", async () => {
     // Arrange
-    await home.install({ ...probeApp("restart: Probe\ncolours: []\n"), "themes/dusk/colors.toml": dusk });
+    await home.install({ ...probeApp("colours: []\n"), "themes/dusk/colors.toml": dusk });
 
     // Act
     const result = await home.run(["dusk"]);
@@ -364,6 +364,18 @@ describe("app templates", () => {
     // Assert
     expect(result.code).toBe(1);
     expect(result.stderr).toContain("probe/app.yaml: unknown key 'colours'");
+  });
+
+  test("reject an app template that still names an app to restart", async () => {
+    // Arrange
+    await home.install({ ...probeApp("restart: Probe\n"), "themes/dusk/colors.toml": dusk });
+
+    // Act
+    const result = await home.run(["dusk"]);
+
+    // Assert
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain("probe/app.yaml: unknown key 'restart'");
   });
 
   test("name the template that uses a color the palette lacks", async () => {

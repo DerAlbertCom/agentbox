@@ -15,13 +15,9 @@ export interface AppTemplate {
   readonly settings: readonly { file: string; merge: Record<string, unknown> }[];
   /** Shell commands run after rendering, from the home folder. */
   readonly run: readonly string[];
-  /** The app's display name for the restart notice; none when it picks up changes on its next run. */
-  readonly restart?: string;
 }
 
 export interface Rendered {
-  /** Display names of the apps to restart. */
-  readonly restart: string[];
   /** Run commands that failed, with their output. */
   readonly failures: string[];
 }
@@ -39,7 +35,7 @@ function readAppTemplate(name: string, folder: string): AppTemplate {
     unknown
   >;
   if (typeof yaml !== "object" || Array.isArray(yaml)) fail("expected a mapping");
-  const unknown = Object.keys(yaml).filter((key) => !["files", "settings", "run", "restart"].includes(key));
+  const unknown = Object.keys(yaml).filter((key) => !["files", "settings", "run"].includes(key));
   if (unknown.length) fail(`unknown key '${unknown[0]}'`);
 
   const list = (key: string) => {
@@ -74,12 +70,10 @@ function readAppTemplate(name: string, folder: string): AppTemplate {
   const run = list("run").map((item) =>
     typeof item === "string" && item !== "" ? item : fail("every 'run' entry must be a command"),
   );
-  if (yaml.restart !== undefined && (typeof yaml.restart !== "string" || yaml.restart === ""))
-    fail("'restart' must be a name");
   for (const target of [...files.map((file) => file.target), ...settings.map((setting) => setting.file)]) {
     if (!target.startsWith("~/")) fail(`'${target}' must start with ~/`);
   }
-  return { name, folder, files, settings, run, restart: yaml.restart as string | undefined };
+  return { name, folder, files, settings, run };
 }
 
 /** Renders the app templates with the palette: writes the files, merges the settings, runs the commands. */
@@ -123,7 +117,7 @@ export async function renderAppTemplates(
       }
     }
   }
-  return { restart: apps.flatMap((app) => (app.restart ? [app.restart] : [])), failures };
+  return { failures };
 }
 
 function engine(root: string): Liquid {

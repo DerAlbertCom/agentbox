@@ -160,8 +160,42 @@ public sealed class SbxClientTests : IDisposable
                             "sample",
                             "--pull",
                             pullPolicy == PullPolicy.Always ? "always" : "never",
+                            "--no-input",
                         }
                     )
+                ),
+                Arg.Any<CancellationToken>()
+            );
+    }
+
+    [Fact]
+    public async Task CreationNeverLetsSbxWaitForAnAnswer()
+    {
+        // Arrange
+        _runner
+            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new ProcessResult(0, string.Empty, string.Empty));
+
+        // Act
+        await _client.CreateAsync(
+            new SbxCreateRequest(
+                "/kits/workload",
+                "/workspace",
+                "sample",
+                ["/kits/github-auth"],
+                new Dictionary<string, string>(),
+                [],
+                []
+            ),
+            CancellationToken.None
+        );
+
+        // Assert
+        await _runner
+            .Received(1)
+            .RunAsync(
+                Arg.Is<ProcessRequest>(request =>
+                    request.Arguments[0] == "create" && request.Arguments.Contains("--no-input")
                 ),
                 Arg.Any<CancellationToken>()
             );

@@ -51,7 +51,22 @@ public sealed class KitDescriptor
                 continue;
             }
 
-            services.Add(new KitService(service));
+            var domains =
+                config!
+                    .GetEntry("apiKey")
+                    ?.GetEntries("inject")
+                    .Select(inject => inject.GetString("domain"))
+                    .Where(domain => !string.IsNullOrWhiteSpace(domain))
+                    .Select(domain => domain!)
+                    .ToList()
+                ?? [];
+            var optional = string.Equals(
+                capability.GetString("optional"),
+                "true",
+                StringComparison.OrdinalIgnoreCase
+            );
+
+            services.Add(new KitService(service, domains, optional));
         }
 
         return new KitDescriptor(path, services);

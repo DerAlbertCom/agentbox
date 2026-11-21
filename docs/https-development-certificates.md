@@ -80,8 +80,8 @@ even in a comment); DTDs/entities are never evaluated. Oversize unrelated projec
 are ignored; an ASP.NET marker in the bounded prefix retains the 1 MiB error.
 
 Non-Web/non-.NET folders perform **no host dotnet certificate operation**. An
-explicit Web SDK project requires certificate setup even without discovered launch
-ports. The shared `SandboxHttps` module (configure, refresh bootstrap, ensure
+explicit Web SDK project requires certificate setup only when launch ports were
+discovered and published; without them nothing needs a trusted host certificate. The shared `SandboxHttps` module (configure, refresh bootstrap, ensure
 launch-ready) lives outside command slices and is the only production caller of
 the sbx certificate operations, so
 creation/replacement reuses its prepared `AppPorts` flow with the immutable entry-time

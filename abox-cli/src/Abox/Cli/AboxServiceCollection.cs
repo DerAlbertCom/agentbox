@@ -1,5 +1,6 @@
 using Abox.ApplicationPorts;
 using Abox.Configuration;
+using Abox.Credentials;
 using Abox.Features.Build;
 using Abox.Features.Create;
 using Abox.Features.Ports;
@@ -78,6 +79,9 @@ public static class AboxServiceCollection
         services.AddSingleton<SandboxHttps>();
         services.AddSingleton<Preflight>();
         services.AddSingleton<SquadResolver>();
+        services.AddSingleton<SecretValues>();
+        services.AddSingleton(SbxCredentialBindings.Create());
+        services.AddSingleton<SquadCredentials>();
         services.AddSingleton<BuildStore>();
         services.AddSingleton<SandboxRecordStore>();
         services.AddSingleton<CreateRecoveryHints>();

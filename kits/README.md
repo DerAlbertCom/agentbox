@@ -57,7 +57,7 @@ at once, without recreating the sandbox:
 
 | Command | What it does |
 |---|---|
-| `sbox theme <name>` | renders every app with the theme, saves the choice, tells which apps to restart |
+| `sbox theme <name>` | renders every app with the theme, saves the choice, notes that some apps show it only after a restart |
 | `sbox theme` | in a terminal, opens an `fzf` picker with a color preview of each theme, the current one selected; otherwise like `--list` |
 | `sbox theme --list` | lists the themes, the current one marked with `*` |
 | `sbox theme --current` | prints the current theme |
@@ -97,9 +97,10 @@ The apps it themes today:
 | lazygit | `~/.config/lazygit/sbox.yml` | `LG_CONFIG_FILE`, set by the kit: `config.yml`, then `sbox.yml` (an empty `config.yml` is created when there is none) |
 | yazi | `~/.config/yazi/theme.toml` | the file itself |
 
-The terminal tools pick up a switch on their next run, so the restart notice names
-only the agents. A switch overwrites only the theme files it renders (the `sbox` files
-and yazi's `theme.toml`) and merges its keys into the settings files. The apps' other
+The terminal tools pick up a switch on their next run; some apps, such as the agents,
+may show it only after a restart. A switch overwrites only the theme files it renders
+(the `sbox` files and yazi's `theme.toml`) and merges its keys into the settings
+files. The apps' other
 config files, such as `~/.config/git/config`, `~/.config/bat/config` and lazygit's
 `config.yml`, stay the user's: the first switch only adds the `[include]` to the git
 config and an empty `config.yml` when there is none. The theme comes after the user's
@@ -142,8 +143,6 @@ settings:                       # merged into JSON files on every apply; strings
       theme: { name: sbox, mode: "{{ mode }}" }
 run:                            # shell commands run from the home folder afterwards
   - bat cache --build
-restart: OpenCode               # named in the restart notice; leave out if the app
-                                # picks up changes on its next run
 ```
 
 Every key is optional and an unknown key is an error. Targets start with `~/`. A

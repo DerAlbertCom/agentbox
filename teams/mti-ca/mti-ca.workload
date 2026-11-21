@@ -16,8 +16,15 @@ apt:
   - libpcre2-dev
   - openssh-server
   - gettext-base
-# abox installs this list in reverse order; runtimes precede their consumers.
+# abox installs the tools in this order: runtimes come before the tools that need them.
 mise:
+  - node@24.22.3
+  - npm:npm@12.2.2
+  - bun@1.4.4
+  - pnpm@12.21.0
+  - python@3.14.10
+  - uv@0.13.8
+  - powershell@7.6.10
   - npm:@anthropic-ai/claude-code[allow_builds=true]@2.1.326
   - npm:@github/copilot[allow_builds=true]@1.0.112
   - npm:@earendil-works/pi-coding-agent[allow_builds=true]@1.5.2
@@ -71,13 +78,6 @@ mise:
     --tool-option 'install_env={ UV_NO_CACHE = "true", UV_SYSTEM_CERTS = "true" }'
     pipx:azure-cli@2.93.0
   - aws-cli@2.40.4
-  - powershell@7.6.10
-  - uv@0.13.8
-  - python@3.14.10
-  - pnpm@12.21.0
-  - bun@1.4.4
-  - npm:npm@12.2.2
-  - node@24.22.3
 scripts:
   - install-dotnet.sh
   - configure-shells.sh
