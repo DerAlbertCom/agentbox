@@ -2,6 +2,7 @@ using System.Text.Json;
 using Abox.Configuration;
 using Abox.Infrastructure;
 using Abox.LocalState;
+using Abox.Naming;
 using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
@@ -121,14 +122,73 @@ public sealed class FolderSandboxCommandTests
         var exitCode = await fixture.Invoke(command, args);
 
         // Assert
-        exitCode.Should().Be(0, fixture.Cli.Console.AllText);
-        fixture.Listings.Should().Be(1);
-        if (command != "user-secrets")
-            fixture
-                .Calls.Where(call => call.FileName == "sbx" && call.Arguments[0] == "exec")
-                .Should()
-                .NotBeEmpty()
-                .And.OnlyContain(call => call.Arguments.Contains(legacy));
+        fixture.ShouldHaveUsed(legacy, command, exitCode);
+    }
+
+    [Theory]
+    [InlineData("run")]
+    [InlineData("ports", "--refresh-https-bootstrap")]
+    [InlineData("user-secrets")]
+    public async Task WindowsTrailingSeparatorFindsTheCurrentSandbox(
+        string command,
+        params string[] args
+    )
+    {
+        // Arrange
+        RequireWindows();
+        using var fixture = new Fixture();
+        var current = SandboxName.For(fixture.Cli.Location);
+        fixture.Sandbox(current);
+
+        // Act
+        var exitCode = await fixture.Cli.Invoke([
+            command,
+            "--location",
+            fixture.Cli.Location + @"\",
+            .. args,
+        ]);
+
+        // Assert
+        fixture.ShouldHaveUsed(current, command, exitCode);
+    }
+
+    [Theory]
+    [InlineData("run")]
+    [InlineData("ports", "--refresh-https-bootstrap")]
+    [InlineData("user-secrets")]
+    public async Task WindowsWorkspaceWithOtherDriveCaseFindsTheLegacySandbox(
+        string command,
+        params string[] args
+    )
+    {
+        // Arrange
+        RequireWindows();
+        using var fixture = new Fixture();
+        var original = char.ToUpperInvariant(fixture.Cli.Location[0]) + fixture.Cli.Location[1..];
+        // Independent historical oracle, as in PortsCommandSandboxLookupTests.
+        var legacy =
+            "folder-ai-sbx-"
+            + Convert.ToHexStringLower(
+                System.Security.Cryptography.SHA256.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(original)
+                )
+            )[..6];
+        fixture.Sandbox(legacy, original);
+        var lowercaseDrive = char.ToLowerInvariant(original[0]) + original[1..];
+
+        // Act
+        var exitCode = await fixture.Cli.Invoke([command, "--location", lowercaseDrive, .. args]);
+
+        // Assert
+        fixture.ShouldHaveUsed(legacy, command, exitCode);
+    }
+
+    private static void RequireWindows()
+    {
+        if (!OperatingSystem.IsWindows())
+            throw new InvalidOperationException(
+                Xunit.v3.DynamicSkipToken.Value + "Requires Windows path semantics."
+            );
     }
 
     private sealed class Fixture : IDisposable
@@ -172,6 +232,18 @@ public sealed class FolderSandboxCommandTests
 
         public Task<int> Invoke(string command, params string[] args) =>
             Cli.Invoke([command, "--location", Cli.Location, .. args]);
+
+        public void ShouldHaveUsed(string sandbox, string command, int exitCode)
+        {
+            exitCode.Should().Be(0, Cli.Console.AllText);
+            Listings.Should().Be(1);
+            if (command != "user-secrets")
+                Calls
+                    .Where(call => call.FileName == "sbx" && call.Arguments[0] == "exec")
+                    .Should()
+                    .NotBeEmpty()
+                    .And.OnlyContain(call => call.Arguments.Contains(sandbox));
+        }
 
         private async Task<ProcessResult> Respond(
             ProcessRequest request,

@@ -59,7 +59,12 @@ public sealed class RunFlow(
         SandboxInfo sandbox;
         try
         {
-            sandbox = await sandboxes.RequireAsync(location, folderConfig, null, cancellationToken);
+            sandbox = await sandboxes.RequireAsync(
+                location,
+                folderConfig,
+                note: null,
+                cancellationToken
+            );
         }
         catch (MissingFolderSandboxException exception)
         {
@@ -110,10 +115,8 @@ public sealed class RunFlow(
         FolderConfig? folderConfig
     )
     {
-        var hint = recoveryHints.Resolve(name, location, folderConfig);
-        if (hint.Diagnostic is not null)
-            console.WriteError(hint.Diagnostic);
-        console.WriteError(prefix + hint.Command);
+        foreach (var line in recoveryHints.Resolve(name, location, folderConfig).Lines(prefix))
+            console.WriteError(line);
     }
 
     /// <summary>

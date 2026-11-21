@@ -91,7 +91,7 @@ public sealed class SandboxCreator(
         var mcpToRegister = await FindMcpServersToRegisterAsync(manifest, cancellationToken);
         var existing =
             request.ExistingSandbox ?? await sandboxes.FindAsync(location, cancellationToken);
-        var name = existing?.Name ?? FolderSandbox.FallbackName(location);
+        var name = existing?.Name ?? SandboxName.For(location);
         var replace = ConfirmReplacement(existing, location, request.AssumeYes);
         cancellationToken.ThrowIfCancellationRequested();
         await RegisterMcpServersAsync(mcpToRegister, cancellationToken);
