@@ -41,7 +41,9 @@ public sealed class PublishedSquadSourceTests
         // Assert
         result
             .Reference.Should()
-            .Be("rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac@" + PublishedSquadFactory.Digest);
+            .Be(
+                "rwest.jfrog.io/release/agentic-box-rwest-mti-ca/ac@" + PublishedSquadFactory.Digest
+            );
         result.Metadata.State.Single().RelativePath.Should().Be(".published");
         result.Metadata.Mcp.Single().Url.Should().Be("https://example.com/mcp");
         result.Metadata.CreatedAt.Should().Be(DateTimeOffset.Parse("2026-11-09T12:00:00Z"));

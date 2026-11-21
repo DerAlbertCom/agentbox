@@ -17,7 +17,7 @@ public sealed class BuildStoreTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
+                Reference = "agentic-box-rwest-sample:latest",
             }
         );
 
@@ -90,7 +90,7 @@ public sealed class BuildStoreTests
         {
             Squad = "ac",
             Tag = "latest",
-            Reference = "agentbox-rwest-sample:latest",
+            Reference = "agentic-box-rwest-sample:latest",
             WorkloadKitDirectory = "/kits/workload",
             Kits =
             [

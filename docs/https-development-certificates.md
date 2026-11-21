@@ -5,7 +5,7 @@ statically detected ASP.NET Core Web SDK / `Microsoft.AspNetCore.App` projects, 
 It does not start/restart applications. Successful creation/replacement also uses
 this same shared setup; see [lifecycle ordering and recovery](application-ports-lifecycle.md).
 **#46 was accepted for the current Windows-host scope**, per the
-[tracker clarification](https://github.com/DerAlbertCom/agentbox/issues/46#issuecomment-6918879462),
+[tracker clarification](https://github.com/DerAlbertCom/agentic-box/issues/46#issuecomment-6918879462),
 which supersedes the older outstanding-gates status, not its evidence boundaries.
 [Windows real-host production evidence](verification/https/real-host-production-verification.md)
 establishes strict host/system/Node TLS, repeat safety and bootstrap-only refresh on

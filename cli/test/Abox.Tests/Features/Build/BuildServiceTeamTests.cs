@@ -56,11 +56,11 @@ public sealed class BuildServiceTeamTests
         _store
             .Load(new SquadBuildIdentity(first, "ac", "latest"))!
             .Reference.Should()
-            .Be($"agentbox-rwest-{first}:latest");
+            .Be($"agentic-box-rwest-{first}:latest");
         _store
             .Load(new SquadBuildIdentity(second, "ac", "latest"))!
             .Reference.Should()
-            .Be($"agentbox-rwest-{second}:latest");
+            .Be($"agentic-box-rwest-{second}:latest");
         BuildSources.EnsureUnchanged(firstBuild);
         BuildSources.EnsureUnchanged(secondBuild);
         if (metadataOnly)

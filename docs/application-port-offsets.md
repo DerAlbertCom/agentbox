@@ -138,7 +138,7 @@ the guard all **16 receiver process/TCP checks passed** in disposable sandbox
 `abox-issue45-green-66814670-abox-52842`, removed successfully.
 
 The actual Debug abox executable subsequently passed the then-checked-in
-[`OffsetProbe`](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/OffsetProbe) in new task-owned sandbox
+[`OffsetProbe`](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/OffsetProbe) in new task-owned sandbox
 `abox-issue45-live-be43bf4f-abox-22EA0`:
 
 - A synthetic localhost-only HTTP server on sandbox 8345 was reached at host **28345**

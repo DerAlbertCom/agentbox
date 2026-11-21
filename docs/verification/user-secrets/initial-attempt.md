@@ -6,8 +6,8 @@ workflow instead of the experimental relay. See [the current findings](README.md
 The runtime/relay/hostname blockers and proposed next steps below are superseded;
 do not repeat those failed probes or require an upgrade to resume this task.
 
-For [#5](https://github.com/DerAlbertCom/agentbox/issues/5), gating
-[#2](https://github.com/DerAlbertCom/agentbox/issues/2). Observed 2026-11-15.
+For [#5](https://github.com/DerAlbertCom/agentic-box/issues/5), gating
+[#2](https://github.com/DerAlbertCom/agentic-box/issues/2). Observed 2026-11-15.
 **Not complete: do not start feature implementation on the assumption that
 the proposed relay/discovery contract works on the supported runtime.**
 
@@ -105,7 +105,7 @@ declarations; scanning inherited recipes or old descriptors is not a solution.
 These are local exports from published inputs, **not** an actual published
 squad pulled and created by sbx. Read-only attempts to resolve the example
 `docker.io/docker/sbx-kit-team:1.0.0` and `:1.0.2` were denied/unavailable;
-`rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest` was not
+`rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-sample/ac:latest` was not
 found. Those example names are not evidence that no published squad exists.
 No registry artifact was published to fill this gap.
 
@@ -310,7 +310,7 @@ experimental specification are different evidence.
 
 ## Repository verification
 
-- `dotnet test --solution cli/agentbox.slnx`: **452 passed**, no failures/skips.
+- `dotnet test --solution cli/agentic-box.slnx`: **452 passed**, no failures/skips.
 - Release builds of the CLI solution, `Probe`, and `TransportProbe`: succeeded
   with zero warnings/errors.
 - `dotnet csharpier check cli docs/verification/user-secrets` and

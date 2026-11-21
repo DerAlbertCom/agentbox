@@ -39,8 +39,8 @@ endpoint/adapter cases or change production behavior or public testing APIs.
 
 ## Verification
 
-The solution was restored with `dotnet restore cli/agentbox.slnx --disable-parallel`
-and built with `dotnet build cli/agentbox.slnx -c Debug --no-restore -m:1`, with zero
+The solution was restored with `dotnet restore cli/agentic-box.slnx --disable-parallel`
+and built with `dotnet build cli/agentic-box.slnx -c Debug --no-restore -m:1`, with zero
 warnings/errors.
 Tests ran through `cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe`, not a
 discovery-only `dotnet test` invocation.

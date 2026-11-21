@@ -44,7 +44,7 @@ public sealed class RunServiceTeamTests
         {
             Squad = "ac",
             Tag = "latest",
-            Reference = "agentbox-rwest-other:latest",
+            Reference = "agentic-box-rwest-other:latest",
             CreatedAt = DateTimeOffset.Now,
             LocalWorkload = LocalWorkloadFactory.Artifact(_root),
         };
@@ -112,7 +112,7 @@ public sealed class RunServiceTeamTests
         {
             Squad = "ac",
             Tag = "latest",
-            Reference = "agentbox-rwest-sample:latest",
+            Reference = "agentic-box-rwest-sample:latest",
             RootDirectory = _root.Path,
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
             LocalWorkload = LocalWorkloadFactory.Artifact(_root),
@@ -126,7 +126,7 @@ public sealed class RunServiceTeamTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = "agentbox-rwest-other:latest",
+                Reference = "agentic-box-rwest-other:latest",
                 RootDirectory = otherSources.Path,
                 CreatedAt = DateTimeOffset.UtcNow,
                 LocalWorkload = otherImage,
@@ -176,7 +176,7 @@ public sealed class RunServiceTeamTests
                 {
                     Squad = "ac",
                     Tag = "latest",
-                    Reference = "agentbox-rwest-sample:latest",
+                    Reference = "agentic-box-rwest-sample:latest",
                     RootDirectory = _root.Path,
                 }
             );
@@ -185,7 +185,7 @@ public sealed class RunServiceTeamTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = "agentbox-rwest-other:latest",
+                Reference = "agentic-box-rwest-other:latest",
                 RootDirectory = other.Path,
             }
         );

@@ -9,7 +9,7 @@ The [initial attempt](initial-attempt.md) is archived evidence, not current bloc
 
 Only the bundled synthetic values/id were transferred. No real secret stores,
 registry publication, host/global settings, daemon repair, or existing sandbox
-changes were involved. The pre-existing `agentbox-abox-4F84A` was inspected only
+changes were involved. The pre-existing `agentic-box-abox-4F84A` was inspected only
 and was stopped at inspection time; it was not started, replaced or removed.
 
 ## Gate and acceptance
@@ -48,7 +48,7 @@ Found using Docker's existing image-reference inventory and read-only registry
 inspection, not by reading Docker credentials or any secret values:
 
 ```text
-rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac:latest
+rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-mti-ca/ac:latest
 linux/amd64 manifest:
 sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954
 ```
@@ -166,7 +166,7 @@ $fixture = 'docs/verification/user-secrets'
 $local = 'abox-issue5-local-' + [guid]::NewGuid().ToString('N').Substring(0,8)
 $published = 'abox-issue5-published-' + [guid]::NewGuid().ToString('N').Substring(0,8)
 $out = '.abox/issue5-' + [guid]::NewGuid().ToString('N')
-$ref = 'rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954'
+$ref = 'rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954'
 dotnet publish "$fixture/Probe" -c Release -r linux-x64 --self-contained true -o "$out/probe"
 # Scope/save/restore these environment settings in your invoking shell.
 $env:SBX_KIT_BUILDER = 'host'
@@ -201,7 +201,7 @@ from Python inside the disposable sandbox verifies TCP only, not authentication.
 
 ## Repository verification
 
-- `dotnet test --solution cli/agentbox.slnx` in Debug and Release: **452 passed**
+- `dotnet test --solution cli/agentic-box.slnx` in Debug and Release: **452 passed**
   each, no failures/skips.
 - Release solution and all three probe builds: zero warnings/errors.
 - `dotnet csharpier check cli docs/verification/user-secrets` and `git diff --check`.
@@ -215,7 +215,7 @@ No production copy/rewrite command has been added by #5.
 ## Production copy verification (#6)
 
 The user accepted the local/nonempty + published/empty scope and closed #5; see
-the [parent clarification](https://github.com/DerAlbertCom/agentbox/issues/2#issuecomment-6892259793).
+the [parent clarification](https://github.com/DerAlbertCom/agentic-box/issues/2#issuecomment-6892259793).
 The missing published/nonempty rewrite case remains a documented limitation,
 not a blocker for #6. No rewrite is implemented by #6.
 
@@ -282,7 +282,7 @@ source with the already-published digest below and `--pull always`; run the same
 probe and `finally` cleanup. No publication or persistent trust change is needed:
 
 ```text
-rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954
+rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954
 ```
 
 No cross-store rollback, malicious same-user filesystem-race defense, crash

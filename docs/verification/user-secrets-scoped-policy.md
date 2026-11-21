@@ -2,7 +2,7 @@
 
 ## Clarified contract
 
-The original [#2 story](https://github.com/DerAlbertCom/agentbox/issues/2) already
+The original [#2 story](https://github.com/DerAlbertCom/agentic-box/issues/2) already
 said: **"The user has no kit files: a published squad is pulled from the registry"**
 and **"Works for published and local sandboxes; no host-side kit files needed."**
 Its subsequent approved policy-discovery clarification explicitly excluded manual
@@ -34,7 +34,7 @@ to fill that gap.
 
 Started from open PR #19's fetched head
 `8e8447166be3e6ed9337c8b49125db6bb0435bba`, in isolated worktree
-`D:/dev/rwe/agentbox-scoped-policy-20261115-e`, branch
+`D:/dev/rwe/agentic-box-scoped-policy-20261115-e`, branch
 `fix/scoped-user-secret-policy-20261115-e`. No push or PR update was performed.
 The original checkout's modified `run-abox.ps1` and the existing diagnostic
 worktree's untracked regression test were left untouched. The launcher retained
@@ -49,7 +49,7 @@ configuration in tests is synthetic; no private parser interface was exposed.
 
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
-dotnet $sdk10 build cli/agentbox.slnx -c Debug -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*ExplicitSandboxTcpPolicySuppliesRewriteIntentWithoutKitSources' -noLogo -maxThreads 2
 ```
 
@@ -147,10 +147,10 @@ story record documents this host's `dotnet test` handshake limitation):
 ```powershell
 dotnet tool restore
 dotnet csharpier format cli
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class Abox.Tests.UserSecretsPolicyTests -class Abox.Tests.UserSecretsRewriteTests -noLogo -maxThreads 2
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
-dotnet $sdk10 build cli/agentbox.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
 dotnet csharpier check cli
 git diff --check

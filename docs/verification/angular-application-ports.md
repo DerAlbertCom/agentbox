@@ -143,14 +143,14 @@ programs, and `git diff --check` passed. No Release verification is claimed.
 Run:
 
 ```powershell
-dotnet test cli/agentbox.slnx -c Debug
+dotnet test cli/agentic-box.slnx -c Debug
 dotnet csharpier check cli
 git diff --check
 ```
 
 ## Earlier synthetic transport check (not Angular acceptance)
 
-The now-retired [AngularRuntimeProbe](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/AngularRuntimeProbe) was run
+The now-retired [AngularRuntimeProbe](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/AngularRuntimeProbe) was run
 against minimum **sbx 0.51.0** and the actual Debug `abox.dll`, in newly created
 task-owned sandbox `abox-issue44-angular-7e541-abox-B89F1`, using an already cached
 local template `docker.io/library/sandbox-kit-assembled:2cbc7aa649a63792` with
@@ -181,7 +181,7 @@ separate run closes the actual-dev-server gap, not by relabelling that listener.
 
 ## Actual Angular end-to-end verification (Windows, 2026-11-16)
 
-The probe copied the then-checked-in [minimal Angular app](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/SyntheticAngular),
+The probe copied the then-checked-in [minimal Angular app](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/SyntheticAngular),
 including its npm lockfile, into a **new disposable workspace**. Its framework
 **22.2.4**, CLI/build **22.2.6**, TypeScript **6.0.3**, RxJS **7.8.2** and tslib
 **2.9.1** are exact pins, matching the inspected Deals frontend's Angular 22

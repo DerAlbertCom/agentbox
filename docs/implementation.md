@@ -180,7 +180,7 @@ workloads select `mtiae-developer-container-images-local`; there is no hardcoded
 repository fallback. Missing/invalid repositories fail before any Docker calls.
 Changing a workload (including its repository) requires a new `--no-personal`
 build, and older manifests without this setting must be rebuilt. A
-team always publishes **`agentbox-rwest-<team>/<squad>:<tag>`**, regardless of its
+team always publishes **`agentic-box-rwest-<team>/<squad>:<tag>`**, regardless of its
 squad count. Distinct path segments keep team, squad and component identities
 separate; adding another squad does not rename existing images. Names are
 lowercased, and case collisions are rejected. The current implementation moves
@@ -190,8 +190,8 @@ question. The local manifest's unqualified team `Reference` is an ownership mark
 not the remote publication name.
 
 Each component uses a unique `publish-<id>` tag under
-`agentbox-rwest-<team>/<squad>/components/{workload,kit-N,state,config}`. The final
-set candidate uses `agentbox-rwest-<team>/<squad>:publish-<id>`. A failed component
+`agentic-box-rwest-<team>/<squad>/components/{workload,kit-N,state,config}`. The final
+set candidate uses `agentic-box-rwest-<team>/<squad>:publish-<id>`. A failed component
 push or failed candidate inspection cannot move the requested tag. This is not
 a transaction across squads/teams; failures after promotion cannot automatically
 roll back a tag. Temporary snapshots/descriptors are removed even on failure;
@@ -346,7 +346,7 @@ See [verification and red evidence](verification/legacy-sandbox-compatibility.md
    are rejected with the key and both kit names before sandbox replacement.
 7. Creates the sandbox from
    the immutable platform digest resolved from
-   `rwest.jfrog.io/<pullRepository>/agentbox-rwest-<team>/<squad>:<tag>`, with
+   `rwest.jfrog.io/<pullRepository>/agentic-box-rwest-<team>/<squad>:<tag>`, with
    `--pull always`, preventing moving-tag metadata drift. The set already contains
    its mixins and arguments. With `--local`,
     uses the **thin prebuilt-workload runtime kit**, `--kit <mixin>...`
@@ -892,7 +892,7 @@ arbitrary old Unix shell's environment, and raw sbx launches bypass this contrac
 
 Production export/activation and synthetic exact-leaf .NET 10/real-local-tool
 verification are present; #46 was accepted for the current Windows-host scope per
-the [tracker closure clarification](https://github.com/DerAlbertCom/agentbox/issues/46#issuecomment-6918879462). See
+the [tracker closure clarification](https://github.com/DerAlbertCom/agentic-box/issues/46#issuecomment-6918879462). See
 [the scoped production-path record](verification/https/README.md). The latest
 [Windows real-host production evidence](verification/https/real-host-production-verification.md)
 is pinned to `5b40b570aff9fb76b9c6379e55569eef83dc2df9`: actual Release setup exited

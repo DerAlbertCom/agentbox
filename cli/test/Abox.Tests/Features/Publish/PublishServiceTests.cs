@@ -114,11 +114,11 @@ public sealed class PublishServiceTests
         kits.Select(kit => kit.GetString("ref")!.Split('@')[0])
             .Should()
             .Equal(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/workload",
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/kit-0",
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac/components/workload",
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac/components/kit-0",
                 "ghcr.io/example/tool:1",
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/state",
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac/components/config"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac/components/state",
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac/components/config"
             );
         kits[1].GetEntry("args")!.GetString("url").Should().Be(build.Kits[0].Arguments["url"]);
         kits[2]
@@ -190,15 +190,17 @@ public sealed class PublishServiceTests
         tags.Take(4)
             .Should()
             .OnlyContain(tag =>
-                tag.StartsWith("rwest.jfrog.io/first-images-local/agentbox-rwest-sample/ac")
+                tag.StartsWith("rwest.jfrog.io/first-images-local/agentic-box-rwest-sample/ac")
             );
         tags.Skip(4)
             .Should()
             .OnlyContain(tag =>
-                tag.StartsWith("rwest.jfrog.io/second-images-local/agentbox-rwest-sample/bd")
+                tag.StartsWith("rwest.jfrog.io/second-images-local/agentic-box-rwest-sample/bd")
             );
-        tags.Should().Contain("rwest.jfrog.io/first-images-local/agentbox-rwest-sample/ac:latest");
-        tags.Should().Contain("rwest.jfrog.io/second-images-local/agentbox-rwest-sample/bd:latest");
+        tags.Should()
+            .Contain("rwest.jfrog.io/first-images-local/agentic-box-rwest-sample/ac:latest");
+        tags.Should()
+            .Contain("rwest.jfrog.io/second-images-local/agentic-box-rwest-sample/bd:latest");
         foreach (var descriptor in _descriptors.Where(text => text.Contains("\"kind\": \"set\"")))
         {
             descriptor.Should().NotContain("mtiae-developer-container-images-local");
@@ -220,19 +222,19 @@ public sealed class PublishServiceTests
             .SelectMany(call => call.Arguments)
             .Should()
             .Contain(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac:latest"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac:latest"
             );
         _calls
             .SelectMany(call => call.Arguments)
             .Should()
             .Contain(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/bd:latest"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/bd:latest"
             );
         _calls
             .SelectMany(call => call.Arguments)
             .Should()
             .NotContain(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample:latest"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample:latest"
             );
     }
 
@@ -311,7 +313,7 @@ public sealed class PublishServiceTests
         // Arrange
         SaveBuild("ac");
         var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
-        build.Reference = "agentbox-rwest-other:latest";
+        build.Reference = "agentic-box-rwest-other:latest";
         File.WriteAllText(
             ManifestPath(new("sample", "ac", "latest")),
             JsonSerializer.Serialize(build)
@@ -425,7 +427,7 @@ public sealed class PublishServiceTests
         SaveBuild("ac");
         var build = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
         build.Tag = "release-1";
-        build.Reference = "agentbox-rwest-sample:release-1";
+        build.Reference = "agentic-box-rwest-sample:release-1";
         _store.Save(build);
 
         // Act
@@ -442,7 +444,7 @@ public sealed class PublishServiceTests
             .Last()
             .Arguments.Should()
             .Contain(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac:release-1"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac:release-1"
             );
     }
 
@@ -482,7 +484,7 @@ public sealed class PublishServiceTests
             .Single(call => call.Arguments.Contains("create"))
             .Arguments.Should()
             .Contain(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac:latest"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac:latest"
             );
         pushes.Should().OnlyContain(call => call.Arguments.Contains("--provenance=mode=min"));
         var set = YamlReader.Parse(_descriptors.Last(), "published set");
@@ -735,7 +737,7 @@ public sealed class PublishServiceTests
         SaveBuild("ac");
         SaveBuild("workload");
         var second = _store.Load(new SquadBuildIdentity("sample", "workload", "latest"))!;
-        second.Reference = "agentbox-rwest-sample-ac:latest";
+        second.Reference = "agentic-box-rwest-sample-ac:latest";
         _store.Save(second);
         var request = new PublishRequest(
             [new("sample", _root.Path, ["ac"]), new("sample-ac", _root.Path, ["workload"])],
@@ -751,10 +753,10 @@ public sealed class PublishServiceTests
             .SelectMany(call => call.Arguments)
             .Should()
             .Contain(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac:latest"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac:latest"
             )
             .And.Contain(
-                "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample-ac/workload:latest"
+                "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample-ac/workload:latest"
             );
     }
 

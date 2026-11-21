@@ -52,7 +52,7 @@ handshake on this host. Commands run from the ticket worktree:
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
 $tests = 'cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll'
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
 dotnet $tests -list full/json -preEnumerateTheories
 dotnet $tests -class Abox.Tests.UserSecretsRewriteTests -class Abox.Tests.UserSecretsRewriteCommandTests -class Abox.Tests.UserSecretsAppSettingsCommandTests -class Abox.Tests.UserSecretsOracleCommandTests -class Abox.Tests.SplitSettingsCommandTests -class Abox.Tests.UserSecretsSharedStoreCommandTests -class Abox.Tests.UserSecretsEndpointCommandTests -noLogo -maxThreads 2
 dotnet $tests -noLogo -maxThreads 2
@@ -96,7 +96,7 @@ attempt. The full executable was allowed a 30-minute timeout and completed in
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
 $tests = './cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe'
 $artifacts = 'C:/Users/UI520628/AppData/Local/Temp/11/opencode'
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
 # Capture discovery stdout as raw bytes, avoiding shell code-page decoding.
 python -c "import subprocess; subprocess.run(['$tests', '-list', 'full/json', '-preEnumerateTheories', '-noColor'], stdout=open('$artifacts/ticket-35-integrated-discovery.json', 'wb'), check=True)"
 & $tests -class Abox.Tests.UserSecretsRewriteTests -class Abox.Tests.UserSecretsRewriteCommandTests -class Abox.Tests.UserSecretsAppSettingsCommandTests -class Abox.Tests.UserSecretsOracleCommandTests -class Abox.Tests.SplitSettingsCommandTests -class Abox.Tests.UserSecretsSharedStoreCommandTests -class Abox.Tests.UserSecretsEndpointCommandTests -noLogo -noColor -maxThreads 2 -result-xml "$artifacts/ticket-35-integrated-focused.xml"
@@ -274,9 +274,9 @@ Commands run from the integration worktree:
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
 $artifacts = 'C:/Users/UI520628/AppData/Local/Temp/11/opencode/audit21-final-endpoint-fix'
 dotnet $sdk10 tool restore
-dotnet $sdk10 restore cli/agentbox.slnx --disable-parallel
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
-dotnet $sdk10 build cli/agentbox.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 restore cli/agentic-box.slnx --disable-parallel
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
 $debug = './cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe'
 $release = './cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.exe'
 # Capture before/after discovery directly as raw stdout bytes with Python subprocess.run.

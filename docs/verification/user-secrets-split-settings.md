@@ -41,10 +41,10 @@ reinterpreted as standalone URLs/connection strings.
 
 On 2026-11-15, before sibling integration:
 
-- `dotnet test cli/agentbox.slnx -c Debug --filter FullyQualifiedName~SplitSettingsCommandTests`:
+- `dotnet test cli/agentic-box.slnx -c Debug --filter FullyQualifiedName~SplitSettingsCommandTests`:
   **62 passed**, no failures/skips.
-- `dotnet build cli/agentbox.slnx -c Debug`: zero warnings/errors.
-- `dotnet test cli/agentbox.slnx -c Debug --no-build`: **1050 passed**, zero failures,
+- `dotnet build cli/agentic-box.slnx -c Debug`: zero warnings/errors.
+- `dotnet test cli/agentic-box.slnx -c Debug --no-build`: **1050 passed**, zero failures,
   **7 explicit platform skips** (1057 total).
 - `dotnet csharpier check cli`: passed (164 files).
 - `git diff --check`: passed.
@@ -71,8 +71,8 @@ pairs retain validated copy-only behavior.
 
 Final post-merge Debug checks:
 
-- `dotnet build cli/agentbox.slnx -c Debug`: zero warnings/errors.
-- `dotnet test cli/agentbox.slnx -c Debug --no-build`: **1087 passed**, zero failures,
+- `dotnet build cli/agentic-box.slnx -c Debug`: zero warnings/errors.
+- `dotnet test cli/agentic-box.slnx -c Debug --no-build`: **1087 passed**, zero failures,
   **7 platform skips** (1094 total).
 - `dotnet csharpier check cli`: passed (166 files).
 - `git diff --check`: passed.
@@ -91,7 +91,7 @@ the existing `dotnet test` Microsoft.Testing.Platform handshake failure is alrea
 documented in [shared-store verification](user-secrets-shared-stores.md#checks):
 
 ```powershell
-dotnet build cli/agentbox.slnx -c Debug
+dotnet build cli/agentic-box.slnx -c Debug
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class Abox.Tests.UserSecretsOracleCommandTests -class Abox.Tests.UserSecretsSharedStoreCommandTests -class Abox.Tests.SplitSettingsCommandTests -noLogo -maxThreads 2
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
 dotnet csharpier check cli

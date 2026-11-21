@@ -18,7 +18,7 @@ public sealed class TeamBuildStoreTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
+                Reference = "agentic-box-rwest-sample:latest",
                 Template = "legacy-template",
             }
         );
@@ -31,7 +31,7 @@ public sealed class TeamBuildStoreTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
+                Reference = "agentic-box-rwest-sample:latest",
                 Template = "new-template",
             }
         );
@@ -63,7 +63,7 @@ public sealed class TeamBuildStoreTests
                 {
                     Squad = squad,
                     Tag = tag,
-                    Reference = "agentbox-rwest-sample:latest",
+                    Reference = "agentic-box-rwest-sample:latest",
                 }
             )
         );
@@ -86,13 +86,13 @@ public sealed class TeamBuildStoreTests
         root.File(
             "builds/ac/latest/build.json",
             """
-            {"Squad":"ac", "Tag":"latest", "Reference":"agentbox-rwest-sample:latest"}
+            {"Squad":"ac", "Tag":"latest", "Reference":"agentic-box-rwest-sample:latest"}
             """
         );
         root.File(
             "builds/sample/ac/latest/build.json",
             """
-            {"Squad":"ac", "Tag":"latest", "Reference":"agentbox-rwest-other:latest"}
+            {"Squad":"ac", "Tag":"latest", "Reference":"agentic-box-rwest-other:latest"}
             """
         );
 
@@ -109,7 +109,7 @@ public sealed class TeamBuildStoreTests
     [InlineData("not json")]
     [InlineData("null")]
     [InlineData(
-        "{\"Squad\":\"ac\",\"Tag\":\"latest\",\"Reference\":\"agentbox-rwest-sample:latest\",\"Reference\":\"agentbox-rwest-other:latest\"}"
+        "{\"Squad\":\"ac\",\"Tag\":\"latest\",\"Reference\":\"agentic-box-rwest-sample:latest\",\"Reference\":\"agentic-box-rwest-other:latest\"}"
     )]
     public void UnreadableQualifiedBuildsNeverFallBackOrChangeLegacyArtifacts(string qualified)
     {
@@ -117,7 +117,7 @@ public sealed class TeamBuildStoreTests
         using var root = new TempDirectory();
         var store = new BuildStore(AboxPaths.For(root.Path, root.Path));
         const string original =
-            "{\"Squad\":\"ac\",\"Tag\":\"latest\",\"Reference\":\"agentbox-rwest-sample:latest\"}";
+            "{\"Squad\":\"ac\",\"Tag\":\"latest\",\"Reference\":\"agentic-box-rwest-sample:latest\"}";
         var legacyPath = root.File("builds/ac/latest/build.json", original);
         var qualifiedPath = root.File("builds/sample/ac/latest/build.json", qualified);
 
@@ -141,7 +141,7 @@ public sealed class TeamBuildStoreTests
         root.File(
             "builds/ac/latest/build.json",
             """
-            {"Squad":"ac", "Tag":"latest", "Reference":"agentbox-rwest-other:latest", "Reference":"agentbox-rwest-sample:latest"}
+            {"Squad":"ac", "Tag":"latest", "Reference":"agentic-box-rwest-other:latest", "Reference":"agentic-box-rwest-sample:latest"}
             """
         );
 
@@ -157,9 +157,9 @@ public sealed class TeamBuildStoreTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    [InlineData("agentbox-rwest-other:latest")]
-    [InlineData("agentbox-rwest-sample:other-tag")]
-    [InlineData("agentbox-rwest-sample/other:latest")]
+    [InlineData("agentic-box-rwest-other:latest")]
+    [InlineData("agentic-box-rwest-sample:other-tag")]
+    [InlineData("agentic-box-rwest-sample/other:latest")]
     public void UnprovenLegacyOwnershipRequiresARequestedTeamRebuildWithoutChangingArtifacts(
         string? reference
     )

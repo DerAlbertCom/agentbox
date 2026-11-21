@@ -223,9 +223,9 @@ public sealed class PublishedSquadArchiveTests
 // A single saved config image, with fixed registry responses and no mutable fake-dispatch modes.
 internal sealed class PublishedArchiveScenario
 {
-    private const string Reference = "rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac:latest";
+    private const string Reference = "rwest.jfrog.io/release/agentic-box-rwest-mti-ca/ac:latest";
     private const string Config =
-        "rwest.jfrog.io/published/agentbox-rwest-mti-ca/ac/components/config@"
+        "rwest.jfrog.io/published/agentic-box-rwest-mti-ca/ac/components/config@"
         + PublishedSquadFactory.Digest;
     private readonly List<ProcessRequest> _calls = [];
     private readonly PublishedSquadSource _source;

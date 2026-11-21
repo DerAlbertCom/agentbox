@@ -91,10 +91,10 @@ process runner, verifying that expanded IDs cannot bypass its authorization chec
 
 Final verification:
 
-- `dotnet test --solution cli/agentbox.slnx`: **847 passed, 5 explicitly skipped,
+- `dotnet test --solution cli/agentic-box.slnx`: **847 passed, 5 explicitly skipped,
   852 total, zero failures** (about 30 seconds).
-- `dotnet build cli/agentbox.slnx --no-restore`: **zero warnings/errors**.
-- `dotnet build cli/agentbox.slnx --no-restore -c Release`: **zero warnings/errors**.
+- `dotnet build cli/agentic-box.slnx --no-restore`: **zero warnings/errors**.
+- `dotnet build cli/agentic-box.slnx --no-restore -c Release`: **zero warnings/errors**.
 - `dotnet tool run csharpier check cli`: **160 files checked**.
 - `git diff --check`: passed.
 
@@ -147,7 +147,7 @@ isolation (**3 passed**, zero skips/failures).
 
 Follow-up full verification:
 
-- `dotnet test --solution cli/agentbox.slnx`: **852 passed, 5 explicitly skipped,
+- `dotnet test --solution cli/agentic-box.slnx`: **852 passed, 5 explicitly skipped,
   857 total, zero failures** (about 30 seconds).
 - Debug and Release solution builds: **zero warnings/errors**.
 - `dotnet tool run csharpier check cli`: **160 files checked**.

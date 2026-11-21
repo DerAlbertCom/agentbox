@@ -118,7 +118,7 @@ public sealed class SbxClientTests : IDisposable
 
     [Theory]
     [InlineData(
-        "rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest",
+        "rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-sample/ac:latest",
         PullPolicy.Always
     )]
     [InlineData("/kits/workload", PullPolicy.Never)]
@@ -269,7 +269,7 @@ public sealed class SbxClientTests : IDisposable
                     """
                     [
                       {
-                        "name": "agentbox-abox-12345",
+                        "name": "agentic-box-abox-12345",
                         "id": "1749681b-5622-4313-9d80-bf971233fcea",
                         "agent": "shell",
                         "status": "running",
@@ -295,7 +295,7 @@ public sealed class SbxClientTests : IDisposable
 
         // Assert
         sandboxes.Should().HaveCount(2);
-        sandboxes[0].Name.Should().Be("agentbox-abox-12345");
+        sandboxes[0].Name.Should().Be("agentic-box-abox-12345");
         sandboxes[0].IsRunning.Should().BeTrue();
         sandboxes[0].CreatedAt.Should().Be(DateTimeOffset.Parse("2026-11-08T14:27:10Z"));
         sandboxes[1].IsRunning.Should().BeFalse();

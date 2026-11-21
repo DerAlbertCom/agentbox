@@ -1,7 +1,7 @@
 # Story #12 / PR #19: combined review fixes and final verification
 
 Verified on Windows, 2026-11-15, in
-`D:/dev/rwe/agentbox/.worktrees/issue-12-integration`, branch
+`D:/dev/rwe/agentic-box/.worktrees/issue-12-integration`, branch
 `integration/issue-12-endpoint-overrides`.
 
 - Integration baseline: `a0901be5e9e594b554a444d137f99868f963f409` (all four
@@ -25,7 +25,7 @@ installed SDK **10.0.404**, rather than ambient **11.0.100**:
 
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*UnsafeMappedOracleEndpointsFailBeforeAnyWriteWithoutLeakingValues' -noLogo -maxThreads 2
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*WhitespaceProseIsNotAnOracleEndpoint' -noLogo -maxThreads 2
 ```
@@ -96,14 +96,14 @@ results. Runner configuration was not changed. Exact accepted commands:
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
 
 # Focused Debug verification after consolidation.
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.SplitSettingsCommandTests -class Abox.Tests.CreateCommandTests -class Abox.Tests.RunCommandTests -noLogo -maxThreads 2
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*CompatibleDisjointKeysAndAlreadyAdaptedConsumersMergeWithoutUnrelatedConflicts' -noLogo -maxThreads 2
 
 # Full integrated Debug, then Release: serial builds and full direct runs.
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
-dotnet $sdk10 build cli/agentbox.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
 dotnet csharpier check cli
 git diff --check

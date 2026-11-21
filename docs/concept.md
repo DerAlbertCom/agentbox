@@ -1,4 +1,4 @@
-# agentbox (`abox`)
+# Agentic Box (`abox`)
 
 This document records the original concept, including proposals that have not
 shipped. Where it differs from current behavior, [implementation.md](implementation.md)
@@ -41,7 +41,7 @@ Exit codes: 0 on success, 1 on an `abox` error, 130 on cancellation. `run` passe
   - `shell` works offline. Other launchers list their needs under Launchers.
   - If JFrog has a newer `latest`, asks whether to replace the sandbox now. Skipped offline. *(proposed placement)*
 - **`abox build --team <names> [--root <dir>]`** resolves each team's folder under `teams` (from now on) and builds the kit set of every squad of it that no other squad of the team names as its `base`: one workload and the mixins reached through the chain. Rejects duplicate kit repositories; checking file collisions between kits is not built yet. Layers are shared, not repacked, so squads with common kits share blobs.
-- **`abox publish --team <name> [--root <dir>]`** pushes the kit set to `rwest.jfrog.io/<publishRepository>` (selected by the squad's resolved `.workload`) under `agentbox-rwest-<team>/<squad>:<tag>`, `latest` by default, with the resolved squad config. Every squad keeps the same name when others are added. Publication uses the v3 BuildKit frontend through Docker Buildx; its registry credentials stay in Docker's host credential store. Only builds explicitly excluding personal `.abox` configuration can be published.
+- **`abox publish --team <name> [--root <dir>]`** pushes the kit set to `rwest.jfrog.io/<publishRepository>` (selected by the squad's resolved `.workload`) under `agentic-box-rwest-<team>/<squad>:<tag>`, `latest` by default, with the resolved squad config. Every squad keeps the same name when others are added. Publication uses the v3 BuildKit frontend through Docker Buildx; its registry credentials stay in Docker's host credential store. Only builds explicitly excluding personal `.abox` configuration can be published.
 - **`abox prune [--full] [--sbx]`** removes the template images of sbx that stopped being used: it keeps the newest assembled kit set and the kit sources it is built from, and removes the older sets and the kit sources nothing uses. `--full` reaches for everything sbx holds: what a sandbox uses, sbx refuses and keeps. `--sbx` stops the running sandboxes first. Never touches secrets, or images of other repositories, nor anything an image of unknown age or id holds. *(proposed: also keep anything a stopped sandbox uses; also prune the local builds of the build store)*
 - **`abox secrets list|set|remove [--team <name>] --squad <name> [--root <dir>]`** manages host-side secrets for local kits, through `sbx secret` behind the scenes. `set` and `remove` accept repeatable `--service <name>`.
 - **`abox user-secrets [--location <path>] [--force]`** copies explicitly selected local .NET user-secret stores into an existing sandbox. See [the safety contract](../README.md#copying-net-user-secrets).

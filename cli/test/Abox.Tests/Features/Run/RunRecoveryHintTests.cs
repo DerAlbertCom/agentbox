@@ -79,7 +79,7 @@ public sealed class RunRecoveryHintTests
         );
         fixture.Cli.Root.File(
             "builds/recorded/ac/release/build.json",
-            """{"Squad":"ac","Tag":"release","Reference":"agentbox-rwest-unrelated:release","RootDirectory":"unrelated-source-root"}"""
+            """{"Squad":"ac","Tag":"release","Reference":"agentic-box-rwest-unrelated:release","RootDirectory":"unrelated-source-root"}"""
         );
         fixture.Missing(missingProgram);
 
@@ -157,7 +157,7 @@ public sealed class RunRecoveryHintTests
             Squad = "ac",
             Tag = "release",
             RootDirectory = "legacy sources",
-            Reference = storage == "unowned-legacy" ? null : "agentbox-rwest-owned:release",
+            Reference = storage == "unowned-legacy" ? null : "agentic-box-rwest-owned:release",
         };
         if (storage == "qualified-only")
             fixture.Builds.Save(manifest);
@@ -221,7 +221,7 @@ public sealed class RunRecoveryHintTests
     [Theory]
     [InlineData("{ broken JSON")]
     [InlineData(
-        "{\"Squad\":\"ac\",\"Tag\":\"release\",\"Reference\":\"agentbox-rwest-unrelated:release\"}"
+        "{\"Squad\":\"ac\",\"Tag\":\"release\",\"Reference\":\"agentic-box-rwest-unrelated:release\"}"
     )]
     public async Task InvalidLocalMetadataStillAllowsOrdinaryLaunch(string metadata)
     {
@@ -280,7 +280,7 @@ public sealed class RunRecoveryHintTests
             {
                 Squad = "selected",
                 Tag = "release",
-                Reference = "agentbox-rwest-recorded:release",
+                Reference = "agentic-box-rwest-recorded:release",
                 RootDirectory = sourceRoot,
             }
         );

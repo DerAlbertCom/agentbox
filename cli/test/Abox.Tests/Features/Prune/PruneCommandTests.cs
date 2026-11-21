@@ -97,7 +97,7 @@ public sealed class PruneCommandTests
             Template("sbx-kit-src", "unknown-id", null, "2026-11-01T00:00:00Z"),
             Template("other-sandbox-kit-assembled", "old", "other", "2026-11-01T00:00:00Z"),
             Template("other-sbx-kit-src", "unused", "other-source", "2026-11-01T00:00:00Z"),
-            Template("agentbox-rwest-team/squad", "latest", "published", "2026-11-01T00:00:00Z"),
+            Template("agentic-box-rwest-team/squad", "latest", "published", "2026-11-01T00:00:00Z"),
         };
         if (uncertainSet)
         {

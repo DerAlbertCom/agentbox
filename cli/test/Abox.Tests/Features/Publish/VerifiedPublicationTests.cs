@@ -110,7 +110,7 @@ public sealed class VerifiedPublicationTests
             .Equal(
                 candidate,
                 candidate,
-                "rwest.jfrog.io/test-images-local/agentbox-rwest-sample/ac:latest"
+                "rwest.jfrog.io/test-images-local/agentic-box-rwest-sample/ac:latest"
             );
         fixture.Calls[promotion - 1].Arguments.Should().Contain("--raw");
         fixture.Calls[promotion + 1].Arguments.Should().Contain("--raw");
@@ -277,7 +277,7 @@ public sealed class VerifiedPublicationTests
             .Should()
             .ContainSingle()
             .Which.Arguments.Should()
-            .Contain("rwest.jfrog.io/test-images-local/agentbox-rwest-sample/ac:latest");
+            .Contain("rwest.jfrog.io/test-images-local/agentic-box-rwest-sample/ac:latest");
         fixture
             .Console.AllText.Should()
             .Contain("Published squad 'ac'")
@@ -316,7 +316,7 @@ public sealed class VerifiedPublicationTests
             {
                 Squad = squad,
                 Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
+                Reference = "agentic-box-rwest-sample:latest",
                 PublishRepository = "test-images-local",
                 WorkloadKitDirectory = Path.GetDirectoryName(workload)!,
                 IncludesPersonalConfigurations = false,

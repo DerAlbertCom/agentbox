@@ -77,9 +77,9 @@ filters, not `--filter-method`; combining those filter types means intersection)
 
 ```powershell
 $env:DOTNET_GENERATE_ASPNET_CERTIFICATE = 'false'
-dotnet build cli/agentbox.slnx -c Debug -m:1
+dotnet build cli/agentic-box.slnx -c Debug -m:1
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 4
-dotnet build cli/agentbox.slnx -c Release -m:1
+dotnet build cli/agentic-box.slnx -c Release -m:1
 dotnet cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.dll -noLogo -maxThreads 4
 dotnet csharpier check cli
 git diff --check

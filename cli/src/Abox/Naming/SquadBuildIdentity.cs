@@ -27,5 +27,5 @@ public readonly record struct SquadBuildIdentity(string Team, string Squad, stri
         }
     }
 
-    internal static string TeamRepository(string team) => $"agentbox-{ImageName.Tenant}-{team}";
+    internal static string TeamRepository(string team) => $"agentic-box-{ImageName.Tenant}-{team}";
 }

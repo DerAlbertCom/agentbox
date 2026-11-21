@@ -37,10 +37,10 @@ historical preservation cases newly required to fail are now at the CLI seam.
 
 | Check | Result |
 | --- | --- |
-| `dotnet build cli/agentbox.slnx -c Debug --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
-| `dotnet test cli/agentbox.slnx -c Debug --no-build --verbosity minimal` | 918 passed, 0 failed, 5 platform skips (923 total) |
-| `dotnet build cli/agentbox.slnx -c Release --verbosity minimal` | Passed; 0 warnings, 0 errors |
-| `dotnet test cli/agentbox.slnx -c Release --no-restore --verbosity minimal` | 918 passed, 0 failed, 5 platform skips (923 total) |
+| `dotnet build cli/agentic-box.slnx -c Debug --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet test cli/agentic-box.slnx -c Debug --no-build --verbosity minimal` | 918 passed, 0 failed, 5 platform skips (923 total) |
+| `dotnet build cli/agentic-box.slnx -c Release --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet test cli/agentic-box.slnx -c Release --no-restore --verbosity minimal` | 918 passed, 0 failed, 5 platform skips (923 total) |
 | `dotnet csharpier check cli` | Passed |
 | `git diff --check` | Passed |
 
@@ -66,7 +66,7 @@ or real host-secret/runtime operations were performed.
 ### Reproductions and decisions
 
 All new behavior tests use the same confirmed CLI/harness seam described above.
-Focused commands used `dotnet $sdk10 test cli/agentbox.slnx --verbosity minimal
+Focused commands used `dotnet $sdk10 test cli/agentic-box.slnx --verbosity minimal
 --filter FullyQualifiedName~<test-name>` (adding `--no-restore` after restore), with
 `$sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'` to select the installed
 .NET 10 SDK explicitly without changing repository/global SDK settings.
@@ -134,10 +134,10 @@ list-continuation indentation is consistent.
 
 | Check | Result |
 | --- | --- |
-| `dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
-| `dotnet $sdk10 test cli/agentbox.slnx -c Debug --no-build --verbosity minimal` | 953 passed, 0 failed, 7 platform skips (960 total) |
-| `dotnet $sdk10 build cli/agentbox.slnx -c Release --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
-| `dotnet $sdk10 test cli/agentbox.slnx -c Release --no-build --verbosity minimal` | 953 passed, 0 failed, 7 platform skips (960 total) |
+| `dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet $sdk10 test cli/agentic-box.slnx -c Debug --no-build --verbosity minimal` | 953 passed, 0 failed, 7 platform skips (960 total) |
+| `dotnet $sdk10 build cli/agentic-box.slnx -c Release --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet $sdk10 test cli/agentic-box.slnx -c Release --no-build --verbosity minimal` | 953 passed, 0 failed, 7 platform skips (960 total) |
 | `dotnet csharpier check cli` | Passed |
 | `git diff --check` | Passed |
 
@@ -210,10 +210,10 @@ unknown-consumer restriction and `hostaddr` validation semantics.
 | Check | Result |
 | --- | --- |
 | Focused appsettings/lifecycle CLI tests | 213 passed, 0 failed, 2 explicit file-symlink skips (215 total) |
-| `dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
-| `dotnet $sdk10 test cli/agentbox.slnx -c Debug --no-build --verbosity minimal` | 988 passed, 0 failed, 7 platform skips (995 total) |
-| `dotnet $sdk10 build cli/agentbox.slnx -c Release --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
-| `dotnet $sdk10 test cli/agentbox.slnx -c Release --no-build --verbosity minimal` | 988 passed, 0 failed, 7 platform skips (995 total) |
+| `dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet $sdk10 test cli/agentic-box.slnx -c Debug --no-build --verbosity minimal` | 988 passed, 0 failed, 7 platform skips (995 total) |
+| `dotnet $sdk10 build cli/agentic-box.slnx -c Release --no-restore --verbosity minimal` | Passed; 0 warnings, 0 errors |
+| `dotnet $sdk10 test cli/agentic-box.slnx -c Release --no-build --verbosity minimal` | 988 passed, 0 failed, 7 platform skips (995 total) |
 | `dotnet csharpier check cli` | Passed |
 | `git diff --check` | Passed |
 

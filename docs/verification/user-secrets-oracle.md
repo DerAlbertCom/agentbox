@@ -22,7 +22,7 @@ transport remain owned by the shared flow.
 Commands were run in the task-owned `feat/issue-15-oracle` worktree, originally
 based on integration `2e51210` (the merged #13 foundation):
 
-- `dotnet test cli/agentbox.slnx -c Debug --filter FullyQualifiedName~UserSecretsOracleCommandTests`:
+- `dotnet test cli/agentic-box.slnx -c Debug --filter FullyQualifiedName~UserSecretsOracleCommandTests`:
   the initial Easy Connect slice failed **4 of 5** cases because generated
   endpoints were absent; the implementation passed all five.
 - The descriptor slice failed **4 of 4**, then passed all four after structural
@@ -76,11 +76,11 @@ Additional Oracle command cases prove compatible Easy Connect/descriptor merges,
 already-adapted consumers, conflicting remote/unmapped/service/options values,
 discovery-order independence and authoritative shared-secret precedence.
 
-- `dotnet test cli/agentbox.slnx -c Debug --filter 'FullyQualifiedName~UserSecretsOracleCommandTests|FullyQualifiedName~UserSecretsSharedStoreCommandTests'`:
+- `dotnet test cli/agentic-box.slnx -c Debug --filter 'FullyQualifiedName~UserSecretsOracleCommandTests|FullyQualifiedName~UserSecretsSharedStoreCommandTests'`:
   **90 passed**, no skips/failures (**66 Oracle**, **24 shared-store**).
-- `dotnet build cli/agentbox.slnx -c Debug --no-restore`:
+- `dotnet build cli/agentic-box.slnx -c Debug --no-restore`:
   **0 warnings, 0 errors**.
-- `dotnet test cli/agentbox.slnx -c Debug --no-build`:
+- `dotnet test cli/agentic-box.slnx -c Debug --no-build`:
   **1076 passed, 7 explicit platform skips, 0 failures** (**1083 total**).
 - `dotnet csharpier check cli` and `git diff --check`: passed.
 

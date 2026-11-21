@@ -104,7 +104,7 @@ public sealed class PrunePlanTests
             Image(prefix + "other-sbx-kit-src", "unused", "lookalike-source", 1),
             Image(prefix + "sandbox-kit-assembled-other", "old", "other", 1),
             Image(prefix + "sbx-kit-src-other", "unused", "other-source", 1),
-            Image("agentbox-rwest-team/squad", "local", "local", 1),
+            Image("agentic-box-rwest-team/squad", "local", "local", 1),
         ];
         TemplateImage[] images = [newest, stale, source, .. unrelated];
 

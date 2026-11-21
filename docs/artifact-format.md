@@ -35,7 +35,7 @@ Authentication uses Docker's host credential configuration. It does not depend o
 a change to the legacy `sbx kit push` implementation. The full command, naming and credential
 expectations are in [implementation.md](implementation.md).
 
-Every squad uses the stable path `agentbox-rwest-<team>/<squad>:<tag>`, with
+Every squad uses the stable path `agentic-box-rwest-<team>/<squad>:<tag>`, with
 components below a separate `/components/` segment. Builds must exclude personal
 configuration and retain matching source fingerprints. All selected inputs are
 validated/snapshotted before the first push. Uploaded artifact digests and every
@@ -79,7 +79,7 @@ with `sbx template load` does not make its kit reference resolve offline: a prob
 of `sbx create <loaded-reference> --pull never` still fetched the manifest from
 its registry. Template content alone is not a substitute for kit declarations.
 
-Agentbox therefore uses the supported source-kit host-builder path. `abox build`
+Agentic Box therefore uses the supported source-kit host-builder path. `abox build`
 builds the original workload once with the v3 frontend into host Docker using
 `--load`. It retains the original recipe separately and writes a thin v3 workload
 whose entire recipe is `FROM <unique-prebuilt-local-tag>`. `abox create --local`

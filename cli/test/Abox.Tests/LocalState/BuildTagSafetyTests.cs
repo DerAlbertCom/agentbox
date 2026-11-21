@@ -45,7 +45,7 @@ public sealed class BuildTagSafetyTests
                     {
                         Squad = "ac",
                         Tag = tag,
-                        Reference = $"agentbox-rwest-sample:{tag}",
+                        Reference = $"agentic-box-rwest-sample:{tag}",
                     }
                 ),
         };

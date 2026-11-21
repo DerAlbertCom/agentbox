@@ -2,7 +2,7 @@
 
 ## Approved seam and source
 
-The original specification is [issue #10](https://github.com/DerAlbertCom/agentbox/issues/10).
+The original specification is [issue #10](https://github.com/DerAlbertCom/agentic-box/issues/10).
 The subsequent user-requested on-demand squad-policy correction below supersedes
 its historical user-secret record prerequisite, not its replacement safeguards.
 Tests invoke the composed root CLI with the real shared resolver and fake external
@@ -42,7 +42,7 @@ Each feature slice was tested failing before its implementation:
    revision also refused missing, unknown and mismatched records; this prerequisite
    is superseded by the on-demand policy correction below.
 3. **Create replacement:** both consent cases failed before creator integration:
-   declining incorrectly succeeded with a new agentbox sandbox, and accepting
+   declining incorrectly succeeded with a new Agentic Box sandbox, and accepting
    skipped the legacy replacement prompt. Both passed after shared lookup and
    carrying the selected name through removal, state paths, creation and records.
 4. **Accepted run replacement:** after correcting test setup to supply valid local
@@ -97,10 +97,10 @@ service and run service tests passed **260 tests** both before and after the edi
 Use the Microsoft.Testing.Platform/xUnit syntax configured by this repository:
 
 ```sh
-dotnet test --solution cli/agentbox.slnx -- --filter-class '*LegacySandboxCompatibilityTests' --filter-class '*LegacySandboxNamingTests' --filter-class '*LegacySandboxInventoryTests'
-dotnet test --solution cli/agentbox.slnx
-dotnet build cli/agentbox.slnx --no-restore
-dotnet build cli/agentbox.slnx --configuration Release --no-restore
+dotnet test --solution cli/agentic-box.slnx -- --filter-class '*LegacySandboxCompatibilityTests' --filter-class '*LegacySandboxNamingTests' --filter-class '*LegacySandboxInventoryTests'
+dotnet test --solution cli/agentic-box.slnx
+dotnet build cli/agentic-box.slnx --no-restore
+dotnet build cli/agentic-box.slnx --configuration Release --no-restore
 dotnet csharpier check cli
 git diff --check
 ```

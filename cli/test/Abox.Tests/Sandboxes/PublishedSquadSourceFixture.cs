@@ -13,14 +13,14 @@ namespace Abox.Tests;
 
 internal sealed class PublishedSquadSourceFixture
 {
-    internal const string Reference = "rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac:latest";
+    internal const string Reference = "rwest.jfrog.io/release/agentic-box-rwest-mti-ca/ac:latest";
     internal const string Config =
-        "rwest.jfrog.io/published/agentbox-rwest-mti-ca/ac/components/config@"
+        "rwest.jfrog.io/published/agentic-box-rwest-mti-ca/ac/components/config@"
         + PublishedSquadFactory.Digest;
     private const string IndexDigest =
         "sha256:2222222222222222222222222222222222222222222222222222222222222222";
     internal const string PinnedSet =
-        "rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac@" + PublishedSquadFactory.Digest;
+        "rwest.jfrog.io/release/agentic-box-rwest-mti-ca/ac@" + PublishedSquadFactory.Digest;
     internal static readonly string ArchitectureName =
         RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "amd64";
     internal IProcessRunner Runner { get; } = Substitute.For<IProcessRunner>();

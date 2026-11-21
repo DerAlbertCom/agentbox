@@ -65,7 +65,7 @@ internal sealed class PublishServiceFixture
             {
                 Squad = squad,
                 Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
+                Reference = "agentic-box-rwest-sample:latest",
                 PublishRepository = repository,
                 WorkloadKitDirectory = workload,
             },

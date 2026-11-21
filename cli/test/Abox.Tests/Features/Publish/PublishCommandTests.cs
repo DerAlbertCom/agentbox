@@ -37,7 +37,7 @@ public sealed class PublishCommandTests
 
         // Assert
         exitCode.Should().Be(0);
-        _console.AllText.Should().Contain("agentbox-rwest-sample/ac:release");
+        _console.AllText.Should().Contain("agentic-box-rwest-sample/ac:release");
     }
 
     [Fact]
@@ -67,8 +67,8 @@ public sealed class PublishCommandTests
         exitCode.Should().Be(0);
         _console
             .AllText.Should()
-            .Contain("agentbox-rwest-one/ac:test")
-            .And.Contain("agentbox-rwest-two/bd:test");
+            .Contain("agentic-box-rwest-one/ac:test")
+            .And.Contain("agentic-box-rwest-two/bd:test");
         await _runner
             .Received(6)
             .RunAsync(
@@ -116,7 +116,7 @@ public sealed class PublishCommandTests
         exitCode.Should().Be(0);
         _console
             .AllText.Should()
-            .Contain("rwest.jfrog.io/shared-images-local/agentbox-rwest-sample/ac:latest");
+            .Contain("rwest.jfrog.io/shared-images-local/agentic-box-rwest-sample/ac:latest");
         await _runner
             .DidNotReceive()
             .RunAsync(
@@ -219,7 +219,7 @@ public sealed class PublishCommandTests
         {
             Squad = squad,
             Tag = tag,
-            Reference = $"agentbox-rwest-{team}:{tag}",
+            Reference = $"agentic-box-rwest-{team}:{tag}",
             PublishRepository = "mtiae-developer-container-images-local",
             WorkloadKitDirectory = workload,
             IncludesPersonalConfigurations = false,

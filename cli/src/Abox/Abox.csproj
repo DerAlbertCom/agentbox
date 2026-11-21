@@ -10,7 +10,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>abox</ToolCommandName>
-    <PackageId>rwest-agentbox</PackageId>
+    <PackageId>rwest-agentic-box</PackageId>
     <Description>AI agent sandboxes for your folders, built on Docker Sandboxes.</Description>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>

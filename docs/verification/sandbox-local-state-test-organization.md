@@ -38,7 +38,7 @@ The Debug test executable was run before and after the changes with
 
 ## Verification
 
-- `dotnet build cli/agentbox.slnx -c Debug -m:1`: zero warnings/errors.
+- `dotnet build cli/agentic-box.slnx -c Debug -m:1`: zero warnings/errors.
 - Direct executable runner, all `Sandboxes`/`LocalState` classes: **219 passed**,
   zero failures/skips.
 - Direct executable runner, full Debug suite before and after: **1,557 passed**,
@@ -71,7 +71,7 @@ On 2026-11-15, merged ticket commit
   pre-existing duplicate display-name groups are unchanged; none were introduced.
 - Fact/theory/data attribute text and assertion/received-call counts are unchanged
   in all twelve changed or moved C# files. All later integration tests remain.
-- `dotnet build cli/agentbox.slnx -c Debug -m:1`: **0 warnings, 0 errors**.
+- `dotnet build cli/agentic-box.slnx -c Debug -m:1`: **0 warnings, 0 errors**.
 - Focused executable Debug run across all eleven sandbox/local-state test classes,
   including their partial files: **244 passed, 0 skipped, 0 failed**.
 - Full executable Debug run before the merge (completing #30 verification) and

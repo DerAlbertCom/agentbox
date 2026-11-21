@@ -2,7 +2,7 @@
 
 **Historical procedure:** PR #48 removed the activation probe and its target
 preparation/cleanup helper. The
-[pre-removal procedure and sources](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https)
+[pre-removal procedure and sources](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https)
 remain archived, not runnable as a complete procedure from this checkout. The
 steps below explain the earlier gate; a future run needs a separately prepared
 disposable target and explicit authorization. Probe removal performed no live run.

@@ -41,7 +41,7 @@ public sealed class PublishDiscoveryTests
         manifest.IncludesPersonalConfigurations.Should().BeFalse();
         project
             .Console.AllText.Should()
-            .Contain("rwest.jfrog.io/source-images-local/agentbox-rwest-sample/ac:release");
+            .Contain("rwest.jfrog.io/source-images-local/agentic-box-rwest-sample/ac:release");
         await project
             .Runner.Received(4)
             .RunAsync(

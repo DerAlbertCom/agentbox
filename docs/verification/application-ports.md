@@ -147,11 +147,11 @@ Early disposable probe `abox-issue43-probe-a6f280c1` established:
    Existing unrelated mappings survived. Host listener inspection showed only
    `127.0.0.1` for the tested mappings. The task-owned sandbox was removed.
 
-The now-retired [runtime probe](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/RuntimeProbe) then exercised the
+The now-retired [runtime probe](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/RuntimeProbe) then exercised the
 **actual Debug abox executable** against disposable sandbox
 `abox-issue43-live-72d48a01-abox-F74D5`:
 
-- A self-contained Debug [synthetic .NET HTTP application](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/SyntheticHttp)
+- A self-contained Debug [synthetic .NET HTTP application](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/application-ports/SyntheticHttp)
   served `abox-issue43-dotnet-http-marker` from sandbox port 8203.
 - `abox ports --location ...` exited 0; a **subsequent** host request to
   `http://localhost:18203` returned that marker, after abox had exited.
@@ -293,7 +293,7 @@ the corresponding implementation. Adapter tests first failed on unimplemented
 publishing, then on invalid mapping/inventory/conflict protection. Tests observe
 the composed CLI seam and `SbxClient` process seam, not private parser methods.
 
-Run `dotnet test cli/agentbox.slnx -c Debug`, `dotnet csharpier check cli` and
+Run `dotnet test cli/agentic-box.slnx -c Debug`, `dotnet csharpier check cli` and
 `git diff --check`. No Release verification is needed for this slice.
 
 Original native-only Debug verification: **1752 passed, 15 platform skips, zero

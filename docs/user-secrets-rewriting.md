@@ -197,7 +197,7 @@ the xUnit executable directly:
 
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
-dotnet $sdk10 build cli/agentbox.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
 dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.SplitSettingsCommandTests -noLogo -maxThreads 2
 ```
 
@@ -234,7 +234,7 @@ use `--pull always`, and pass `empty` to `RewriteProbe`. No host kit sources,
 publication, registry writes, runtime upgrades or persistent settings are required.
 
 ```text
-rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954
+rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-mti-ca/ac@sha256:ae9c3211420760e6581ff3fdbcd3357cdd59761d1ad2d352ab0bba3adf81d954
 ```
 
 Verified 2026-11-15 with sbx v0.51.0 in task-owned
@@ -255,7 +255,7 @@ and Debug probe build. The focused rewrite/policy/CLI suite passed **101 tests**
 with no skips. Those builds had zero warnings/errors; CSharpier and
 `git diff --check` passed. No Release test run was performed for #8.
 
-The earlier #8 post-review integrated run, `dotnet test cli/agentbox.slnx -c Debug`,
+The earlier #8 post-review integrated run, `dotnet test cli/agentic-box.slnx -c Debug`,
 passed **756 tests**, with **4 explicit native-symlink privilege skips** (760 total),
 zero failures. The focused user-secrets/create/run regression set passed **366
 tests**, with the same **4 skips** (370 total). The Debug solution build had zero

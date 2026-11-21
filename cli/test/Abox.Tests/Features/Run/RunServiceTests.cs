@@ -404,7 +404,8 @@ public sealed class RunServiceTests
                 Squad = "ac",
                 Tag = "latest",
                 BuildCreatedAt = DateTimeOffset.MinValue,
-                KitReference = "rwest.jfrog.io/team-docker-release/agentbox-rwest-sample/ac:latest",
+                KitReference =
+                    "rwest.jfrog.io/team-docker-release/agentic-box-rwest-sample/ac:latest",
             }
         );
         _store.Save(

@@ -110,7 +110,7 @@ public sealed class PublishedSquadSourceOciTests
     {
         // Arrange
         _rawManifests[PinnedSet] = PlatformIndex(ChildDigest);
-        var child = "rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac@" + ChildDigest;
+        var child = "rwest.jfrog.io/release/agentic-box-rwest-mti-ca/ac@" + ChildDigest;
         _rawManifests[child] = PlatformIndex(LeafDigest);
 
         // Act
@@ -119,7 +119,7 @@ public sealed class PublishedSquadSourceOciTests
         // Assert
         result
             .Reference.Should()
-            .Be("rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac@" + LeafDigest);
+            .Be("rwest.jfrog.io/release/agentic-box-rwest-mti-ca/ac@" + LeafDigest);
         result.Metadata.State.Single().RelativePath.Should().Be(".published");
         _calls
             .Where(call => call.Arguments.Contains("--format"))
@@ -173,7 +173,7 @@ public sealed class PublishedSquadSourceOciTests
         var config = error switch
         {
             "wrong-registry" => Config.Replace("rwest.jfrog.io", "unrelated.example"),
-            "wrong-team" => Config.Replace("agentbox-rwest-mti-ca", "agentbox-rwest-other"),
+            "wrong-team" => Config.Replace("agentic-box-rwest-mti-ca", "agentic-box-rwest-other"),
             "wrong-squad" => Config.Replace("/ac/", "/other/"),
             "tag-not-digest" => Config.Replace("@" + PublishedSquadFactory.Digest, ":latest"),
             "extra-path" => Config + "/extra",
@@ -218,7 +218,7 @@ public sealed class PublishedSquadSourceOciTests
     public async Task HostPlatformResolutionIsBoundedAtFourNestedIndexes(int depth)
     {
         // Arrange
-        var repository = "rwest.jfrog.io/release/agentbox-rwest-mti-ca/ac@";
+        var repository = "rwest.jfrog.io/release/agentic-box-rwest-mti-ca/ac@";
         var digest = PublishedSquadFactory.Digest;
         for (var index = 0; index < depth; index++)
         {

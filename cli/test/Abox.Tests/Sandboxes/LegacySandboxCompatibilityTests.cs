@@ -165,7 +165,7 @@ public sealed class LegacySandboxCompatibilityTests
                 Squad = "ac",
                 Tag = "latest",
                 RootDirectory = cli.Root.Path,
-                Reference = "agentbox-rwest-sample:latest",
+                Reference = "agentic-box-rwest-sample:latest",
                 CreatedAt = DateTimeOffset.UtcNow,
                 LocalWorkload = LocalWorkloadFactory.Artifact(cli.Root),
             }

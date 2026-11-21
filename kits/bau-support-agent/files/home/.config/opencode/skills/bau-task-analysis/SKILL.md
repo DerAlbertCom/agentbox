@@ -15,7 +15,7 @@ A ticket ID is required. Without one, ask for it before doing anything else.
 Everything org-specific lives here. Adopting this skill elsewhere is an edit to this
 section — the workflow below refers to these values by name.
 
-This copy ships with the `bau-support-agent` kit of `agentbox` and is the
+This copy ships with the `bau-support-agent` kit of `Agentic Box` and is the
 only maintained copy; edit it there and open a PR. In a BAU sandbox the `ado` and
 `elastic` MCP servers come from the squad configuration (`teams/mti-ca/bau.abox`) and their
 credentials are proxy-managed — there is nothing to set up inside the sandbox.
@@ -357,7 +357,7 @@ a source queried that returned nothing.>
 ## Related
 
 - `~/bau-support-agent/` — the triage agent step 0 calls, shipped into BAU sandboxes by the
-  `bau-support-agent` kit in `agentbox`. Its `CAPE_BAU_TRIAGE_SYSTEM_PROMPT`
+  `bau-support-agent` kit in `Agentic Box`. Its `CAPE_BAU_TRIAGE_SYSTEM_PROMPT`
   mirrors steps 1-3 of this file, so a change to either should be checked against the other.
   `/bau-triage <id>` is the same path with the ticket ID given up front.
 - [L1 Support Agent](https://dev.azure.com/RWEST-MTI-TM/MarketDataIT/_wiki/wikis/MarketDataIT.wiki/2982/AI-L1-Support-Agent)

@@ -40,7 +40,7 @@ that new disposable sandbox, never an existing user core/app.
 
 ## Retired activation harness
 
-The [archived helper sources](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https)
+The [archived helper sources](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https)
 preserve the live harness used below. Its project commands no longer apply to this
 checkout. Removing it also removes the ready-made synthetic ASP.NET/tool subprocess
 and real-host target preparation/cleanup harness; receiver tests do not replace

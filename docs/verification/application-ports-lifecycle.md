@@ -9,7 +9,7 @@ with synthetic host files/certificate CLI output and substituted external adapte
 one transport test also uses the real `SbxClient` with a substituted process runner.
 
 This is not evidence of registry publication, a new Linux host, real-host renewal,
-or a new browser/Herdr run. #46's [Windows acceptance clarification](https://github.com/DerAlbertCom/agentbox/issues/46#issuecomment-6918879462)
+or a new browser/Herdr run. #46's [Windows acceptance clarification](https://github.com/DerAlbertCom/agentic-box/issues/46#issuecomment-6918879462)
 remains in force: Copilot is excluded, independent Linux-host proof is deferred,
 and the retained Deals 18203/manual browser result is distinct from disposable
 production-flow evidence. Existing Deals and the user's root script must not change.

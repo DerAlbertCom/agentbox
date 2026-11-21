@@ -85,7 +85,7 @@ public sealed class SandboxCreatorTeamTests
             {
                 Squad = "ac",
                 Tag = "latest",
-                Reference = "agentbox-rwest-sample:latest",
+                Reference = "agentic-box-rwest-sample:latest",
                 LocalWorkload = image,
             }
         );
@@ -107,7 +107,7 @@ public sealed class SandboxCreatorTeamTests
 
     [Theory]
     [InlineData(null)]
-    [InlineData("agentbox-rwest-other:latest")]
+    [InlineData("agentic-box-rwest-other:latest")]
     public async Task UnownedLegacyLocalCreationCannotPrepareOrReplaceASandbox(string? reference)
     {
         // Arrange

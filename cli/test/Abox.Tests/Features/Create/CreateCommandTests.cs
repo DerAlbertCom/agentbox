@@ -36,7 +36,7 @@ public sealed class CreateCommandTests
         await _sbx.Received(1)
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
-                    request.KitSource.Contains("agentbox-rwest-mti-ca/ac")
+                    request.KitSource.Contains("agentic-box-rwest-mti-ca/ac")
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -118,7 +118,7 @@ public sealed class CreateCommandTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                        == $"rwest.jfrog.io/{repository}/agentic-box-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                     && request.PullPolicy == PullPolicy.Always
                 ),
                 Arg.Any<CancellationToken>()
@@ -226,7 +226,7 @@ public sealed class CreateCommandTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                    == $"rwest.jfrog.io/team-docker-release/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                    == $"rwest.jfrog.io/team-docker-release/agentic-box-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                 ),
                 Arg.Any<CancellationToken>()
             );
@@ -290,7 +290,7 @@ public sealed class CreateCommandTests
             {
                 Squad = "ac",
                 Tag = "release",
-                Reference = "agentbox-rwest-sample:release",
+                Reference = "agentic-box-rwest-sample:release",
                 WorkloadKitDirectory = "/kits/workload",
                 LocalWorkload = LocalWorkloadFactory.Artifact(_root),
             }

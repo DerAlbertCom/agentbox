@@ -1,7 +1,7 @@
 # Real-host production HTTPS verification — 2026-11-16
 
 PR #48 retired the activation probe project/helper; its
-[source is archived before removal](https://github.com/DerAlbertCom/agentbox/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https).
+[source is archived before removal](https://github.com/DerAlbertCom/agentic-box/tree/4ad3b459368789e72400769017153cc1269b49f3/docs/verification/https).
 The SHA-pinned observations and artifact hashes below remain historical, not
 results rerun for cleanup or helpers available in the current checkout.
 
@@ -40,7 +40,7 @@ actual CLI reported `1.0.0+5b40b570aff9fb76b9c6379e55569eef83dc2df9`:
 ### Fresh actual real-host run — 13:59:01Z–14:01:03Z
 
 ```text
-Workspace: D:\dev\rwe\agentbox-worktrees\app-ports-46-review-fixes\.abox\abox-issue46-activation-production-12d3c4b1
+Workspace: D:\dev\rwe\agentic-box-worktrees\app-ports-46-review-fixes\.abox\abox-issue46-activation-production-12d3c4b1
 Sandbox:   abox-issue46-activation-production-12d3c4b1-abox-34A1B
 ```
 
@@ -184,7 +184,7 @@ The actual CLI reported
 **2026-11-16T13:36:04Z–13:37:53Z**, in a **different freshly prepared target**:
 
 ```text
-Workspace: D:\dev\rwe\agentbox-worktrees\app-ports-46-review-fixes\.abox\abox-issue46-activation-production-f26ae4db
+Workspace: D:\dev\rwe\agentic-box-worktrees\app-ports-46-review-fixes\.abox\abox-issue46-activation-production-f26ae4db
 Sandbox:   abox-issue46-activation-production-f26ae4db-abox-55F7F
 ```
 
@@ -246,7 +246,7 @@ were exercised live with this private identity or that independent review passed
 
 ### Artifacts and environment
 
-- Worktree `D:\dev\rwe\agentbox-worktrees\app-ports-46-review-fixes`, branch
+- Worktree `D:\dev\rwe\agentic-box-worktrees\app-ports-46-review-fixes`, branch
   `feature/app-ports-46-review-fixes`; clean tracked state before execution.
 - Actual Release CLI version:
   `1.0.0+d600a117e47f08cb09ba5098a2d10bb9d525d3b8`.
@@ -269,7 +269,7 @@ were exercised live with this private identity or that independent review passed
 **2026-11-16T13:31:42Z–13:33:29Z**:
 
 ```text
-Workspace: D:\dev\rwe\agentbox-worktrees\app-ports-46-review-fixes\.abox\abox-issue46-activation-production-58ca11ee
+Workspace: D:\dev\rwe\agentic-box-worktrees\app-ports-46-review-fixes\.abox\abox-issue46-activation-production-58ca11ee
 Sandbox:   abox-issue46-activation-production-58ca11ee-abox-F18BB
 ```
 

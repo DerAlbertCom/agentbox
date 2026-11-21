@@ -171,7 +171,7 @@ public sealed class SandboxCreatorTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                        == $"rwest.jfrog.io/{repository}/agentic-box-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                     && request.PullPolicy == PullPolicy.Always
                     && request.HostDockerContext == null
                     && request.Mixins.Count == 0
@@ -185,7 +185,7 @@ public sealed class SandboxCreatorTests
             .Load(SandboxName.For(_root.Path))!
             .KitReference.Should()
             .Be(
-                $"rwest.jfrog.io/{repository}/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                $"rwest.jfrog.io/{repository}/agentic-box-rwest-sample/ac@{PublishedSquadFactory.Digest}"
             );
     }
 
@@ -635,7 +635,7 @@ public sealed class SandboxCreatorTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                        == $"rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                     && request.Mixins.Count == 0
                     && request.KitArguments.Count == 0
                     && request.HostDockerContext == null
@@ -702,7 +702,7 @@ public sealed class SandboxCreatorTests
             .CreateAsync(
                 Arg.Is<SbxCreateRequest>(request =>
                     request.KitSource
-                        == $"rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac@{PublishedSquadFactory.Digest}"
+                        == $"rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-sample/ac@{PublishedSquadFactory.Digest}"
                     && request.Mixins.Count == 0
                     && request.KitArguments.Count == 0
                     && request.HostDockerContext == null

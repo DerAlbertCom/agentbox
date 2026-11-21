@@ -235,7 +235,7 @@ public sealed class PublishServiceOciTests
 
         // Assert
         const string repository =
-            "rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac";
+            "rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac";
         var inspected = _calls
             .Where(call => call.Arguments.Contains("--raw"))
             .Select(call => call.Arguments.Last());

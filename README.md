@@ -186,7 +186,7 @@ Only store IDs, key names/counts and safe recovery messages are reported.
 │   └── opencode-config/
 │       └── opencode-config.yaml
 └── cli/
-    ├── agentbox.slnx
+    ├── agentic-box.slnx
     ├── src/Abox/              the command line
     └── test/Abox.Tests/       the tests
 ```
@@ -203,11 +203,11 @@ it includes the .NET 10 runtime that abox needs. Once the package has been publi
 to a configured NuGet source, install it globally:
 
 ```sh
-dotnet tool install --global rwest-agentbox
+dotnet tool install --global rwest-agentic-box
 abox --help
 ```
 
-The NuGet package is named `rwest-agentbox`; the installed command is **`abox`**.
+The NuGet package is named `rwest-agentic-box`; the installed command is **`abox`**.
 Make sure the global tools directory is on PATH: `$HOME/.dotnet/tools` on Linux and
 macOS, or `%USERPROFILE%\.dotnet\tools` on Windows. The installer reports any PATH
 setup that is needed.
@@ -215,8 +215,8 @@ setup that is needed.
 To update or remove the tool:
 
 ```sh
-dotnet tool update --global rwest-agentbox
-dotnet tool uninstall --global rwest-agentbox
+dotnet tool update --global rwest-agentic-box
+dotnet tool uninstall --global rwest-agentic-box
 ```
 
 Installing the tool does not install sbx or the project's `teams/` and `kits/`
@@ -244,9 +244,9 @@ changing your global tools or publishing anything:
 
 ```sh
 dotnet pack cli/src/Abox/Abox.csproj --configuration Release --output cli/src/Abox/bin/packages
-dotnet tool install rwest-agentbox --source ./cli/src/Abox/bin/packages --tool-path ./cli/src/Abox/bin/tool-test
+dotnet tool install rwest-agentic-box --source ./cli/src/Abox/bin/packages --tool-path ./cli/src/Abox/bin/tool-test
 ./cli/src/Abox/bin/tool-test/abox --help
-dotnet tool uninstall rwest-agentbox --tool-path ./cli/src/Abox/bin/tool-test
+dotnet tool uninstall rwest-agentic-box --tool-path ./cli/src/Abox/bin/tool-test
 ```
 
 `--source` restricts installation to the local package directory. The package and
@@ -299,18 +299,18 @@ Runtime/discovery errors stop the command; they are not treated as absence.
 
 A legacy sandbox is reused **in place**, including when sbx exec needs to start
 it. Probes, launchers and secret copying use its actual name. If both names exist,
-the agentbox name wins and the legacy sandbox is left alone. There is no automatic
+the Agentic Box name wins and the legacy sandbox is left alone. There is no automatic
 rename, recreation, cleanup, adoption record or persistent-state/Herdr migration.
 Arbitrary custom names and workspace-metadata matches are not discovered.
 
 `run` and `user-secrets` still never create a missing sandbox. Normal `create`
 uses current naming when neither candidate exists. Replacing an existing legacy
 sandbox still requires the usual confirmation (or explicit `--yes`), lists the
-same losses, and retains the selected name rather than converting it to agentbox
+same losses, and retains the selected name rather than converting it to Agentic Box
 naming. An accepted newer-build replacement from `run` does the same.
 
 On-demand `user-secrets` does **not verify the sandbox's squad** or require an
-agentbox record, even when `abox.json` declares a squad. It copies into the resolved
+Agentic Box record, even when `abox.json` declares a squad. It copies into the resolved
 existing sandbox without creating or changing any record. Create/run replacement
 squad checks remain unchanged. Review the [user-secret safety contract](#copying-net-user-secrets)
 before copying. Historical path spelling and link rules determine the legacy hash;
@@ -571,7 +571,7 @@ and representative Unix transfer are not independent Unix-host sbx verification.
 ### Creating local and published sandboxes
 
 For example, `abox create --team sample --squad ac --tag latest` pulls
-`rwest.jfrog.io/mtiae-docker-release/agentbox-rwest-sample/ac:latest`, validates its
+`rwest.jfrog.io/mtiae-docker-release/agentic-box-rwest-sample/ac:latest`, validates its
 bundled metadata and creates from its immutable platform digest with `--pull always`.
 `abox create --team sample --local` uses a prebuilt local workload
 image plus its thin v3 runtime kit and local mixins, with `--pull never`. It does
@@ -610,7 +610,7 @@ From any directory, with no `teams/`, `kits/`, local build or abox user config:
 ```sh
 abox create --team sample --squad ac --tag latest --location /path/to/project
 # From D:\dev\rwe using this checkout's launcher:
-.\agentbox\run-abox.ps1 create --team mti-ca --squad ac
+.\agentic-box\run-abox.ps1 create --team mti-ca --squad ac
 ```
 
 Remote create needs a healthy, signed-in sbx runtime and host Docker with Buildx
@@ -678,7 +678,7 @@ abox publish --team sample --tag latest
 
 Publishing updates the chosen tag (`latest` by default) after remote descriptor
 verification. Every squad has a stable reference, for example
-`rwest.jfrog.io/mtiae-developer-container-images-local/agentbox-rwest-sample/ac:latest`.
+`rwest.jfrog.io/mtiae-developer-container-images-local/agentic-box-rwest-sample/ac:latest`.
 Builds containing personal `.abox` configuration, default local builds without
 fingerprints, older builds without provenance, and builds whose local sources
 have changed must be rebuilt with `--no-personal` before publication. The build

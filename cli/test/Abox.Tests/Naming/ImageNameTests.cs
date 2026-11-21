@@ -21,10 +21,10 @@ public sealed class ImageNameTests
     [Theory]
     [InlineData(null)]
     [InlineData("")]
-    [InlineData("agentbox-rwest-:release")]
-    [InlineData("agentbox-rwest-sample:other")]
-    [InlineData("registry.example/agentbox-rwest-sample:release")]
-    [InlineData("agentbox-other-sample:release")]
+    [InlineData("agentic-box-rwest-:release")]
+    [InlineData("agentic-box-rwest-sample:other")]
+    [InlineData("registry.example/agentic-box-rwest-sample:release")]
+    [InlineData("agentic-box-other-sample:release")]
     public void OtherReferencesAreNotLocalTeamReferences(string? reference)
     {
         // Arrange: the theory supplies references outside the requested local identity.

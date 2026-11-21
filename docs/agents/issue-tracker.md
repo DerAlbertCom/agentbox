@@ -1,6 +1,6 @@
 # Issue tracker: GitHub
 
-Issues and specs live in DerAlbertCom/agentbox on GitHub. Use the `gh` CLI,
+Issues and specs live in DerAlbertCom/agentic-box on GitHub. Use the `gh` CLI,
 explicitly targeting this repository for writes.
 
 ## Operations
@@ -25,22 +25,22 @@ explicitly targeting this repository for writes.
 
 For sub-issues, use `gh issue create --parent` or
 `gh issue edit --add-sub-issue` when supported. Otherwise POST to
-`repos/DerAlbertCom/agentbox/issues/<parent>/sub_issues`
+`repos/DerAlbertCom/agentic-box/issues/<parent>/sub_issues`
 with `sub_issue_id=<child database id>` using `gh api`.
 
 For blockers, use `--blocked-by` or `--add-blocked-by` when supported.
 Otherwise POST to
-`repos/DerAlbertCom/agentbox/issues/<child>/dependencies/blocked_by`
+`repos/DerAlbertCom/agentic-box/issues/<child>/dependencies/blocked_by`
 with `issue_id=<blocker database id>` using `gh api`.
 
 Count open blockers with
-`gh api repos/DerAlbertCom/agentbox/issues/<n> --jq .issue_dependencies_summary.blocked_by`
+`gh api repos/DerAlbertCom/agentic-box/issues/<n> --jq .issue_dependencies_summary.blocked_by`
 (0 means startable). `gh issue view <n> --json blockedBy` also lists closed
 blockers, so filter it: `--jq '[.blockedBy.nodes[] | select(.state == "OPEN")] | length'`.
 
-Database IDs come from `gh api repos/DerAlbertCom/agentbox/issues/<number> --jq .id`; they are distinct from issue numbers and node IDs.
+Database IDs come from `gh api repos/DerAlbertCom/agentic-box/issues/<number> --jq .id`; they are distinct from issue numbers and node IDs.
 
-File issues only into DerAlbertCom/agentbox. Never file into `mattpocock/skills`.
+File issues only into DerAlbertCom/agentic-box. Never file into `mattpocock/skills`.
 Before the first `gh issue create` of a session, confirm the target with
 `gh repo view --json nameWithOwner`.
 

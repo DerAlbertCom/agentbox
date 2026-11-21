@@ -103,7 +103,7 @@ public sealed class PublishServiceTeamTests
                 .Should()
                 .Contain(call =>
                     call.Arguments.Contains(
-                        $"rwest.jfrog.io/{team}-images-local/agentbox-rwest-{team}/ac:latest"
+                        $"rwest.jfrog.io/{team}-images-local/agentic-box-rwest-{team}/ac:latest"
                     )
                 );
         }
@@ -121,7 +121,7 @@ public sealed class PublishServiceTeamTests
         // Arrange
         SaveBuild("ac");
         var manifest = _store.Load(new SquadBuildIdentity("sample", "ac", "latest"))!;
-        manifest.Reference = owner is null ? null : $"agentbox-rwest-{owner}:latest";
+        manifest.Reference = owner is null ? null : $"agentic-box-rwest-{owner}:latest";
         var original = JsonSerializer.Serialize(manifest);
         var legacy = _root.File("state/builds/ac/latest/build.json", original);
         var qualified = ManifestPath(new("sample", "ac", "latest"));
