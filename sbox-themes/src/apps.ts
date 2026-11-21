@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { Liquid } from "liquidjs";
+import { foldersWith } from "./folders";
 import { channels, mix, type Palette } from "./palette";
 
 /** An app definition: `<apps>/<app>/app.yaml` next to the app's Liquid templates. */
@@ -26,12 +27,7 @@ export interface Rendered {
 }
 
 export function readApps(folder: string): App[] {
-  if (!existsSync(folder)) return [];
-  return readdirSync(folder, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory() && existsSync(join(folder, entry.name, "app.yaml")))
-    .map((entry) => entry.name)
-    .sort()
-    .map((name) => readApp(name, join(folder, name)));
+  return foldersWith(folder, "app.yaml").map((name) => readApp(name, join(folder, name)));
 }
 
 function readApp(name: string, folder: string): App {

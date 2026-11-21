@@ -1,9 +1,10 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 import type { Command, CommandContext } from "sbox-cli";
 import { readApps, renderApps, type Rendered } from "./apps";
+import { foldersWith } from "./folders";
 import { readPalette, type Palette } from "./palette";
 import { pick, preview } from "./picker";
 
@@ -73,11 +74,7 @@ class Themes {
   }
 
   names(): string[] {
-    if (!existsSync(this.themes)) return [];
-    return readdirSync(this.themes, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && existsSync(join(this.themes, entry.name, "colors.toml")))
-      .map((entry) => entry.name)
-      .sort();
+    return foldersWith(this.themes, "colors.toml");
   }
 
   exists(name: string): boolean {
