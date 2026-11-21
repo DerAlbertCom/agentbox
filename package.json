@@ -1,0 +1,14 @@
+{
+  "name": "agentic-box",
+  "private": true,
+  "type": "module",
+  "workspaces": ["sbox-cli"],
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.4",
+    "typescript": "5.9.3"
+  }
+}

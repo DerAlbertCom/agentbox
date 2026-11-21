@@ -12,3 +12,7 @@ obj/
 
 # Local state
 .abox/
+
+# Bun workspace
+node_modules/
+dist/
