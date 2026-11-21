@@ -8,20 +8,6 @@ namespace Abox.Launchers;
 public sealed record HostRequirement(string Program, string InstallHint);
 
 /// <summary>
-/// What a launcher gets when it starts.
-/// </summary>
-/// <param name="Location">The folder the sandbox works on.</param>
-/// <param name="SandboxName">The name of the sandbox.</param>
-/// <param name="WorkspacePath">Where the workspace is inside the sandbox.</param>
-/// <param name="Argv">The arguments after <c>--</c>.</param>
-public sealed record LauncherContext(
-    string Location,
-    string SandboxName,
-    string WorkspacePath,
-    IReadOnlyList<string> Argv
-);
-
-/// <summary>
 /// A way to open something for the user in a sandbox.
 /// </summary>
 public interface ILauncher
@@ -39,5 +25,5 @@ public interface ILauncher
     IReadOnlyList<string> SandboxRequirements { get; }
 
     /// <summary>Starts the launcher and returns its exit code.</summary>
-    Task<int> RunAsync(LauncherContext context, CancellationToken cancellationToken);
+    Task<int> RunAsync(LauncherSession session, CancellationToken cancellationToken);
 }

@@ -1,4 +1,5 @@
 using Abox.Configuration;
+using Abox.Https;
 using Abox.Infrastructure;
 using Abox.Kits;
 using Abox.Launchers;
@@ -16,15 +17,17 @@ namespace Abox.Features.Run;
 public sealed record RunRequest(string LauncherId, string Location, IReadOnlyList<string> Argv);
 
 /// <summary>
-/// Starts a launcher for the sandbox of a folder.
+/// Starts a launcher for the sandbox of a folder: the common Launcher steps in order, then
+/// the launcher itself with a Launcher session.
 /// </summary>
-public sealed class RunService(
+public sealed class RunFlow(
     LauncherRegistry launchers,
     SquadResolver resolver,
     BuildStore store,
     SandboxRecordStore records,
     SandboxCreator create,
     ISbxClient sbx,
+    SandboxHttps https,
     FolderSandbox sandboxes,
     CreateRecoveryHints recoveryHints,
     IHostPrograms hostPrograms,
@@ -88,14 +91,16 @@ public sealed class RunService(
             return 1;
         }
 
-        var context = new LauncherContext(
+        var session = new LauncherSession(
             location,
             sandbox.Name,
             await WorkspaceOfAsync(sandbox.Name, location, cancellationToken),
-            request.Argv
+            request.Argv,
+            sbx,
+            https
         );
 
-        return await launcher.RunAsync(context, cancellationToken);
+        return await launcher.RunAsync(session, cancellationToken);
     }
 
     private void WriteCreateHint(

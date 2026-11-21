@@ -14,14 +14,11 @@ public sealed class HerdrAppLauncherTests
     {
         // Arrange
         var fixture = new HerdrProtocolFixture($"{{\"machines\":[{{\"name\":\"{sandbox}\"}}]}}");
-        var context = fixture.Context with
-        {
-            SandboxName = sandbox,
-            Argv = ["tool", "space and \"quote\"", "$(not-a-shell)", "Grüße"],
-        };
+        var argv = new[] { "tool", "space and \"quote\"", "$(not-a-shell)", "Grüße" };
+        var session = fixture.SessionFor(sandbox, argv);
 
         // Act
-        var result = await fixture.Launcher.RunAsync(context, CancellationToken.None);
+        var result = await fixture.Launcher.RunAsync(session, CancellationToken.None);
 
         // Assert
         result.Should().Be(0);
@@ -45,7 +42,7 @@ public sealed class HerdrAppLauncherTests
         System
             .Text.Json.JsonSerializer.Deserialize<string[]>(opened.Arguments[9])
             .Should()
-            .Equal(context.Argv);
+            .Equal(argv);
     }
 
     [Fact]
@@ -88,23 +85,15 @@ public sealed class HerdrAppLauncherTests
     public async Task StaleSandboxParentDoesNotOpenDesktopOrReportSuccessfulLaunch()
     {
         // Arrange
-        var runner = Substitute.For<IProcessRunner>();
-        runner
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(new ProcessResult(0, "actual", ""));
-        var sbx = Substitute.For<ISbxClient>();
-        sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(42);
-        var launcher = new HerdrAppLauncher(runner, sbx, new TestConsole());
-        var context = new LauncherContext("location", "actual", "/workspace", []);
+        var fixture = new HerdrProtocolFixture();
+        fixture.Sbx.ExecAsync(Arg.Any<SbxExecRequest>(), Arg.Any<CancellationToken>()).Returns(42);
 
         // Act
-        var action = () => launcher.RunAsync(context, CancellationToken.None);
+        var action = fixture.LaunchAsync;
 
         // Assert
         var failure = (await action.Should().ThrowAsync<AboxException>()).Which;
         failure.Message.Should().Contain("fresh").And.Contain("not opened");
-        await runner
-            .DidNotReceive()
-            .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>());
+        fixture.Calls.Should().BeEmpty();
     }
 }

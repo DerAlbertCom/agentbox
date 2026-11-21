@@ -1079,7 +1079,7 @@ cli/src/Abox/
     Build/          abox build: the command and the service that does its work
     Publish/        abox publish: v3 frontend builds, JFrog pushes and set assembly
     Create/         abox create: the command and its slice registration
-    Run/            abox run: the command and the service that does its work
+    Run/            abox run: the command and the Run flow (common Launcher steps)
     Secrets/        abox secrets: the command and the service that does its work
     UserSecrets/    abox user-secrets: on-demand command only
     Ports/          abox ports: on-demand command only
@@ -1106,8 +1106,9 @@ cli/src/Abox/
     SandboxRecord.cs
     SandboxRecordStore.cs
   Launchers/        one class per launcher
-    ILauncher.cs           launcher contract and data-only LauncherContext;
-                           launcher services are constructor-injected
+    ILauncher.cs           launcher contract; launcher services are constructor-injected
+    LauncherSession.cs     what a launcher gets: location, sandbox, workspace, argv,
+                           exec in the sandbox and ensure launch-ready
   Sandboxes/        orchestration and resolution shared by create, run, ports and user-secrets
     SandboxCreator.cs       the create operation shared by create and run
     FolderSandbox.cs        this folder's Sandbox: one listing, current-first, exact legacy fallback

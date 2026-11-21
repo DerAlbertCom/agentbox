@@ -14,13 +14,13 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class RunServiceTests
+public sealed class RunFlowTests
 {
-    private readonly RunServiceFixture _fixture = new();
+    private readonly RunFlowFixture _fixture = new();
     private TempDirectory _root => _fixture.Root;
     private TestConsole _console => _fixture.Console;
     private ISbxClient _sbx => _fixture.Sbx;
-    private RunService _service => _fixture.Service;
+    private RunFlow _service => _fixture.Service;
     private BuildStore _store => _fixture.Store;
     private SandboxRecordStore _records => _fixture.Records;
     private SandboxCreator _create => _fixture.Create;
@@ -162,13 +162,14 @@ public sealed class RunServiceTests
             new SandboxRecord { Squad = "ac", Tag = "release" }
         );
         var config = new AboxConfig();
-        var service = new RunService(
-            new LauncherRegistry([new ShellLauncher(_sbx)]),
+        var service = new RunFlow(
+            new LauncherRegistry([new ShellLauncher()]),
             new SquadResolver(config),
             _store,
             _records,
             _create,
             _sbx,
+            SandboxFactory.Https(_sbx, _console),
             SandboxFactory.Resolver(_sbx, SandboxFactory.Hints(config, _store, _records)),
             SandboxFactory.Hints(config, _store, _records),
             Substitute.For<IHostPrograms>(),
@@ -288,13 +289,14 @@ public sealed class RunServiceTests
             _records.Save(SandboxName.For(_root.Path), new SandboxRecord());
         }
 
-        var service = new RunService(
-            new LauncherRegistry([new ShellLauncher(_sbx)]),
+        var service = new RunFlow(
+            new LauncherRegistry([new ShellLauncher()]),
             new SquadResolver(new AboxConfig()),
             _store,
             _records,
             _create,
             _sbx,
+            SandboxFactory.Https(_sbx, _console),
             SandboxFactory.Resolver(_sbx, SandboxFactory.Hints(new AboxConfig(), _store, _records)),
             SandboxFactory.Hints(new AboxConfig(), _store, _records),
             Substitute.For<IHostPrograms>(),
