@@ -28,12 +28,13 @@ public sealed class LauncherSession(
     /// <summary>The arguments after <c>--</c>.</summary>
     public IReadOnlyList<string> Argv => argv;
 
-    /// <summary>Runs a command in the workspace of the sandbox and returns its exit code.</summary>
+    /// <summary>Runs a command in the sandbox and returns its exit code.</summary>
     public Task<int> ExecAsync(
         IReadOnlyList<string> command,
         CancellationToken cancellationToken,
         bool allocateTty = false,
-        bool keepStandardInputOpen = false
+        bool keepStandardInputOpen = false,
+        string? workingDirectory = null
     ) =>
         sbx.ExecAsync(
             new SbxExecRequest(
@@ -41,7 +42,7 @@ public sealed class LauncherSession(
                 command,
                 allocateTty,
                 keepStandardInputOpen,
-                workspacePath
+                workingDirectory
             ),
             cancellationToken
         );
