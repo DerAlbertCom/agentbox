@@ -1,0 +1,29 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: sbox themes
+description: The sbox theme command, with the color themes for the agents and terminal tools.
+version: "1.0.0"
+requires: [sbox]
+args:
+  THEME:
+    default: tokyo-night
+    pattern: '[A-Za-z0-9_-]+'
+    env: SBOX_THEME
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: env HOME=/home/agent /home/agent/.local/bin/sbox theme --apply
+          user: "1000"
+          env: [SBOX_THEME]
+      startup:
+        - command: env HOME=/home/agent /home/agent/.local/bin/sbox theme --apply
+          user: "1000"
+          env: [SBOX_THEME]
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The color theme of the sandbox's apps is the user's choice, made with
+        `sbox theme` (`sbox theme --list` shows the themes). Do not change theme
+        files or theme settings unless the user asks for it.

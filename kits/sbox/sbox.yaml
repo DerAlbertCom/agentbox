@@ -3,6 +3,7 @@ schemaVersion: "3"
 kind: mixin
 displayName: sbox
 version: "1.0.0"
+provides: [sbox]
 capabilities:
   - type: com.docker.sandbox/agent-context@2
     config:
