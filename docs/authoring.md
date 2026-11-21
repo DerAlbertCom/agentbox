@@ -18,7 +18,7 @@ feature is built is in [implementation.md](implementation.md).
 ├── kits/
 │   └── pi-config/             a kit: a directory with a descriptor
 │       └── pi-config.yaml
-└── cli/                       the abox command line
+└── abox-cli/                  the abox command line
 ```
 
 A team is a folder under `teams`: it holds the `.abox` files of its squads, its

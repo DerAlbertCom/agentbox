@@ -15,7 +15,7 @@ actual host user secrets, or contacts a live sandbox.
 Before production edits, this command ran one test and failed in about one second:
 
 ```sh
-dotnet test --project cli/test/Abox.Tests -- --filter-method '*CapePrefixCopiesEveryMatchingHostStoreIntoTheExistingSandbox*'
+dotnet test --project abox-cli/test/Abox.Tests -- --filter-method '*CapePrefixCopiesEveryMatchingHostStoreIntoTheExistingSandbox*'
 ```
 
 ```text
@@ -76,7 +76,7 @@ See [the full selection semantics](../user-secrets-filtering.md).
 Focused command:
 
 ```sh
-dotnet test --project cli/test/Abox.Tests -- --filter-class '*UserSecretsStorePatternTests' --filter-class '*UserSecretsLifecycleTests' --filter-class '*UserSecretsCommandTests' --filter-class '*UserSecretsSafetyTests'
+dotnet test --project abox-cli/test/Abox.Tests -- --filter-class '*UserSecretsStorePatternTests' --filter-class '*UserSecretsLifecycleTests' --filter-class '*UserSecretsCommandTests' --filter-class '*UserSecretsSafetyTests'
 ```
 
 Result: **188 passed, 5 explicitly skipped, 193 total, zero failures**.
@@ -91,11 +91,11 @@ process runner, verifying that expanded IDs cannot bypass its authorization chec
 
 Final verification:
 
-- `dotnet test --solution cli/agentic-box.slnx`: **847 passed, 5 explicitly skipped,
+- `dotnet test --solution abox-cli/agentic-box.slnx`: **847 passed, 5 explicitly skipped,
   852 total, zero failures** (about 30 seconds).
-- `dotnet build cli/agentic-box.slnx --no-restore`: **zero warnings/errors**.
-- `dotnet build cli/agentic-box.slnx --no-restore -c Release`: **zero warnings/errors**.
-- `dotnet tool run csharpier check cli`: **160 files checked**.
+- `dotnet build abox-cli/agentic-box.slnx --no-restore`: **zero warnings/errors**.
+- `dotnet build abox-cli/agentic-box.slnx --no-restore -c Release`: **zero warnings/errors**.
+- `dotnet tool run csharpier check abox-cli`: **160 files checked**.
 - `git diff --check`: passed.
 
 Release tests were not run; the full test result above is Debug.
@@ -109,7 +109,7 @@ a linked APPDATA profile above an ordinary user-secrets root, for both exact IDs
 and prefixes. Before production edits:
 
 ```sh
-dotnet test --project cli/test/Abox.Tests -- --filter-method '*LinkedProfileAncestorsAreAllowedForExactAndPrefixSelections*'
+dotnet test --project abox-cli/test/Abox.Tests -- --filter-method '*LinkedProfileAncestorsAreAllowedForExactAndPrefixSelections*'
 ```
 
 Both cases failed with:
@@ -138,7 +138,7 @@ this follow-up does not add that behavior change.
 Follow-up focused verification:
 
 ```sh
-dotnet test --project cli/test/Abox.Tests -- --filter-class '*UserSecrets*'
+dotnet test --project abox-cli/test/Abox.Tests -- --filter-class '*UserSecrets*'
 ```
 
 Result: **357 passed, 5 explicitly skipped, 362 total, zero failures**.
@@ -147,10 +147,10 @@ isolation (**3 passed**, zero skips/failures).
 
 Follow-up full verification:
 
-- `dotnet test --solution cli/agentic-box.slnx`: **852 passed, 5 explicitly skipped,
+- `dotnet test --solution abox-cli/agentic-box.slnx`: **852 passed, 5 explicitly skipped,
   857 total, zero failures** (about 30 seconds).
 - Debug and Release solution builds: **zero warnings/errors**.
-- `dotnet tool run csharpier check cli`: **160 files checked**.
+- `dotnet tool run csharpier check abox-cli`: **160 files checked**.
 - `git diff --check`: passed.
 
 Release tests and independent Unix-host/live-sbx runs were not performed. Skip

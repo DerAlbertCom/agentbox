@@ -66,10 +66,10 @@ existing xUnit executable directly, after a serial Debug solution build:
 
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
-dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.CreateCommandTests -class Abox.Tests.RunCommandTests -noLogo -maxThreads 2
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
-dotnet csharpier check cli
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.CreateCommandTests -class Abox.Tests.RunCommandTests -noLogo -maxThreads 2
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
+dotnet csharpier check abox-cli
 git diff --check
 ```
 

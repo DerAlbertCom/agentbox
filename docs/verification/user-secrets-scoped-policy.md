@@ -49,8 +49,8 @@ configuration in tests is synthetic; no private parser interface was exposed.
 
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
-dotnet $sdk10 build cli/agentic-box.slnx -c Debug -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*ExplicitSandboxTcpPolicySuppliesRewriteIntentWithoutKitSources' -noLogo -maxThreads 2
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Debug -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*ExplicitSandboxTcpPolicySuppliesRewriteIntentWithoutKitSources' -noLogo -maxThreads 2
 ```
 
 The exact observed manually added rule shape failed with the value-free metadata
@@ -146,13 +146,13 @@ story record documents this host's `dotnet test` handshake limitation):
 
 ```powershell
 dotnet tool restore
-dotnet csharpier format cli
-dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class Abox.Tests.UserSecretsPolicyTests -class Abox.Tests.UserSecretsRewriteTests -noLogo -maxThreads 2
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
-dotnet $sdk10 build cli/agentic-box.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
-dotnet csharpier check cli
+dotnet csharpier format abox-cli
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class Abox.Tests.UserSecretsPolicyTests -class Abox.Tests.UserSecretsRewriteTests -noLogo -maxThreads 2
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
+dotnet csharpier check abox-cli
 git diff --check
 ```
 

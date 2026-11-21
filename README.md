@@ -185,7 +185,7 @@ Only store IDs, key names/counts and safe recovery messages are reported.
 │   │   └── pi-config.yaml
 │   └── opencode-config/
 │       └── opencode-config.yaml
-└── cli/
+└── abox-cli/
     ├── agentic-box.slnx
     ├── src/Abox/              the command line
     └── test/Abox.Tests/       the tests
@@ -227,7 +227,7 @@ Use `create --local --root <project>` when the sandbox location is outside that 
 ## Building and running the command line
 
 ```sh
-cd cli
+cd abox-cli
 dotnet build
 dotnet test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noColor
 dotnet run --project src/Abox -- build --team sample --root .. --no-verify
@@ -243,10 +243,10 @@ From the repository root, pack and install into a fresh isolated directory witho
 changing your global tools or publishing anything:
 
 ```sh
-dotnet pack cli/src/Abox/Abox.csproj --configuration Release --output cli/src/Abox/bin/packages
-dotnet tool install rwest-agentic-box --source ./cli/src/Abox/bin/packages --tool-path ./cli/src/Abox/bin/tool-test
-./cli/src/Abox/bin/tool-test/abox --help
-dotnet tool uninstall rwest-agentic-box --tool-path ./cli/src/Abox/bin/tool-test
+dotnet pack abox-cli/src/Abox/Abox.csproj --configuration Release --output abox-cli/src/Abox/bin/packages
+dotnet tool install rwest-agentic-box --source ./abox-cli/src/Abox/bin/packages --tool-path ./abox-cli/src/Abox/bin/tool-test
+./abox-cli/src/Abox/bin/tool-test/abox --help
+dotnet tool uninstall rwest-agentic-box --tool-path ./abox-cli/src/Abox/bin/tool-test
 ```
 
 `--source` restricts installation to the local package directory. The package and

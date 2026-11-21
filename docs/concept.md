@@ -240,9 +240,9 @@ Same rule for every XDG directory: use the variable if it is set, otherwise the 
 
 ## Implementation notes *(proposed)*
 
-- `cli/` is a .NET 10 console app using System.CommandLine. It builds one executable, `abox`, for Windows, Linux, and macOS. Tests go in `cli/test`.
+- `abox-cli/` is a .NET 10 console app using System.CommandLine. It builds one executable, `abox`, for Windows, Linux, and macOS. Tests go in `abox-cli/test`.
 - One wrapper class makes every `sbx` call, so flags and version checks live in one place. Arguments come from the table below and are passed as argument lists, never as shell strings.
-- Each launcher is one class implementing one launcher interface, in `cli/src/Abox/Launchers/`.
+- Each launcher is one class implementing one launcher interface, in `abox-cli/src/Abox/Launchers/`.
 - Two hidden internal helpers are not user commands: `exec` (run a command in a sandbox, starting it if stopped) and `pipe` (used by `hc`).
 
 ### `sbx` mapping (internal)

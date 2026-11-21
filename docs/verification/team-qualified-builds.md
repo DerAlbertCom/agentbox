@@ -48,11 +48,11 @@ After merging integration through
   runtime guidance).
 - Whole Debug executable xUnit run: **1604 passed, 7 skipped, zero failed**
   (**1611 total**).
-- `dotnet csharpier check cli` and `git diff --check`: passed.
+- `dotnet csharpier check abox-cli` and `git diff --check`: passed.
 
 The seven existing Windows-host limitations are four receiver-symlink cases,
 two linked-project cases and one case-distinct-directory case. They are skips,
 not passing cross-platform evidence. Tests ran via
-`cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe`, not `dotnet test`.
+`abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.exe`, not `dotnet test`.
 No live sandbox/registry operation or real host-secret access was used. Release
 verification was not run for this ticket.

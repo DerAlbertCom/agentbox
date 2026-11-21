@@ -3,7 +3,7 @@
 PR #48 removed the Angular runtime probe and its npm fixture folder. The live
 results below are historical, with source links pinned before removal. There is
 no ready-made Angular live harness in the current checkout; no Angular run was
-repeated for cleanup. Composed CLI/transport tests remain in `cli/test/Abox.Tests`.
+repeated for cleanup. Composed CLI/transport tests remain in `abox-cli/test/Abox.Tests`.
 
 ## Supported static scope
 
@@ -137,14 +137,14 @@ that this Windows host cannot create; descendant directory-link tests ran using
 native junctions. These skips are not claimed as passing.
 Focused command/adapter verification: **136 passed, 3 platform skips, zero
 failures** (139 total). Debug solution build had **zero warnings/errors**;
-CSharpier passed for `cli` and the checked-in application-port verification
+CSharpier passed for `abox-cli` and the checked-in application-port verification
 programs, and `git diff --check` passed. No Release verification is claimed.
 
 Run:
 
 ```powershell
-dotnet test cli/agentic-box.slnx -c Debug
-dotnet csharpier check cli
+dotnet test abox-cli/agentic-box.slnx -c Debug
+dotnet csharpier check abox-cli
 git diff --check
 ```
 
@@ -264,7 +264,7 @@ offset selection, retaining duplicate rows and rejecting a whole mixed plan for
 an invalid custom-offset Angular mapping. The Angular transport test's expected
 argv was updated for the #45 offset/binding-snapshot protocol; it still asserts
 only sbx calls, distinct relays and no duplicate publish/unpublish operation.
-Debug solution build had **zero warnings/errors**; CSharpier passed for `cli`
+Debug solution build had **zero warnings/errors**; CSharpier passed for `abox-cli`
 and all checked-in application-port verification programs, and `git diff --check`
 passed. Probe host ports 18354/18355 had no remaining listener after cleanup.
 The exact task-owned red-test and lock-generation temporary directories were

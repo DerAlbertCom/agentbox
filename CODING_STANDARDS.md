@@ -103,8 +103,8 @@ The code is formatted with [CSharpier](https://csharpier.com), which comes with 
 repository as a local tool:
 
 ```sh
-dotnet csharpier format cli     # format the code
-dotnet csharpier check cli      # check the formatting
+dotnet csharpier format abox-cli  # format the code
+dotnet csharpier check abox-cli   # check the formatting
 ```
 
 The hook in `.githooks/pre-commit` checks the formatting before every commit. Enable

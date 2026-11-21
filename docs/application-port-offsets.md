@@ -181,7 +181,7 @@ snapshot checks: **113 passed, one platform skip** (114 total). The skips are th
 and case-distinct-directory limitations; they are not counted as passes. The composed
 help output exposes `--offset` without loading runtime configuration. The solution
 and offset-probe builds each had **zero warnings/errors**. CSharpier checks for
-`cli` and the offset probe, plus `git diff --check`, passed. No Release verification
+`abox-cli` and the offset probe, plus `git diff --check`, passed. No Release verification
 is claimed.
 
 ### Native-binding safety hardening (current contract)
@@ -230,7 +230,7 @@ checked free before creation; the existing Deals/API port **18203 was not used**
 Final hardening Debug verification: **1814 passed, 15 platform skips, zero failures**
 (1829 total). Focused ports-command/adapter/folder-offset checks: **109 passed,
 one platform skip** (110 total). The solution, offset probe and runtime probe builds
-had **zero warnings/errors**. CSharpier passed for `cli` and the checked-in application
+had **zero warnings/errors**. CSharpier passed for `abox-cli` and the checked-in application
 port probes; `git diff --check` passed. No Release or independent Unix-host runtime
 verification is claimed. Configuration snapshot code was not changed; the unused
 three-argument `AppPorts.PublishAsync` overload was removed so callers must pass the

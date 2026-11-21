@@ -25,9 +25,9 @@ installed SDK **10.0.404**, rather than ambient **11.0.100**:
 
 ```powershell
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
-dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*UnsafeMappedOracleEndpointsFailBeforeAnyWriteWithoutLeakingValues' -noLogo -maxThreads 2
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*WhitespaceProseIsNotAnOracleEndpoint' -noLogo -maxThreads 2
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*UnsafeMappedOracleEndpointsFailBeforeAnyWriteWithoutLeakingValues' -noLogo -maxThreads 2
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*WhitespaceProseIsNotAnOracleEndpoint' -noLogo -maxThreads 2
 ```
 
 Each regression was added and run separately before its implementation change,
@@ -96,16 +96,16 @@ results. Runner configuration was not changed. Exact accepted commands:
 $sdk10 = 'C:/Program Files/dotnet/sdk/10.0.404/dotnet.dll'
 
 # Focused Debug verification after consolidation.
-dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.SplitSettingsCommandTests -class Abox.Tests.CreateCommandTests -class Abox.Tests.RunCommandTests -noLogo -maxThreads 2
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*CompatibleDisjointKeysAndAlreadyAdaptedConsumersMergeWithoutUnrelatedConflicts' -noLogo -maxThreads 2
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -class 'Abox.Tests.UserSecrets*' -class Abox.Tests.SplitSettingsCommandTests -class Abox.Tests.CreateCommandTests -class Abox.Tests.RunCommandTests -noLogo -maxThreads 2
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -method '*CompatibleDisjointKeysAndAlreadyAdaptedConsumersMergeWithoutUnrelatedConflicts' -noLogo -maxThreads 2
 
 # Full integrated Debug, then Release: serial builds and full direct runs.
-dotnet $sdk10 build cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
-dotnet $sdk10 build cli/agentic-box.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
-dotnet cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
-dotnet csharpier check cli
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Debug --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Debug/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
+dotnet $sdk10 build abox-cli/agentic-box.slnx -c Release --no-restore -m:1 --nologo --verbosity minimal
+dotnet abox-cli/test/Abox.Tests/bin/Release/net10.0/Abox.Tests.dll -noLogo -maxThreads 2
+dotnet csharpier check abox-cli
 git diff --check
 ```
 
