@@ -7,16 +7,6 @@ kits:
   - opencode-config
   - elastic-auth
 
-# Named values the kits and the MCP servers use.
-parameters:
-  elastic-url: https://foobar.com/mcp
-
-# The MCP servers every agent of the sandbox gets.
-mcp:
-  - name: elastic
-    url: ${{ parameters.elastic-url }}
-  - azuredevops
-
 # The directories that survive a replacement of the sandbox.
 state:
   - ~/.config/opencode/state
