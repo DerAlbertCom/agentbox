@@ -2,3 +2,12 @@
 #
 # Only the root configuration declares a workload. Every squad inherits from it.
 workload: sample
+
+# sbox, the command line inside the sandbox, with its theme command.
+kits:
+  - sbox
+  - themes
+
+# The saved theme choice survives a replacement of the sandbox.
+state:
+  - ~/.local/state/sbox

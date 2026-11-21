@@ -7,6 +7,7 @@ publishRepository: mtiae-developer-container-images-local
 
 mise:
   - nodejs@24.22.2
+  - bun@1.4.4
   - dotnet@9.0.303
   - dotnet@10.0.403
 
