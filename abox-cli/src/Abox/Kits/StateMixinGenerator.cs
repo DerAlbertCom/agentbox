@@ -40,6 +40,48 @@ public sealed class StateMixinGenerator
             descriptor.ToString().ReplaceLineEndings("\n")
         );
 
+        WriteHomeDirectories(entries, targetDirectory);
+
         return targetDirectory;
+    }
+
+    /// <summary>
+    /// sbx creates a missing mount point and its parents as root, which locks the sandbox
+    /// user out of folders like <c>~/.config/opencode</c>. The mixin's image creates the
+    /// home state directories first, owned by the sandbox user.
+    /// </summary>
+    private static void WriteHomeDirectories(
+        IReadOnlyList<StateEntry> entries,
+        string targetDirectory
+    )
+    {
+        var files = Path.Combine(targetDirectory, "files");
+        var dockerfile = Path.Combine(targetDirectory, MixinName + ".dockerfile");
+        if (Directory.Exists(files))
+        {
+            Directory.Delete(files, recursive: true);
+        }
+
+        File.Delete(dockerfile);
+
+        var homeEntries = entries
+            .Where(entry =>
+                entry.SandboxPath.StartsWith(StateEntry.SandboxHome + "/", StringComparison.Ordinal)
+            )
+            .ToList();
+        if (homeEntries.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var entry in homeEntries)
+        {
+            Directory.CreateDirectory(Path.Combine(files, "home", entry.RelativePath));
+        }
+
+        File.WriteAllText(
+            dockerfile,
+            $"FROM scratch\nCOPY --chown=1000:1000 files/home/ {StateEntry.SandboxHome}/\n"
+        );
     }
 }

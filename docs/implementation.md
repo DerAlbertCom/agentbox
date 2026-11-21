@@ -51,7 +51,9 @@ does not skip the workload image build.
 5. Writes the workload kit: `workload.yaml` (the descriptor) and `workload.dockerfile`
    (the recipe) in the build directory, with the scripts of the workload and the
    bundled CA certificates copied into it.
-6. Writes the state mixin: one `host-mount@1` per state directory.
+6. Writes the state mixin: one `host-mount@1` per state directory. Its image creates
+   the home state directories owned by the sandbox user, because sbx creates a missing
+   mount point and its parents as root.
 7. Runs the [kit build step](authoring.md#kit-build-step) of every local kit with a
    `build` file: copies the kit into `kits/<kit>/` of the build directory,
    runs `build <stagedKitDir>` from the kit's repository folder and uses the staged
