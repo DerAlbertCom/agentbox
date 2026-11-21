@@ -27,13 +27,6 @@ public sealed partial class SbxClient : ISbxClient
         _kitSources = new SbxKitSources(_invoker, paths);
     }
 
-    public Task StageDevelopmentCertificateAsync(
-        string sandbox,
-        ReadOnlyMemory<byte> pfx,
-        string password,
-        CancellationToken cancellationToken
-    ) => _certificates.StageDevelopmentCertificateAsync(sandbox, pfx, password, cancellationToken);
-
     public Task ActivateDevelopmentCertificateAsync(
         string sandbox,
         ReadOnlyMemory<byte> pfx,

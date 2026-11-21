@@ -75,7 +75,7 @@ public static class AboxServiceCollection
         services.AddSingleton<UserSecretsCopy>();
         services.AddSingleton<AppPorts>();
         services.AddSingleton<HostDevelopmentCertificate>();
-        services.AddSingleton<DevelopmentHttps>();
+        services.AddSingleton<SandboxHttps>();
         services.AddSingleton<Preflight>();
         services.AddSingleton<SquadResolver>();
         services.AddSingleton<BuildStore>();

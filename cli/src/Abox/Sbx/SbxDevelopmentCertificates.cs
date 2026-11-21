@@ -43,13 +43,6 @@ internal sealed class SbxDevelopmentCertificates(SbxInvoker invoker)
         InvalidConfiguration = 78,
     }
 
-    public Task StageDevelopmentCertificateAsync(
-        string sandbox,
-        ReadOnlyMemory<byte> pfx,
-        string password,
-        CancellationToken cancellationToken
-    ) => TransferDevelopmentCertificateAsync(sandbox, pfx, password, "stage", cancellationToken);
-
     public async Task ActivateDevelopmentCertificateAsync(
         string sandbox,
         ReadOnlyMemory<byte> pfx,

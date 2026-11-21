@@ -24,7 +24,7 @@ internal static class SandboxFactory
         new(
             sbx,
             console,
-            new DevelopmentHttps(
+            new SandboxHttps(
                 new HostDevelopmentCertificate(LocalWorkloadFactory.Runner(), console),
                 sbx,
                 console

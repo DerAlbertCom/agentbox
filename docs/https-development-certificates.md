@@ -81,7 +81,9 @@ are ignored; an ASP.NET marker in the bounded prefix retains the 1 MiB error.
 
 Non-Web/non-.NET folders perform **no host dotnet certificate operation**. An
 explicit Web SDK project requires certificate setup even without discovered launch
-ports. Shared `DevelopmentHttps` orchestration lives outside command slices, so
+ports. The shared `SandboxHttps` module (configure, refresh bootstrap, ensure
+launch-ready) lives outside command slices and is the only production caller of
+the sbx certificate operations, so
 creation/replacement reuses its prepared `AppPorts` flow with the immutable entry-time
 folder snapshot's **explicitly selected offset**, without a second command implementation.
 
@@ -146,9 +148,9 @@ to **five seconds**; other operations, including cleanup, wait up to three secon
 contention returns a distinct busy/retry result (75), not invalid configuration
 (78); readiness is not claimed and unconfirmed cleanup is still reported honestly.
 After a lost acknowledgement the new PFX may already be committed; no rollback,
-power-loss durability or secure-erasure claim is made. The earlier private
-`StageDevelopmentCertificateAsync` bundle adapter remains a transport-only seam;
-production setup uses activation and removes a validated old transport bundle.
+power-loss durability or secure-erasure claim is made. The earlier stage-only
+sbx operation is removed; production setup uses activation and removes a validated
+old transport bundle.
 
 ## Launch propagation and existing parents
 
