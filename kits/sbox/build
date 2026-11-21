@@ -1,0 +1,28 @@
+#!/bin/sh
+# The kit build step of sbox, run by abox build as `build <stagedKitDir>` from this folder.
+# Bundles the sbox core into the staged kit with Bun in a container, so the host needs
+# only Docker. The Bun version matches bun in the mise tools of the workload.
+set -eu
+
+bun_image="oven/bun:1.4.4"
+staged="$(cd "$1" && pwd)"
+repo="$(cd ../.. && pwd)"
+
+mkdir -p "$staged/files/home/.local/bin" "$staged/files/home/.local/share/sbox"
+cp "$repo/sbox-cli/launcher/sbox" "$staged/files/home/.local/bin/sbox"
+
+docker run --rm \
+  --volume "$repo:/src:ro" \
+  --volume "$staged/files/home/.local/share/sbox:/out" \
+  --volume agentic-box-bun-cache:/root/.bun/install/cache \
+  --env OWNER="$(id -u):$(id -g)" \
+  "$bun_image" sh -euc '
+    mkdir /work
+    cd /src
+    workspaces="$(bun -e "console.log(require(\"/src/package.json\").workspaces.join(\" \"))")"
+    tar --exclude=node_modules -cf - package.json bun.lock tsconfig.json $workspaces | tar -xf - -C /work
+    cd /work
+    bun install --frozen-lockfile
+    bun build --target=bun sbox-cli/src/main.ts --outfile /out/sbox.js
+    chown -R "$OWNER" /out
+  '

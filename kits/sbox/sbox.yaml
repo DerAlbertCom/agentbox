@@ -1,0 +1,11 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: sbox
+version: "1.0.0"
+capabilities:
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        `sbox` is the sandbox's command line for user-facing actions, such as
+        switching the color theme. `sbox --help` lists the installed commands.
