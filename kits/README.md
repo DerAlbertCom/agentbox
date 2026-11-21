@@ -29,7 +29,24 @@ so a sandbox carries at most one of them. It themes the agents (OpenCode, Claude
 pi) and the terminal tools of the sandbox (bat, delta, fzf, lazygit, yazi); the terminal
 colors themselves come from the host terminal.
 
-- `colorscheme-tokyo-night` follows the Omarchy Tokyo Night theme. The Claude Code and
-  pi themes come from Omarchy's palette; the bat/delta syntax theme and the yazi theme
-  are taken from [folke/tokyonight.nvim](https://github.com/folke/tokyonight.nvim)
-  extras (Apache-2.0, commit `cdc07ac`).
+Every color scheme kit is derived from one palette, so all its tools agree:
+
+| Tool | File in the sandbox | Selected by |
+|---|---|---|
+| OpenCode | `~/.config/opencode/themes/<scheme>.json` | `~/.config/opencode/cli.json` |
+| Claude Code | `~/.claude/themes/<scheme>.json` | `theme: custom:<scheme>` in `~/.claude/settings.json` |
+| pi | `~/.pi/agent/themes/<scheme>.json` | `theme: <scheme>` in `~/.pi/agent/settings.json` |
+| bat, delta | `~/.config/bat/themes/<scheme>.tmTheme` | `BAT_THEME`, `delta.syntax-theme` in `~/.config/git/config` |
+| fzf | — | `FZF_DEFAULT_OPTS` |
+| lazygit, yazi | `~/.config/lazygit/config.yml`, `~/.config/yazi/theme.toml` | the file itself |
+
+The kits add only files no other kit ships. The agents' settings files belong to other
+kits, so the install hook `~/.local/share/colorscheme/install.sh` sets their `theme` key
+and builds bat's theme cache when the sandbox is created.
+
+Dark: `catppuccin`, `ethereal`, `everforest`, `gruvbox`, `hackerman`, `jade-horse`,
+`kanagawa`, `last-horizon`, `lumon`, `matte-black`, `miasma`, `nord`, `retro-82`,
+`ristretto`, `solitude`, `starship`, `tokyo-night`, `vantablack`.
+Light: `catppuccin-latte`, `flexoki-light`, `lupine`, `rose-pine`, `white`.
+
+To switch a squad's scheme, replace its `colorscheme-<scheme>` kit entry.

@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = jade-horse
+	minus-style = syntax "#313531"
+	minus-non-emph-style = syntax "#313531"
+	minus-emph-style = syntax "#534744"
+	minus-empty-line-marker-style = syntax "#313531"
+	line-numbers-minus-style = "#d88d91"
+	plus-style = syntax "#263f36"
+	plus-non-emph-style = syntax "#263f36"
+	plus-emph-style = syntax "#3a5b4e"
+	plus-empty-line-marker-style = syntax "#263f36"
+	line-numbers-plus-style = "#8bcbb1"
+	line-numbers-zero-style = "#51625b"

@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = gruvbox
+	minus-style = syntax "#453231"
+	minus-non-emph-style = syntax "#453231"
+	minus-emph-style = syntax "#663d3b"
+	minus-empty-line-marker-style = syntax "#453231"
+	line-numbers-minus-style = "#ea6962"
+	plus-style = syntax "#3b3d31"
+	plus-non-emph-style = syntax "#3b3d31"
+	plus-emph-style = syntax "#51553c"
+	plus-empty-line-marker-style = syntax "#3b3d31"
+	line-numbers-plus-style = "#a9b665"
+	line-numbers-zero-style = "#5c554a"

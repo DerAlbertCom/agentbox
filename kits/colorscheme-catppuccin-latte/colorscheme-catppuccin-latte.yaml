@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Catppuccin Latte color scheme
+description: Catppuccin Latte colors for the agents and terminal tools of the sandbox.
+version: "1.0.0"
+provides: [colorscheme]
+args:
+  COLORSCHEME_BAT_THEME:
+    default: catppuccin-latte
+    env: BAT_THEME
+  COLORSCHEME_FZF_OPTS:
+    default: >-
+      --color=fg:#4c4f69,bg:-1,hl:#1e66f5,fg+:#4c4f69,bg+:#ccd0da,hl+:#1e66f5
+      --color=info:#8d90a1,prompt:#179299,pointer:#ea76cb,marker:#40a02b
+      --color=spinner:#ea76cb,header:#df8e1d,border:#bec0cb,gutter:-1
+    env: FZF_DEFAULT_OPTS
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/share/colorscheme/install.sh custom:catppuccin-latte catppuccin-latte
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The sandbox uses the Catppuccin Latte color scheme: OpenCode, Claude Code,
+        pi, bat, delta, fzf, lazygit and yazi are themed to match it.

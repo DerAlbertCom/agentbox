@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = kanagawa
+	minus-style = syntax "#38242c"
+	minus-non-emph-style = syntax "#38242c"
+	minus-emph-style = syntax "#532a31"
+	minus-empty-line-marker-style = syntax "#38242c"
+	line-numbers-minus-style = "#c34043"
+	plus-style = syntax "#2c3132"
+	plus-non-emph-style = syntax "#2c3132"
+	plus-emph-style = syntax "#3b443d"
+	plus-empty-line-marker-style = syntax "#2c3132"
+	line-numbers-plus-style = "#76946a"
+	line-numbers-zero-style = "#585654"

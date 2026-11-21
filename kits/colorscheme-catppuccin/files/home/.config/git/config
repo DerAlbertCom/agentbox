@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = catppuccin
+	minus-style = syntax "#3e2e40"
+	minus-non-emph-style = syntax "#3e2e40"
+	minus-emph-style = syntax "#624155"
+	minus-empty-line-marker-style = syntax "#3e2e40"
+	line-numbers-minus-style = "#f38ba8"
+	plus-style = syntax "#323c3f"
+	plus-non-emph-style = syntax "#323c3f"
+	plus-emph-style = syntax "#4a5d53"
+	plus-empty-line-marker-style = syntax "#323c3f"
+	line-numbers-plus-style = "#a6e3a1"
+	line-numbers-zero-style = "#535569"
