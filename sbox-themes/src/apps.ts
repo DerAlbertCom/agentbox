@@ -175,7 +175,7 @@ function isObject(value: unknown): value is Record<string, unknown> {
 
 async function writeAtomically(path: string, text: string) {
   await mkdir(dirname(path), { recursive: true });
-  const temporary = `${path}.sbox-${process.pid}`;
+  const temporary = `${path}.sbox-${crypto.randomUUID()}`;
   await writeFile(temporary, text);
   await rename(temporary, path);
 }
