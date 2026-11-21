@@ -87,6 +87,8 @@ The apps it themes today:
 | App | File in the sandbox | Selected by |
 |---|---|---|
 | OpenCode | `~/.config/opencode/themes/sbox.json` | `theme` in `~/.config/opencode/cli.json` (merged) |
+| Claude Code | `~/.claude/themes/sbox.json` | `theme: custom:sbox` in `~/.claude/settings.json` (merged) |
+| pi | `~/.pi/agent/themes/sbox.json` | `theme: sbox` in `~/.pi/agent/settings.json` (merged) |
 
 ### Adding a theme
 
