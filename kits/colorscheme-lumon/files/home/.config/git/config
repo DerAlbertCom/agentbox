@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = lumon
+	minus-style = syntax "#1e3341"
+	minus-non-emph-style = syntax "#1e3341"
+	minus-emph-style = syntax "#284357"
+	minus-empty-line-marker-style = syntax "#1e3341"
+	line-numbers-minus-style = "#4d86b0"
+	plus-style = syntax "#213542"
+	plus-non-emph-style = syntax "#213542"
+	plus-emph-style = syntax "#2d485b"
+	plus-empty-line-marker-style = syntax "#213542"
+	line-numbers-plus-style = "#5e95bc"
+	line-numbers-zero-style = "#505d67"

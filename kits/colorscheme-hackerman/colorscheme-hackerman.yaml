@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Hackerman color scheme
+description: Hackerman colors for the agents and terminal tools of the sandbox.
+version: "1.0.0"
+provides: [colorscheme]
+args:
+  COLORSCHEME_BAT_THEME:
+    default: hackerman
+    env: BAT_THEME
+  COLORSCHEME_FZF_OPTS:
+    default: >-
+      --color=fg:#ddf7ff,bg:-1,hl:#82FB9C,fg+:#ddf7ff,bg+:#1f253a,hl+:#c4d2ed
+      --color=info:#8999a2,prompt:#7cf8f7,pointer:#86a7df,marker:#4fe88f
+      --color=spinner:#86a7df,header:#50f7d4,border:#4a535c,gutter:-1
+    env: FZF_DEFAULT_OPTS
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/share/colorscheme/install.sh custom:hackerman hackerman
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The sandbox uses the Hackerman color scheme: OpenCode, Claude Code,
+        pi, bat, delta, fzf, lazygit and yazi are themed to match it.

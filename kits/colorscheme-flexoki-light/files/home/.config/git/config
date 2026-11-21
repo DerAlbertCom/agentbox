@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = flexoki-light
+	minus-style = syntax "#f8e2d6"
+	minus-non-emph-style = syntax "#f8e2d6"
+	minus-emph-style = syntax "#f0c4b8"
+	minus-empty-line-marker-style = syntax "#f8e2d6"
+	line-numbers-minus-style = "#D14D41"
+	plus-style = syntax "#ededd5"
+	plus-non-emph-style = syntax "#ededd5"
+	plus-emph-style = syntax "#d9ddb5"
+	plus-empty-line-marker-style = syntax "#ededd5"
+	line-numbers-plus-style = "#879A39"
+	line-numbers-zero-style = "#b7b5ad"

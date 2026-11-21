@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = solitude
+	minus-style = syntax "#1b1e20"
+	minus-non-emph-style = syntax "#1b1e20"
+	minus-emph-style = syntax "#262b2d"
+	minus-empty-line-marker-style = syntax "#1b1e20"
+	line-numbers-minus-style = "#565d60"
+	plus-style = syntax "#25292b"
+	plus-non-emph-style = syntax "#25292b"
+	plus-emph-style = syntax "#3e4244"
+	plus-empty-line-marker-style = syntax "#25292b"
+	line-numbers-plus-style = "#9fa5a9"
+	line-numbers-zero-style = "#484b4c"

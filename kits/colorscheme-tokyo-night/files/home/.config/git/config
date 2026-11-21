@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = tokyo-night
+	minus-style = syntax "#3b2936"
+	minus-non-emph-style = syntax "#3b2936"
+	minus-emph-style = syntax "#613847"
+	minus-empty-line-marker-style = syntax "#3b2936"
+	line-numbers-minus-style = "#f7768e"
+	plus-style = syntax "#2e3630"
+	plus-non-emph-style = syntax "#2e3630"
+	plus-emph-style = syntax "#44543c"
+	plus-empty-line-marker-style = syntax "#2e3630"
+	line-numbers-plus-style = "#9ece6a"
+	line-numbers-zero-style = "#45485b"

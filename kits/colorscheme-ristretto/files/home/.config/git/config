@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = ristretto
+	minus-style = syntax "#4b2f33"
+	minus-non-emph-style = syntax "#4b2f33"
+	minus-emph-style = syntax "#6f3a43"
+	minus-empty-line-marker-style = syntax "#4b2f33"
+	line-numbers-minus-style = "#fd6883"
+	plus-style = syntax "#3f4031"
+	plus-non-emph-style = syntax "#3f4031"
+	plus-emph-style = syntax "#555f40"
+	plus-empty-line-marker-style = syntax "#3f4031"
+	line-numbers-plus-style = "#adda78"
+	line-numbers-zero-style = "#645b5c"

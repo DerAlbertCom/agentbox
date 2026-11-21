@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Nord color scheme
+description: Nord colors for the agents and terminal tools of the sandbox.
+version: "1.0.0"
+provides: [colorscheme]
+args:
+  COLORSCHEME_BAT_THEME:
+    default: nord
+    env: BAT_THEME
+  COLORSCHEME_FZF_OPTS:
+    default: >-
+      --color=fg:#d8dee9,bg:-1,hl:#81a1c1,fg+:#d8dee9,bg+:#434c5e,hl+:#81a1c1
+      --color=info:#949aa5,prompt:#88c0d0,pointer:#b48ead,marker:#a3be8c
+      --color=spinner:#b48ead,header:#ebcb8b,border:#616773,gutter:-1
+    env: FZF_DEFAULT_OPTS
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/share/colorscheme/install.sh custom:nord nord
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The sandbox uses the Nord color scheme: OpenCode, Claude Code,
+        pi, bat, delta, fzf, lazygit and yazi are themed to match it.

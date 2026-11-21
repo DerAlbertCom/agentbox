@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Matte Black color scheme
+description: Matte Black colors for the agents and terminal tools of the sandbox.
+version: "1.0.0"
+provides: [colorscheme]
+args:
+  COLORSCHEME_BAT_THEME:
+    default: matte-black
+    env: BAT_THEME
+  COLORSCHEME_FZF_OPTS:
+    default: >-
+      --color=fg:#bebebe,bg:-1,hl:#e68e0d,fg+:#bebebe,bg+:#2a2a2a,hl+:#f59e0b
+      --color=info:#797979,prompt:#bebebe,pointer:#D35F5F,marker:#FFC107
+      --color=spinner:#D35F5F,header:#b91c1c,border:#464646,gutter:-1
+    env: FZF_DEFAULT_OPTS
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/share/colorscheme/install.sh custom:matte-black matte-black
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The sandbox uses the Matte Black color scheme: OpenCode, Claude Code,
+        pi, bat, delta, fzf, lazygit and yazi are themed to match it.

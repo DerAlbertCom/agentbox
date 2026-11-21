@@ -5,7 +5,7 @@ Source snapshot: `f8c2ac4801f29a73da086d42212fd41fca67cdbc`.
 
 | Squad | Base | Additions |
 | --- | --- | --- |
-| base | — | Workload, agents, Git defaults, RWE GHEC, Azure DevOps auth |
+| base | — | Workload, agents, Git defaults, RWE GHEC, Azure DevOps auth, Tokyo Night color scheme |
 | cape | base | CS defaults, database MCP, Elastic, JFrog, clean-code, host ports |
 | ac / bc / cc | cape | Aliases |
 | cape-subagents | cape | OpenCode model tiers |

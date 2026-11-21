@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = lupine
+	minus-style = syntax "#f3d5f2"
+	minus-non-emph-style = syntax "#f3d5f2"
+	minus-emph-style = syntax "#eaaae9"
+	minus-empty-line-marker-style = syntax "#f3d5f2"
+	line-numbers-minus-style = "#c900c4"
+	plus-style = syntax "#e0dcf4"
+	plus-non-emph-style = syntax "#e0dcf4"
+	plus-emph-style = syntax "#c2b9ed"
+	plus-empty-line-marker-style = syntax "#e0dcf4"
+	line-numbers-plus-style = "#4a2fd0"
+	line-numbers-zero-style = "#b9b9b9"

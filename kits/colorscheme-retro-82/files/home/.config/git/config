@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = retro-82
+	minus-style = syntax "#29212d"
+	minus-non-emph-style = syntax "#29212d"
+	minus-emph-style = syntax "#532c2b"
+	minus-empty-line-marker-style = syntax "#29212d"
+	line-numbers-minus-style = "#f85525"
+	plus-style = syntax "#05283d"
+	plus-non-emph-style = syntax "#05283d"
+	plus-emph-style = syntax "#043a4e"
+	plus-empty-line-marker-style = syntax "#05283d"
+	line-numbers-plus-style = "#028391"
+	line-numbers-zero-style = "#4d5354"

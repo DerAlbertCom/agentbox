@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Flexoki Light color scheme
+description: Flexoki Light colors for the agents and terminal tools of the sandbox.
+version: "1.0.0"
+provides: [colorscheme]
+args:
+  COLORSCHEME_BAT_THEME:
+    default: flexoki-light
+    env: BAT_THEME
+  COLORSCHEME_FZF_OPTS:
+    default: >-
+      --color=fg:#100F0F,bg:-1,hl:#205EA6,fg+:#100F0F,bg+:#CECDC3,hl+:#4385BE
+      --color=info:#706e69,prompt:#3AA99F,pointer:#CE5D97,marker:#879A39
+      --color=spinner:#CE5D97,header:#D0A215,border:#b7b5ad,gutter:-1
+    env: FZF_DEFAULT_OPTS
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/share/colorscheme/install.sh custom:flexoki-light flexoki-light
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The sandbox uses the Flexoki Light color scheme: OpenCode, Claude Code,
+        pi, bat, delta, fzf, lazygit and yazi are themed to match it.

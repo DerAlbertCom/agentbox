@@ -1,0 +1,13 @@
+[delta]
+	syntax-theme = miasma
+	minus-style = syntax "#2d2a27"
+	minus-non-emph-style = syntax "#2d2a27"
+	minus-emph-style = syntax "#38332c"
+	minus-empty-line-marker-style = syntax "#2d2a27"
+	line-numbers-minus-style = "#685742"
+	plus-style = syntax "#2b312b"
+	plus-non-emph-style = syntax "#2b312b"
+	plus-emph-style = syntax "#364236"
+	plus-empty-line-marker-style = syntax "#2b312b"
+	line-numbers-plus-style = "#5f875f"
+	line-numbers-zero-style = "#52524d"

@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Gruvbox color scheme
+description: Gruvbox colors for the agents and terminal tools of the sandbox.
+version: "1.0.0"
+provides: [colorscheme]
+args:
+  COLORSCHEME_BAT_THEME:
+    default: gruvbox
+    env: BAT_THEME
+  COLORSCHEME_FZF_OPTS:
+    default: >-
+      --color=fg:#d4be98,bg:-1,hl:#7daea3,fg+:#d4be98,bg+:#504945,hl+:#7daea3
+      --color=info:#8f826b,prompt:#89b482,pointer:#d3869b,marker:#a9b665
+      --color=spinner:#d3869b,header:#d8a657,border:#5c554a,gutter:-1
+    env: FZF_DEFAULT_OPTS
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/share/colorscheme/install.sh custom:gruvbox gruvbox
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The sandbox uses the Gruvbox color scheme: OpenCode, Claude Code,
+        pi, bat, delta, fzf, lazygit and yazi are themed to match it.

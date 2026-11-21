@@ -1,0 +1,28 @@
+# syntax=docker/sandbox-kit:3
+schemaVersion: "3"
+kind: mixin
+displayName: Last Horizon color scheme
+description: Last Horizon colors for the agents and terminal tools of the sandbox.
+version: "1.0.0"
+provides: [colorscheme]
+args:
+  COLORSCHEME_BAT_THEME:
+    default: last-horizon
+    env: BAT_THEME
+  COLORSCHEME_FZF_OPTS:
+    default: >-
+      --color=fg:#FAFCFB,bg:-1,hl:#b59790,fg+:#e2dddc,bg+:#584e51,hl+:#b59790
+      --color=info:#9b9c9b,prompt:#a5a0b6,pointer:#c4d8e2,marker:#87a9b0
+      --color=spinner:#c4d8e2,header:#6B5E73,border:#535354,gutter:-1
+    env: FZF_DEFAULT_OPTS
+capabilities:
+  - type: com.docker.sandbox/lifecycle@1
+    config:
+      install:
+        - command: sh /home/agent/.local/share/colorscheme/install.sh custom:last-horizon last-horizon
+          user: "1000"
+  - type: com.docker.sandbox/agent-context@2
+    config:
+      content: |
+        The sandbox uses the Last Horizon color scheme: OpenCode, Claude Code,
+        pi, bat, delta, fzf, lazygit and yazi are themed to match it.
