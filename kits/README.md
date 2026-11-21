@@ -65,7 +65,8 @@ at once, without recreating the sandbox:
 
 The current theme is the saved choice, then the kit arg `THEME` (`SBOX_THEME`,
 `tokyo-night` by default), then `tokyo-night`. A saved theme that no longer exists
-gets a warning and the fallback, and stays saved.
+gets a warning and the fallback, and stays saved; a `THEME` that is not installed
+gets a warning and `tokyo-night`.
 
 ```yaml
 kits:

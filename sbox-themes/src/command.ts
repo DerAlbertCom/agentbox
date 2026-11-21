@@ -38,7 +38,9 @@ export default {
     }
     if (values.apply) {
       const resolved = themes.resolve();
-      if (resolved.warning) ctx.stderr.write(ctx.style.yellow(`sbox theme: ${resolved.warning}`) + "\n");
+      for (const warning of resolved.warnings) {
+        ctx.stderr.write(ctx.style.yellow(`sbox theme: ${warning}`) + "\n");
+      }
       const rendered = await themes.render(resolved.name);
       ctx.stdout.write(`Applied the theme '${resolved.name}'.\n`);
       return rendered.failures.length ? 1 : 0;
@@ -93,14 +95,18 @@ class Themes {
   }
 
   /** The saved choice, then the kit's default `SBOX_THEME`, then tokyo-night. */
-  resolve(): { name: string; warning?: string } {
+  resolve(): { name: string; warnings: string[] } {
     const names = this.names();
     const saved = existsSync(this.saved) ? readFileSync(this.saved, "utf8").trim() : "";
-    const fallback =
-      [this.ctx.env.SBOX_THEME, fallbackTheme].find((name) => name && names.includes(name)) ?? fallbackTheme;
-    if (!saved) return { name: fallback };
-    if (names.includes(saved)) return { name: saved };
-    return { name: fallback, warning: `the saved theme '${saved}' is not installed; using '${fallback}'.` };
+    if (saved && names.includes(saved)) return { name: saved, warnings: [] };
+
+    const preset = this.ctx.env.SBOX_THEME;
+    const fallback = preset && names.includes(preset) ? preset : fallbackTheme;
+    const warnings: string[] = [];
+    if (saved) warnings.push(`the saved theme '${saved}' is not installed; using '${fallback}'.`);
+    if (preset && preset !== fallback)
+      warnings.push(`the default theme '${preset}' (SBOX_THEME) is not installed; using '${fallback}'.`);
+    return { name: fallback, warnings };
   }
 
   /** Renders every app with the theme and reports the failed run commands. */

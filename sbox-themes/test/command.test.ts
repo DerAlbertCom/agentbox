@@ -114,6 +114,21 @@ describe("sbox theme --current and --apply", () => {
     expect((await home.json(".config/opencode/themes/sbox.json")).theme.background.dark).toBe("#1a1b26");
   });
 
+  test("warn about an SBOX_THEME that is missing and apply tokyo-night", async () => {
+    // Arrange
+    await home.install();
+
+    // Act
+    const apply = await home.run(["--apply"], { SBOX_THEME: "tokio-night" });
+
+    // Assert
+    expect(apply.code).toBe(0);
+    expect(apply.stderr).toBe(
+      "sbox theme: the default theme 'tokio-night' (SBOX_THEME) is not installed; using 'tokyo-night'.\n",
+    );
+    expect(apply.stdout).toBe("Applied the theme 'tokyo-night'.\n");
+  });
+
   test("warn about a saved theme that is missing, apply the fallback and keep the choice", async () => {
     // Arrange
     await home.install();
