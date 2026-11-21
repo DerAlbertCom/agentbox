@@ -188,6 +188,9 @@ capabilities:
 - This repository keeps working kits to copy from: `kits/pi-config` writes an agent
   configuration, `kits/github-enterprise-auth` reaches a host through a credential the
   host holds.
+- A squad's color theme comes from the `sbox` and `themes` kits, with the kit arg
+  `THEME` as the team's default and `~/.local/state/sbox` as state to keep the user's
+  choice; see [themes](../kits/README.md#themes).
 
 ### Kit build step
 
