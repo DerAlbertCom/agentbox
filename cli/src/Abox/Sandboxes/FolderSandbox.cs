@@ -11,9 +11,6 @@ namespace Abox.Sandboxes;
 /// </summary>
 public sealed class FolderSandbox(ISbxClient sbx, IProcessRunner runner, CreateRecoveryHints hints)
 {
-    /// <summary>The name a new Sandbox for the folder gets, used when none exists yet.</summary>
-    public static string FallbackName(string location) => SandboxName.For(location);
-
     /// <summary>Returns the actual identity, or null when no supported identity exists. Discovery errors propagate.</summary>
     public async Task<SandboxInfo?> FindAsync(string location, CancellationToken cancellationToken)
     {
@@ -23,7 +20,7 @@ public sealed class FolderSandbox(ISbxClient sbx, IProcessRunner runner, CreateR
                 sandbox.Name.Equals(name, StringComparison.Ordinal)
             );
 
-        var current = Named(FallbackName(location));
+        var current = Named(SandboxName.For(location));
         if (current is not null)
             return current;
         var withoutSeparator = Path.TrimEndingDirectorySeparator(location);
@@ -55,16 +52,14 @@ public sealed class FolderSandbox(ISbxClient sbx, IProcessRunner runner, CreateR
         if (sandbox is not null)
             return sandbox;
 
-        var hint = hints.Resolve(FallbackName(location), location, folderConfig);
-        var lines = new List<string>
-        {
+        var hint = hints.Resolve(SandboxName.For(location), location, folderConfig);
+        string[] lines =
+        [
             note is null
                 ? $"There is no sandbox for '{location}'."
                 : $"There is no sandbox for '{location}'; {note}.",
-        };
-        if (hint.Diagnostic is not null)
-            lines.Add(hint.Diagnostic);
-        lines.Add("Create it with: " + hint.Command);
+            .. hint.Lines("Create it with: "),
+        ];
         throw new MissingFolderSandboxException(string.Join(Environment.NewLine, lines));
     }
 

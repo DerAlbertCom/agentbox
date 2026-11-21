@@ -140,18 +140,6 @@ public sealed partial class SbxClient : ISbxClient
             .ToList();
     }
 
-    /// <summary>Whether a sandbox with this name exists.</summary>
-    public async Task<SandboxInfo?> FindSandboxAsync(
-        string name,
-        CancellationToken cancellationToken
-    )
-    {
-        var sandboxes = await ListSandboxesAsync(cancellationToken);
-        return sandboxes.FirstOrDefault(sandbox =>
-            sandbox.Name.Equals(name, StringComparison.Ordinal)
-        );
-    }
-
     /// <summary>The template images the local runtime holds.</summary>
     public async Task<IReadOnlyList<TemplateImage>> ListTemplatesAsync(
         CancellationToken cancellationToken

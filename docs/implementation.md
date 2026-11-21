@@ -236,7 +236,7 @@ folder's Sandbox") for run, on-demand user secrets, ports and create/replacement
 candidate name against that list. It returns the actual `SandboxInfo` or null: current
 `SandboxName.For` first (also without an optional trailing directory separator on
 Windows), then the exact cape-agent-sandbox generated name only after a genuine
-not-found. `FallbackName` is the name a new Sandbox gets. `RequireAsync` is used by
+not-found. A new Sandbox gets `SandboxName.For(location)`. `RequireAsync` is used by
 run, ports and user-secrets: without a Sandbox it fails with
 `MissingFolderSandboxException`, whose message carries the full create-recovery hint
 (`Sandboxes/CreateRecoveryHints`: team, squad, tag, local flags and the diagnostic for

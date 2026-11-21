@@ -94,4 +94,9 @@ public sealed class CreateRecoveryHints(
 }
 
 /// <summary>A rendered recovery instruction and any safe, nonfatal build-provenance diagnostic.</summary>
-public sealed record CreateRecoveryHint(string Command, string? Diagnostic);
+public sealed record CreateRecoveryHint(string Command, string? Diagnostic)
+{
+    /// <summary>The diagnostic, if any, then the command after the prefix.</summary>
+    public IEnumerable<string> Lines(string prefix) =>
+        Diagnostic is null ? [prefix + Command] : [Diagnostic, prefix + Command];
+}

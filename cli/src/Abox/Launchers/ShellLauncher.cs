@@ -21,8 +21,7 @@ public sealed class ShellLauncher : ILauncher
             command,
             cancellationToken,
             allocateTty: true,
-            keepStandardInputOpen: true,
-            workingDirectory: session.WorkspacePath
+            keepStandardInputOpen: true
         );
     }
 }
