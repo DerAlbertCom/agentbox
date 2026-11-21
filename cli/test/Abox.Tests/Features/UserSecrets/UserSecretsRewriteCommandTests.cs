@@ -48,8 +48,8 @@ public sealed class UserSecretsRewriteCommandTests
         sbx.CreateAsync(Arg.Any<SbxCreateRequest>(), Arg.Any<CancellationToken>())
             .Returns(new SbxOutcome(0, ""));
         if (!automatic)
-            sbx.FindSandboxAsync(SandboxName.For(location), Arg.Any<CancellationToken>())
-                .Returns(new SandboxInfo(SandboxName.For(location), "running", null));
+            sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+                .Returns(new[] { new SandboxInfo(SandboxName.For(location), "running", null) });
         var programs = Substitute.For<IHostPrograms>();
         programs.Exists(Arg.Any<string>()).Returns(true);
         var paths = AboxPaths.For(root.CreateDirectory("config"), root.CreateDirectory("state"));

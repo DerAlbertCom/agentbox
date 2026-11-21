@@ -45,13 +45,13 @@ internal sealed class RunServiceFixture
         );
         Service = new RunService(
             launchers,
-            Config,
             new SquadResolver(Config),
             Store,
             Records,
             Create,
             Sbx,
-            SandboxFactory.Resolver(Sbx),
+            SandboxFactory.Resolver(Sbx, SandboxFactory.Hints(Config, Store, Records)),
+            SandboxFactory.Hints(Config, Store, Records),
             hostPrograms,
             Console
         );

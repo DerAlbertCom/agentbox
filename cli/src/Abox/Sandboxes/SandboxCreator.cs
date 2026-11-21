@@ -35,7 +35,7 @@ public sealed record SandboxCreationRequest(
 public sealed class SandboxCreator(
     SandboxRecordStore records,
     AboxPaths paths,
-    SandboxResolver sandboxes,
+    FolderSandbox sandboxes,
     ISbxClient sbx,
     IConsole console,
     LocalSquadSource local,
@@ -91,7 +91,7 @@ public sealed class SandboxCreator(
         var mcpToRegister = await FindMcpServersToRegisterAsync(manifest, cancellationToken);
         var existing =
             request.ExistingSandbox ?? await sandboxes.FindAsync(location, cancellationToken);
-        var name = existing?.Name ?? SandboxName.For(location);
+        var name = existing?.Name ?? FolderSandbox.FallbackName(location);
         var replace = ConfirmReplacement(existing, location, request.AssumeYes);
         cancellationToken.ThrowIfCancellationRequested();
         await RegisterMcpServersAsync(mcpToRegister, cancellationToken);

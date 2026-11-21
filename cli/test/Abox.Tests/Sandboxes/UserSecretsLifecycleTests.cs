@@ -207,11 +207,11 @@ public sealed class UserSecretsLifecycleTests
         fixture.Store("sample", "{}");
         if (entry == "run")
             fixture
-                .Sbx.FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>())
+                .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
                 .Returns(_ =>
                 {
                     fixture.Configure("""{"squad":"bd","userSecrets":["missing"]}""");
-                    return new SandboxInfo(fixture.Name, "running", OldBuild);
+                    return new[] { new SandboxInfo(fixture.Name, "running", OldBuild) };
                 });
         else
             fixture
@@ -246,11 +246,11 @@ public sealed class UserSecretsLifecycleTests
         fixture.Configure("""{"squad":"ac","userSecrets":["sample"]}""");
         fixture.Store("sample", "{}");
         fixture
-            .Sbx.FindSandboxAsync(fixture.Name, Arg.Any<CancellationToken>())
+            .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
             .Returns(_ =>
             {
                 cancellation.Cancel();
-                return new SandboxInfo(fixture.Name, "running", OldBuild);
+                return new[] { new SandboxInfo(fixture.Name, "running", OldBuild) };
             });
 
         // Act

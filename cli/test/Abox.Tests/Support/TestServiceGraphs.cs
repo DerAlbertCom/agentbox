@@ -43,7 +43,10 @@ internal static class TestServiceGraphs
         new(
             records,
             paths,
-            SandboxFactory.Resolver(sbx),
+            SandboxFactory.Resolver(
+                sbx,
+                SandboxFactory.Hints(new AboxConfig(), new BuildStore(paths), records)
+            ),
             sbx,
             console,
             local,

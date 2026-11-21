@@ -20,19 +20,17 @@ public sealed record RunRequest(string LauncherId, string Location, IReadOnlyLis
 /// </summary>
 public sealed class RunService(
     LauncherRegistry launchers,
-    AboxConfig config,
     SquadResolver resolver,
     BuildStore store,
     SandboxRecordStore records,
     SandboxCreator create,
     ISbxClient sbx,
-    SandboxResolver sandboxes,
+    FolderSandbox sandboxes,
+    CreateRecoveryHints recoveryHints,
     IHostPrograms hostPrograms,
     IConsole console
 )
 {
-    private readonly CreateRecoveryHints _recoveryHints = new(config, resolver, store, records);
-
     /// <summary>Starts the launcher and returns the exit code of the command.</summary>
     public async Task<int> RunAsync(RunRequest request, CancellationToken cancellationToken)
     {
@@ -55,12 +53,14 @@ public sealed class RunService(
         var location = Path.GetFullPath(request.Location);
         var folderConfig = await FolderConfig.LoadAsync(location, cancellationToken);
 
-        var sandbox = await sandboxes.FindAsync(location, cancellationToken);
-        if (sandbox is null)
+        SandboxInfo sandbox;
+        try
         {
-            var name = SandboxName.For(location);
-            console.WriteError($"There is no sandbox for '{location}'.");
-            WriteCreateHint("Create it with: ", name, location, folderConfig);
+            sandbox = await sandboxes.RequireAsync(location, folderConfig, null, cancellationToken);
+        }
+        catch (MissingFolderSandboxException exception)
+        {
+            console.WriteError(exception.Message);
             return 1;
         }
 
@@ -105,7 +105,7 @@ public sealed class RunService(
         FolderConfig? folderConfig
     )
     {
-        var hint = _recoveryHints.Resolve(name, location, folderConfig);
+        var hint = recoveryHints.Resolve(name, location, folderConfig);
         if (hint.Diagnostic is not null)
             console.WriteError(hint.Diagnostic);
         console.WriteError(prefix + hint.Command);

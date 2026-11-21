@@ -29,8 +29,8 @@ internal sealed class PortsCommandFixture : IDisposable
         Location = Root.CreateDirectory("folder");
         Sbx.GetVersionAsync(Arg.Any<CancellationToken>()).Returns(new Version(0, 51, 0));
         Sbx.DiagnoseAsync(Arg.Any<CancellationToken>()).Returns(new DiagnoseReport([]));
-        Sbx.FindSandboxAsync(Name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(Name, "running", null));
+        Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(Name, "running", null) });
         var programs = Substitute.For<IHostPrograms>();
         programs.Exists(Arg.Any<string>()).Returns(true);
         application = new CliTestApplication(

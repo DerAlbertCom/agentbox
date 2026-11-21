@@ -197,8 +197,8 @@ public sealed class NodeModulesDiscoveryTests
         var location = cli.Root.CreateDirectory($"folder/{selectedRoot}");
         cli.Root.File($"folder/{selectedRoot}/abox.json", """{"userSecrets":["shared"]}""");
         var name = SandboxName.For(location);
-        cli.Sbx.FindSandboxAsync(name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(name, "running", null));
+        cli.Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(name, "running", null) });
         cli.Sbx.GetUserSecretsHostPortsAsync(name, Arg.Any<CancellationToken>())
             .Returns(new[] { 8004 });
         var originals = FileSnapshots.CaptureText(cli.Root.Path);

@@ -26,8 +26,8 @@ public sealed class UserSecretsSafetyCommandTests
                 .Returns(new Version(0, 50, 0));
         if (result == "lookup")
             fixture
-                .Sbx.FindSandboxAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
-                .Returns((SandboxInfo?)null);
+                .Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+                .Returns(Array.Empty<SandboxInfo>());
         if (result == "destination")
             fixture
                 .Sbx.ValidateUserSecretsDestinationAsync(

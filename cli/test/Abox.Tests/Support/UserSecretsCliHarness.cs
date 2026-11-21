@@ -55,8 +55,8 @@ internal sealed class UserSecretsCliHarness : IDisposable
     }
 
     public void ExistingSandbox(DateTimeOffset? createdAt = null) =>
-        Sbx.FindSandboxAsync(Name, Arg.Any<CancellationToken>())
-            .Returns(new SandboxInfo(Name, "running", createdAt));
+        Sbx.ListSandboxesAsync(Arg.Any<CancellationToken>())
+            .Returns(new[] { new SandboxInfo(Name, "running", createdAt) });
 
     public void Configure(string json) => Root.File("folder/abox.json", json);
 
