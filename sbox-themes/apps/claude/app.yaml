@@ -1,0 +1,8 @@
+files:
+  - template: sbox.json.liquid
+    target: ~/.claude/themes/sbox.json
+settings:
+  - file: ~/.claude/settings.json
+    merge:
+      theme: custom:sbox
+restart: Claude Code

@@ -1,0 +1,8 @@
+files:
+  - template: sbox.json.liquid
+    target: ~/.pi/agent/themes/sbox.json
+settings:
+  - file: ~/.pi/agent/settings.json
+    merge:
+      theme: sbox
+restart: pi

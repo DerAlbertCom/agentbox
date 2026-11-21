@@ -96,6 +96,110 @@ describe("sbox theme <name>", () => {
   });
 });
 
+describe("sbox theme <name> for Claude Code", () => {
+  test("renders the Claude Code theme sbox from the palette and selects it", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    const result = await run(["tokyo-night"]);
+
+    // Assert
+    expect(result.code).toBe(0);
+    const theme = await homeJson(".claude/themes/sbox.json");
+    expect(theme.name).toBe("sbox");
+    expect(theme.base).toBe("dark");
+    expect(theme.overrides.claude).toBe("#7aa2f7");
+    expect(theme.overrides.claudeShimmer).toBe("#8aa7eb");
+    expect(theme.overrides.inactive).toBe("#707590");
+    expect(theme.overrides.diffRemovedWord).toBe("#613847");
+    expect(theme.overrides.selectionBg).toBe("#292e42");
+    expect(await homeJson(".claude/settings.json")).toEqual({ theme: "custom:sbox" });
+  });
+
+  test("uses the light base for a light theme", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    await run(["white"]);
+
+    // Assert
+    const theme = await homeJson(".claude/themes/sbox.json");
+    expect(theme.base).toBe("light");
+    expect(theme.overrides.text).toBe("#000000");
+    expect(theme.overrides.diffAdded).toBe("#e1e1e1");
+  });
+
+  test("keeps the other settings of Claude Code's settings.json", async () => {
+    // Arrange
+    await install();
+    await mkdir(join(home, ".claude"), { recursive: true });
+    const settings = { model: "opus", permissions: { allow: ["Bash(ls:*)"] }, theme: "dark" };
+    await writeFile(join(home, ".claude/settings.json"), JSON.stringify(settings, null, 2) + "\n");
+
+    // Act
+    await run(["nord"]);
+    const first = await homeFile(".claude/settings.json");
+    await run(["nord"]);
+
+    // Assert
+    expect(JSON.parse(first)).toEqual({ ...settings, theme: "custom:sbox" });
+    expect(await homeFile(".claude/settings.json")).toBe(first);
+  });
+});
+
+describe("sbox theme <name> for pi", () => {
+  test("renders the pi theme sbox from the palette and selects it", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    const result = await run(["tokyo-night"]);
+
+    // Assert
+    expect(result.code).toBe(0);
+    const theme = await homeJson(".pi/agent/themes/sbox.json");
+    expect(theme.name).toBe("sbox");
+    expect(theme.vars.background).toBe("#1a1b26");
+    expect(theme.vars.selectedBackground).toBe("#2f3954");
+    expect(theme.vars.panel).toBe("#232431");
+    expect(theme.vars.dimText).toBe("#5f637a");
+    expect(theme.colors.userMessageBg).toBe("panel");
+    expect(await homeJson(".pi/agent/settings.json")).toEqual({ theme: "sbox" });
+  });
+
+  test("uses light colors for a light theme", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    await run(["white"]);
+
+    // Assert
+    const theme = await homeJson(".pi/agent/themes/sbox.json");
+    expect(theme.vars.background).toBe("#ffffff");
+    expect(theme.vars.panel).toBe("#f0f0f0");
+  });
+
+  test("keeps the other settings of pi's settings.json", async () => {
+    // Arrange
+    await install();
+    await mkdir(join(home, ".pi/agent"), { recursive: true });
+    const settings = { defaultProvider: "anthropic", packages: ["npm:pi-skills"], theme: "dark" };
+    await writeFile(join(home, ".pi/agent/settings.json"), JSON.stringify(settings, null, 2) + "\n");
+
+    // Act
+    await run(["nord"]);
+    const first = await homeFile(".pi/agent/settings.json");
+    await run(["nord"]);
+
+    // Assert
+    expect(JSON.parse(first)).toEqual({ ...settings, theme: "sbox" });
+    expect(await homeFile(".pi/agent/settings.json")).toBe(first);
+  });
+});
+
 describe("sbox theme <name>, continued", () => {
   test("saves the choice and tells which apps to restart", async () => {
     // Arrange
@@ -107,7 +211,7 @@ describe("sbox theme <name>, continued", () => {
     // Assert
     expect(result.code).toBe(0);
     expect(await homeFile(".local/state/sbox/theme/current")).toBe("nord\n");
-    expect(result.stdout).toBe("Switched to the theme 'nord'. Restart OpenCode to see it.\n");
+    expect(result.stdout).toBe("Switched to the theme 'nord'. Restart Claude Code, OpenCode and pi to see it.\n");
   });
 
   test("selects the light mode for a light theme", async () => {
