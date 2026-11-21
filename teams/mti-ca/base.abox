@@ -4,6 +4,7 @@ kits:
   - git-user
   - rwe-ghec
   - azure-devops
+  - colorscheme-tokyo-night
 state:
   - ~/.local/share/opencode
   - ~/.local/state/opencode
