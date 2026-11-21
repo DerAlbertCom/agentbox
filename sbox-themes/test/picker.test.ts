@@ -196,6 +196,33 @@ describe("sbox theme in a terminal", () => {
     expect(await Bun.file(join(home, ".config/opencode/themes/sbox.json")).exists()).toBe(false);
   });
 
+  test("recolors the terminal with the chosen theme with SBOX_TERMINAL_THEME=1", async () => {
+    // Arrange
+    await fakeFzf("nord");
+
+    // Act
+    const result = await run([], { tty: true, env: { SBOX_TERMINAL_THEME: "1" } });
+
+    // Assert
+    expect(result.code).toBe(0);
+    expect(result.stdout).toStartWith("\x1b]4;0;#2e3440\x07");
+    expect(result.stdout).toContain("\x1b]11;#2e3440\x07\x1b]12;#d8dee9\x07Switched to the theme 'nord'.");
+  });
+
+  test("leaves the terminal colors alone without SBOX_TERMINAL_THEME=1 or when cancelled", async () => {
+    // Arrange
+    await fakeFzf("nord");
+
+    // Act
+    const unset = await run([], { tty: true });
+    await fakeFzf(null);
+    const cancelled = await run([], { tty: true, env: { SBOX_TERMINAL_THEME: "1" } });
+
+    // Assert
+    expect(unset.stdout).toStartWith("Switched to the theme 'nord'.");
+    expect(cancelled.stdout).toBe("");
+  });
+
   test("lists the themes without opening fzf when it is not a terminal", async () => {
     // Arrange
     await fakeFzf("nord");

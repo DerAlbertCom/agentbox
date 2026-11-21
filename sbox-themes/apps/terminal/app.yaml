@@ -1,0 +1,3 @@
+files:
+  - template: terminal-colors.sh.liquid
+    target: ~/.config/sbox/terminal-colors.sh
