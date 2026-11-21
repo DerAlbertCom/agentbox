@@ -10,7 +10,8 @@ const sources: ThemeSource[] = [
 ];
 
 const report = await syncThemes({ themes: join(import.meta.dir, "../themes"), sources, fetch });
-const line = (label: string, names: string[]) => console.log(`${label}: ${names.length ? names.join(", ") : "none"}`);
+const line = (label: string, names: string[]) =>
+  console.log(`${label}: ${names.length ? names.join(", ") : "none"}`);
 line("Added", report.added);
 line("Updated", report.updated);
 console.log(`Unchanged: ${report.unchanged.length} themes`);

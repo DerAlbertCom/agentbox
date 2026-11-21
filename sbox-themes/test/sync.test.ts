@@ -22,7 +22,9 @@ const single: ThemeSource = { repo: "someone/jade-theme", ref: "trunk", theme: "
 function gitHub(repos: Record<string, Record<string, string>>): typeof fetch {
   return (async (input: string | URL | Request) => {
     const url = String(input);
-    const tree = url.match(/^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)\/git\/trees\/([^?]+)\?recursive=1$/);
+    const tree = url.match(
+      /^https:\/\/api\.github\.com\/repos\/([^/]+\/[^/]+)\/git\/trees\/([^?]+)\?recursive=1$/,
+    );
     if (tree) {
       const files = repos[`${tree[1]}@${tree[2]}`];
       if (!files) return new Response("not found", { status: 404 });

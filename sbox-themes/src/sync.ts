@@ -67,10 +67,11 @@ export async function syncThemes(options: {
   };
 }
 
-async function download(source: ThemeSource, fetch: typeof fetch): Promise<Download[]> {
+async function download(source: ThemeSource, fetch: typeof globalThis.fetch): Promise<Download[]> {
   const get = async (url: string) => {
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`${source.repo}@${source.ref}: GET ${url} failed with ${response.status}`);
+    if (!response.ok)
+      throw new Error(`${source.repo}@${source.ref}: GET ${url} failed with ${response.status}`);
     return response;
   };
   const raw = async (path: string) =>
@@ -95,8 +96,14 @@ async function download(source: ThemeSource, fetch: typeof fetch): Promise<Downl
   const perTheme = themes.flatMap((theme) =>
     ["colors.toml", "LICENSE"]
       .filter((name) => files.has(`themes/${theme}/${name}`))
-      .map(async (name) => ({ path: join(theme, name), content: await raw(`themes/${theme}/${name}`), theme })),
+      .map(async (name) => ({
+        path: join(theme, name),
+        content: await raw(`themes/${theme}/${name}`),
+        theme,
+      })),
   );
-  const license = files.has("LICENSE") ? [raw("LICENSE").then((content) => ({ path: "LICENSE", content }))] : [];
+  const license = files.has("LICENSE")
+    ? [raw("LICENSE").then((content) => ({ path: "LICENSE", content }))]
+    : [];
   return Promise.all([...license, ...perTheme]);
 }

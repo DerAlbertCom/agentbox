@@ -1,0 +1,11 @@
+files:
+  - template: sbox.json.liquid
+    target: ~/.config/opencode/themes/sbox.json
+settings:
+  - file: ~/.config/opencode/cli.json
+    merge:
+      $schema: https://opencode.ai/v2/cli.json
+      theme:
+        name: sbox
+        mode: "{{ mode }}"
+restart: OpenCode
