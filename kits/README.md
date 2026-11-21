@@ -58,7 +58,8 @@ at once, without recreating the sandbox:
 | Command | What it does |
 |---|---|
 | `sbox theme <name>` | renders every app with the theme, saves the choice, tells which apps to restart |
-| `sbox theme --list` | lists the themes, the current one marked with `*`; also `sbox theme` alone |
+| `sbox theme` | in a terminal, opens an `fzf` picker with a color preview of each theme, the current one selected; otherwise like `--list` |
+| `sbox theme --list` | lists the themes, the current one marked with `*` |
 | `sbox theme --current` | prints the current theme |
 | `sbox theme --apply` | renders the current theme again; the install and startup hooks run it |
 
