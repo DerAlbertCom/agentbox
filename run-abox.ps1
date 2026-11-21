@@ -1,3 +1,4 @@
+#!/usr/bin/env pwsh
 $project = Join-Path $PSScriptRoot 'cli/src/Abox/Abox.csproj'
-dotnet run --project $project -- --verbose @args
+dotnet run --project $project -- @args
 exit $LASTEXITCODE
