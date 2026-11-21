@@ -7,13 +7,13 @@ using NSubstitute;
 
 namespace Abox.Tests;
 
-public sealed class RunServiceTeamTests
+public sealed class RunFlowTeamTests
 {
-    private readonly RunServiceFixture _fixture = new();
+    private readonly RunFlowFixture _fixture = new();
     private TempDirectory _root => _fixture.Root;
     private TestConsole _console => _fixture.Console;
     private ISbxClient _sbx => _fixture.Sbx;
-    private RunService _service => _fixture.Service;
+    private RunFlow _service => _fixture.Service;
     private BuildStore _store => _fixture.Store;
     private SandboxRecordStore _records => _fixture.Records;
 

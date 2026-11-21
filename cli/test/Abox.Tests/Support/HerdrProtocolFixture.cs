@@ -1,3 +1,4 @@
+using Abox.Https;
 using Abox.Infrastructure;
 using Abox.Launchers;
 using Abox.Sbx;
@@ -10,9 +11,9 @@ internal sealed class HerdrProtocolFixture
     internal IProcessRunner Runner { get; } = Substitute.For<IProcessRunner>();
     internal ISbxClient Sbx { get; } = Substitute.For<ISbxClient>();
     internal TestConsole Console { get; } = new();
-    internal HerdrAppLauncher Launcher => new(Runner, Sbx, Console);
+    internal HerdrAppLauncher Launcher => new(Runner, Console);
     internal List<ProcessRequest> Calls { get; } = [];
-    internal LauncherContext Context { get; }
+    internal LauncherSession Session => SessionFor("actual", []);
     internal Queue<ProcessResult> Statuses { get; } = new();
     internal ProcessResult StartupResult { get; set; } = new(0, "", "");
     internal ProcessResult AddResult { get; set; } = new(0, "", "");
@@ -23,7 +24,6 @@ internal sealed class HerdrProtocolFixture
         int listingExit = 0
     )
     {
-        Context = new LauncherContext("folder", "actual", "/runtime/workspace", []);
         Runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(call =>
@@ -57,5 +57,15 @@ internal sealed class HerdrProtocolFixture
             });
     }
 
-    internal Task<int> LaunchAsync() => Launcher.RunAsync(Context, CancellationToken.None);
+    internal LauncherSession SessionFor(string sandbox, IReadOnlyList<string> argv) =>
+        new(
+            "folder",
+            sandbox,
+            "/runtime/workspace",
+            argv,
+            Sbx,
+            new SandboxHttps(new HostDevelopmentCertificate(Runner, Console), Sbx, Console)
+        );
+
+    internal Task<int> LaunchAsync() => Launcher.RunAsync(Session, CancellationToken.None);
 }

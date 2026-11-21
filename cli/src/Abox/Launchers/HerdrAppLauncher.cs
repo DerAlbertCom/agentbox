@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Abox.Infrastructure;
-using Abox.Sbx;
 
 namespace Abox.Launchers;
 
@@ -8,8 +7,7 @@ namespace Abox.Launchers;
 /// The launcher that opens a space in the Herdr desktop app. The Herdr app runs the agents
 /// in terminals that stay alive in <c>hc</c>, so they keep running when the window closes.
 /// </summary>
-public sealed class HerdrAppLauncher(IProcessRunner runner, ISbxClient sbx, IConsole console)
-    : ILauncher
+public sealed class HerdrAppLauncher(IProcessRunner runner, IConsole console) : ILauncher
 {
     private const string AppProgram = "herdr-app";
     private const string CoreProgram = "hc";
@@ -30,22 +28,14 @@ public sealed class HerdrAppLauncher(IProcessRunner runner, ISbxClient sbx, ICon
 
     public IReadOnlyList<string> SandboxRequirements => [CoreProgram];
 
-    public async Task<int> RunAsync(LauncherContext context, CancellationToken cancellationToken)
+    public async Task<int> RunAsync(LauncherSession session, CancellationToken cancellationToken)
     {
         // A newly initialized pipe cannot repair an already-running remote core.
         // Cross the shared bootstrap before the desktop can report launch success.
-        if (
-            await sbx.ExecAsync(
-                new SbxExecRequest(context.SandboxName, ["true"]),
-                cancellationToken
-            ) != 0
-        )
-            throw new AboxException(
-                "Herdr was not opened: sandbox HTTPS launch readiness failed. Exit stale agents and explicitly initialize fresh core/service parents through abox after saving work; rerun 'abox ports' for recovery guidance. No core or app was restarted."
-            );
-        if (!await MachineExistsAsync(context.SandboxName, cancellationToken))
+        await session.EnsureLaunchReadyAsync(cancellationToken);
+        if (!await MachineExistsAsync(session.SandboxName, cancellationToken))
         {
-            await AddMachineAsync(context, cancellationToken);
+            await AddMachineAsync(session, cancellationToken);
         }
 
         await StartAppAsync(cancellationToken);
@@ -56,21 +46,21 @@ public sealed class HerdrAppLauncher(IProcessRunner runner, ISbxClient sbx, ICon
             "space.new",
             "--name",
             Path.GetFileName(
-                context.Location.TrimEnd(
+                session.Location.TrimEnd(
                     Path.DirectorySeparatorChar,
                     Path.AltDirectorySeparatorChar
                 )
             ),
             "--folder",
-            context.WorkspacePath,
+            session.WorkspacePath,
             "--machine",
-            context.SandboxName,
+            session.SandboxName,
         };
 
-        if (context.Argv.Count > 0)
+        if (session.Argv.Count > 0)
         {
             arguments.Add("--argv");
-            arguments.Add(JsonSerializer.Serialize(context.Argv));
+            arguments.Add(JsonSerializer.Serialize(session.Argv));
         }
 
         var result = await runner.RunAsync(
@@ -108,13 +98,13 @@ public sealed class HerdrAppLauncher(IProcessRunner runner, ISbxClient sbx, ICon
         return HerdrResponses.ContainsMachine(result.StandardOutput, sandboxName);
     }
 
-    private async Task AddMachineAsync(LauncherContext context, CancellationToken cancellationToken)
+    private async Task AddMachineAsync(LauncherSession session, CancellationToken cancellationToken)
     {
-        var via = $"abox pipe {context.SandboxName} -- sh -c";
+        var via = $"abox pipe {session.SandboxName} -- sh -c";
         var result = await runner.RunAsync(
             new ProcessRequest(
                 CoreProgram,
-                ["machine", "add", "--via", via, "--name", context.SandboxName]
+                ["machine", "add", "--via", via, "--name", session.SandboxName]
             ),
             cancellationToken
         );
