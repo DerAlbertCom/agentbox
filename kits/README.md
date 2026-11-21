@@ -92,7 +92,7 @@ The apps it themes today:
 | Claude Code | `~/.claude/themes/sbox.json` | `theme: custom:sbox` in `~/.claude/settings.json` (merged) |
 | pi | `~/.pi/agent/themes/sbox.json` | `theme: sbox` in `~/.pi/agent/settings.json` (merged) |
 | bat | `~/.config/bat/themes/sbox.tmTheme` | `BAT_THEME=sbox`, set by the kit; the switch rebuilds bat's cache |
-| delta | `~/.config/git/sbox.gitconfig` (only `[delta]`) | an `[include]` of it in `~/.config/git/config` (added once); `syntax-theme = sbox`, bat's theme |
+| delta | `~/.config/git/sbox.gitconfig` (only `[delta]`) | an `[include]` of it in `~/.config/git/config` (added once); `syntax-theme = sbox`, bat's theme, and `light` or `dark` by the theme's mode |
 | fzf | `~/.config/fzf/sbox` | `FZF_DEFAULT_OPTS_FILE`, set by the kit |
 | lazygit | `~/.config/lazygit/sbox.yml` | `LG_CONFIG_FILE`, set by the kit: `config.yml`, then `sbox.yml` (an empty `config.yml` is created when there is none) |
 | yazi | `~/.config/yazi/theme.toml` | the file itself |

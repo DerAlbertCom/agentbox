@@ -194,7 +194,7 @@ describe("sbox theme <name> for the terminal tools", () => {
 
     // Assert
     const theme = await home.file(".config/git/sbox.gitconfig");
-    expect(theme).toStartWith("[delta]\n\tsyntax-theme = sbox\n");
+    expect(theme).toStartWith("[delta]\n\tdark = true\n\tsyntax-theme = sbox\n");
     expect(theme).toContain('\tminus-style = syntax "#443b46"\n');
     expect(theme).toContain('\tminus-emph-style = syntax "#5c424d"\n');
     expect(theme).toContain('\tplus-style = syntax "#40494b"\n');
@@ -218,6 +218,19 @@ describe("sbox theme <name> for the terminal tools", () => {
       "[user]\n\tname = Someone\n[delta]\n\tside-by-side = true\n[include]\n\tpath = sbox.gitconfig\n",
     );
     expect(await home.file(".config/git/sbox.gitconfig")).toContain('\tline-numbers-minus-style = "#2a2a2a"\n');
+  });
+
+  test("selects delta's light mode for a light theme", async () => {
+    // Arrange
+    await home.install();
+
+    // Act
+    await home.run(["white"]);
+
+    // Assert
+    expect(await home.file(".config/git/sbox.gitconfig")).toStartWith(
+      "[delta]\n\tlight = true\n\tsyntax-theme = sbox\n",
+    );
   });
 
   test("renders fzf's options file with the palette's colors", async () => {
