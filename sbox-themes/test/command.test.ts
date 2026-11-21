@@ -302,7 +302,7 @@ describe("sbox theme <name> for the terminal tools", () => {
     expect(theme.mgr!.find_position).toEqual({ fg: "#8fbcbb", bold: true });
     expect(theme.tabs!.inactive).toEqual({ fg: "#81a1c1", bg: "#3f4551" });
     expect(theme.status!.overall).toEqual({ fg: "#d8dee9", bg: "#383e4a" });
-    expect(theme.filetype!.rules).toContainEqual({ name: "*/", fg: "#81a1c1" });
+    expect(theme.filetype!.rules).toContainEqual({ url: "*/", fg: "#81a1c1" });
   });
 });
 
