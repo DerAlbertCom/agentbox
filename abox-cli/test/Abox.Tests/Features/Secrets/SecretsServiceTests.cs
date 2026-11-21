@@ -1,4 +1,5 @@
 using Abox.Configuration;
+using Abox.Credentials;
 using Abox.Features.Prune;
 using Abox.Features.Run;
 using Abox.Features.Secrets;
@@ -27,6 +28,7 @@ public sealed class SecretsServiceTests
                 AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path)
             ),
             _sbx,
+            new SecretValues(_sbx, _console),
             _console
         );
 
@@ -458,10 +460,12 @@ public sealed class SecretsServiceTests
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
             .Returns(new ProcessResult(0, "", ""));
         var paths = AboxPaths.For(Path.Combine(_root.Path, "config"), _root.Path);
+        var sbx = new SbxClient(runner, paths);
         var service = new SecretsService(
             _resolver,
             new PersonalConfigurations(paths),
-            new SbxClient(runner, paths),
+            sbx,
+            new SecretValues(sbx, _console),
             _console
         );
         return (service, runner);
