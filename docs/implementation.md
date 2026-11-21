@@ -52,23 +52,28 @@ does not skip the workload image build.
    (the recipe) in the build directory, with the scripts of the workload and the
    bundled CA certificates copied into it.
 6. Writes the state mixin: one `host-mount@1` per state directory.
-7. Optionally checks additional local kit declarations with `sbx kit inspect`,
+7. Runs the [kit build step](authoring.md#kit-build-step) of every local kit with an
+   executable `build` file: copies the kit into `kits/<kit>/` of the build directory,
+   runs `build <stagedKitDir>` from the kit's repository folder and uses the staged
+   copy from here on. A failing script fails the build with its output. This also
+   runs with `--metadata-only`.
+8. Optionally checks additional local kit declarations with `sbx kit inspect`,
    passing their resolved arguments, unless `--no-verify` is given. Inspection
    **does not build images**. sbx 0.51.0 cannot inspect recipe-based local kits;
    those require `--no-verify` and are processed by sbx at creation.
-8. Builds the generated workload through the v3 frontend with host
+9. Builds the generated workload through the v3 frontend with host
    `docker buildx build --file workload.yaml --load --provenance=false`, using the
    current Docker context's docker-driver builder. Workload apt, mise, scripts
    and certificate setup run here, not at every sandbox create. BuildKit reuses
    unchanged instruction/layer caches. No images are pushed. A unique local tag
    `docker.io/library/abox-workload:<id>` and its actual immutable Docker image
    content ID are reported; source changes during building fail the build.
-9. Writes a separate versioned thin runtime kit: the same v3 workload descriptor
+10. Writes a separate versioned thin runtime kit: the same v3 workload descriptor
    and a companion Dockerfile containing only `FROM <unique-local-image>`.
    The original generated sources remain unchanged for publication. The versioned
    runtime directory keeps an unsuccessful rebuild from overwriting the previous
    build's runtime kit.
-10. Writes the manifest of the build: `build.json` in the build directory. It records
+11. Writes the manifest of the build: `build.json` in the build directory. It records
    whether personal configuration was included and the resolved workload's
    `publishRepository`. Only `--no-personal` builds capture SHA-256 fingerprints of
    configuration files (including the `.workload`) and local source trees (including
@@ -113,7 +118,8 @@ Published reference naming and tag promotion are unchanged.
 generated workload/state sources and saves the manifest, but skips sbx preflight,
 all kit inspection and all Docker/Buildx/image operations. `LocalWorkload` is
 always null. No sbx or Docker installation/daemon/authentication is required for
-this maintainer preparation. Remote `create` does not use it: it reads published
+this maintainer preparation by abox itself; kit build steps still run, and their
+scripts may need such tools. Remote `create` does not use it: it reads published
 metadata with Docker/Buildx and creates the sandbox with sbx.
 The command reports that no image was built/selected and prints the remote create
 command. `--no-personal` still excludes personal declarations and captures source

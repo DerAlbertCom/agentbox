@@ -12,7 +12,7 @@ namespace Abox.Features.Build;
 /// <param name="Tag">The tag the builds are stored under.</param>
 /// <param name="Verify">Whether additional local kit declarations are checked with sbx.</param>
 /// <param name="IncludePersonalConfigurations">Whether personal .abox files are merged into this local build.</param>
-/// <param name="MetadataOnly">Prepare only source/configuration metadata, without invoking external tools or selecting a local image.</param>
+/// <param name="MetadataOnly">Prepare only source/configuration metadata, without sbx, Docker or selecting a local image. Kit build steps still run, since publishing uses their output.</param>
 public sealed record BuildRequest(
     IReadOnlyList<SquadResolver.ResolvedTeam> Teams,
     string RootDirectory,

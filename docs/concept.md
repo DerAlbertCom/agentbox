@@ -18,6 +18,7 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 - **Workload**: a `.workload` file. Builds the squad's v3 workload kit: the base image, the mise tools, and the scripts.
 - **Base image**: the image built from a workload. Maintainers build it; users get it through their squad's layers.
 - **Kit**: a v3 kit, either a workload (full root filesystem) or a mixin (layers added on top). Used for team and squad customization, agent configuration, and auth. Spec: https://github.com/docker/sandbox-kit-spec
+- **Kit build step**: an executable `build` file in a local kit folder. `abox build` copies the kit into the build's staging folder, runs `build <stagedKitDir>` from the kit's folder in the repository, and uses the staged copy everywhere sbx sees the kit. Kits without one pass through unchanged. See [ADR 0001](adr/0001-kit-build-step.md).
 - **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, `state`, and `secrets`.
 - **Sandbox**: one per folder.
 - **Workspace**: the folder's files inside the sandbox, at the runtime-provided `WORKSPACE_DIR`.
