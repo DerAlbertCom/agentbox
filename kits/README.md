@@ -90,6 +90,15 @@ The apps it themes today:
 | OpenCode | `~/.config/opencode/themes/sbox.json` | `theme` in `~/.config/opencode/cli.json` (merged) |
 | Claude Code | `~/.claude/themes/sbox.json` | `theme: custom:sbox` in `~/.claude/settings.json` (merged) |
 | pi | `~/.pi/agent/themes/sbox.json` | `theme: sbox` in `~/.pi/agent/settings.json` (merged) |
+| bat | `~/.config/bat/themes/sbox.tmTheme` | `--theme=sbox` in `~/.config/bat/config`; the switch rebuilds bat's cache |
+| delta | `~/.config/git/config` (only `[delta]`) | `syntax-theme = sbox` there, bat's theme |
+| fzf | `~/.config/fzf/sbox` | `FZF_DEFAULT_OPTS_FILE`, set by the kit arg `THEMES_FZF_OPTS_FILE` |
+| lazygit | `~/.config/lazygit/config.yml` | the file itself |
+| yazi | `~/.config/yazi/theme.toml` | the file itself |
+
+The terminal tools pick up a switch on their next run, so the restart notice names
+only the agents. A switch owns each file it renders and overwrites it; the git
+settings of other kits belong in `~/.gitconfig`, which git reads as well.
 
 ### Adding a theme
 
