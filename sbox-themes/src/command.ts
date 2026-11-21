@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import type { Command, CommandContext } from "sbox-cli";
 import { readApps, renderApps, type Rendered } from "./apps";
 import { readPalette, type Palette } from "./palette";
-import { preview } from "./picker";
+import { pick, preview } from "./picker";
 
 const fallbackTheme = "tokyo-night";
 
@@ -42,7 +42,11 @@ export default {
       ctx.stdout.write(`Applied the theme '${resolved.name}'.\n`);
       return rendered.failures.length ? 1 : 0;
     }
-    const name = positionals[0];
+    let name = positionals[0];
+    if (name === undefined && !values.list && ctx.isTTY) {
+      name = await pick(themes.names(), themes.resolve().name, ctx);
+      if (name === undefined) return 0;
+    }
     if (values.list || name === undefined) {
       const current = themes.resolve().name;
       for (const theme of themes.names()) {

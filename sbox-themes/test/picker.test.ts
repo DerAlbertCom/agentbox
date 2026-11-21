@@ -144,3 +144,70 @@ describe("sbox theme --preview <name>", () => {
     expect(result.stdout).toBe("");
   });
 });
+
+describe("sbox theme in a terminal", () => {
+  test("offers the themes in fzf and switches to the chosen one", async () => {
+    // Arrange
+    await fakeFzf("nord");
+
+    // Act
+    const result = await run([], { tty: true });
+
+    // Assert
+    expect(result.stderr).toBe("");
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain("Switched to the theme 'nord'.");
+    expect(await savedTheme()).toBe("nord");
+    const calls = (await fzfCalls())!;
+    const items = calls.filter((line) => line.startsWith("item: "));
+    expect(items).toHaveLength(24);
+    expect(items).toContain("item: tokyo-night");
+    expect(calls.some((line) => line.startsWith("arg: ") && line.includes("sbox theme --preview {}"))).toBe(true);
+  });
+
+  test("preselects the current theme", async () => {
+    // Arrange
+    await save("nord");
+    await fakeFzf("nord");
+
+    // Act
+    await run([], { tty: true });
+
+    // Assert
+    const calls = (await fzfCalls())!;
+    const items = calls.filter((line) => line.startsWith("item: ")).map((line) => line.slice("item: ".length));
+    const position = items.indexOf("nord") + 1;
+    expect(calls).toContain(`arg: load:pos(${position})`);
+  });
+
+  test("changes nothing when the choice is cancelled", async () => {
+    // Arrange
+    await save("nord");
+    await fakeFzf(null);
+
+    // Act
+    const result = await run([], { tty: true });
+
+    // Assert
+    expect(result.code).toBe(0);
+    expect(result.stdout).toBe("");
+    expect(await savedTheme()).toBe("nord");
+    expect(await fzfCalls()).not.toBeNull();
+    expect(await Bun.file(join(home, ".config/opencode/themes/sbox.json")).exists()).toBe(false);
+  });
+
+  test("lists the themes without opening fzf when it is not a terminal", async () => {
+    // Arrange
+    await fakeFzf("nord");
+
+    // Act
+    const bare = await run([]);
+    const list = await run(["--list"]);
+
+    // Assert
+    expect(bare).toEqual(list);
+    expect(bare.stdout).toContain("* tokyo-night\n");
+    expect(await fzfCalls()).toBeNull();
+    expect(await savedTheme()).toBeNull();
+  });
+});

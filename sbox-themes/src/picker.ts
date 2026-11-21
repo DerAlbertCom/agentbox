@@ -1,3 +1,4 @@
+import type { CommandContext } from "sbox-cli";
 import { channels, mix, type Palette } from "./palette";
 
 const reset = "\x1b[0m";
@@ -61,4 +62,32 @@ export function preview(name: string, palette: Palette, width: number): string {
   }
   lines.push(blank);
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Lets the user choose a theme with fzf, previewing each through `sbox <command> --preview`.
+ * Returns undefined when the choice is cancelled.
+ */
+export async function pick(themes: string[], current: string, ctx: CommandContext): Promise<string | undefined> {
+  const fzf = Bun.which("fzf", { PATH: ctx.env.PATH ?? "" });
+  if (!fzf) throw new Error("the picker needs fzf; choose a theme with 'sbox theme <name>' instead.");
+  const env = Object.fromEntries(
+    Object.entries(ctx.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
+  );
+  const picker = Bun.spawn(
+    [
+      fzf,
+      "--prompt=theme> ",
+      "--no-multi",
+      `--preview=sbox ${ctx.name} --preview {}`,
+      "--preview-window=right,70%",
+      "--bind",
+      `load:pos(${themes.indexOf(current) + 1})`,
+    ],
+    { env, stdin: new Blob([themes.join("\n") + "\n"]), stdout: "pipe", stderr: "inherit" },
+  );
+  const [selection, code] = await Promise.all([new Response(picker.stdout).text(), picker.exited]);
+  if (code === 1 || code === 130) return undefined;
+  if (code !== 0) throw new Error(`fzf failed with exit code ${code}.`);
+  return selection.trim() || undefined;
 }
