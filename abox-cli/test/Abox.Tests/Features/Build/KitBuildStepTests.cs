@@ -79,18 +79,34 @@ public sealed class KitBuildStepTests
         _store.Load(new SquadBuildIdentity("sample", "ac", "latest")).Should().BeNull();
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task KitsWithoutAnExecutableBuildFilePassThroughUnchanged(bool plainBuildFile)
+    [Fact]
+    public async Task ABuildFileThatCannotRunFailsTheBuild()
     {
         // Arrange
         _root.File("teams/sample/ac.abox", "workload: sample\nkits: [plain]\n");
         _root.File("kits/plain/plain.yaml", "schemaVersion: \"3\"\nkind: mixin\n");
-        if (plainBuildFile)
-        {
-            _root.File("kits/plain/build", "#!/bin/sh\nexit 1\n");
-        }
+        _root.File("kits/plain/build", "#!/bin/sh\nexit 0\n");
+
+        // Act
+        var build = () => _service.BuildAsync(Request(), CancellationToken.None);
+
+        // Assert
+        var failure = await build.Should().ThrowAsync<AboxException>();
+        failure.WithMessage(
+            OperatingSystem.IsWindows()
+                ? "*kit 'plain'*build step*Linux or macOS*"
+                : "*build file of kit 'plain'*not executable*chmod +x*"
+        );
+        _store.Load(new SquadBuildIdentity("sample", "ac", "latest")).Should().BeNull();
+        await _sbx.DidNotReceiveWithAnyArgs().InspectKitAsync(default!, default, default!);
+    }
+
+    [Fact]
+    public async Task KitsWithoutABuildFilePassThroughUnchanged()
+    {
+        // Arrange
+        _root.File("teams/sample/ac.abox", "workload: sample\nkits: [plain]\n");
+        _root.File("kits/plain/plain.yaml", "schemaVersion: \"3\"\nkind: mixin\n");
 
         // Act
         await _service.BuildAsync(Request(), CancellationToken.None);

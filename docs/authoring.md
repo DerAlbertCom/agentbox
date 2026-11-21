@@ -221,6 +221,11 @@ package of the Bun workspace with `sbox-cli/bundle`, which runs Bun in a pinned
 `oven/bun` container, so the host needs only Docker.
 
 - A non-zero exit fails `abox build` and shows the script's output.
+- The `build` file must be executable (`chmod +x`, and committed with that mode). A
+  `build` file that is not executable fails `abox build` instead of letting the kit
+  pass through unbuilt.
+- Kit build steps run on Linux and macOS hosts. On Windows `abox build` fails for a
+  kit with a `build` file; build such squads on Linux, macOS or in WSL.
 - The descriptor format is unchanged; sbx sees an ordinary kit.
 - `--metadata-only` builds run the step too, because publishing uses the staged copy.
 - Publication fingerprints the staged copy, not the sources the script reads: rebuild

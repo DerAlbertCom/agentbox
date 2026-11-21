@@ -12,4 +12,4 @@ abox used to hand a local kit to sbx exactly as it lies in the repository. Kits 
 
 - `--metadata-only` builds also run kit build steps, because publishing uses the staged copy. A build script may need tools such as Docker even though abox itself calls none in that mode.
 - Publication fingerprints cover the staged copy, not the kit's repository folder or the packages its `build` reads. A source change after `abox build --no-personal` is not detected by `publish`; rebuild before publishing.
-- Kit build steps need executable files, so they run on Linux and macOS hosts. On Windows a kit's `build` file is not recognized and the kit passes through unchanged.
+- Kit build steps need executable files, so they run on Linux and macOS hosts. A `build` file that cannot run fails `abox build`: one without the executable bit, and any `build` file on Windows. Passing such a kit through unbuilt would hand sbx a kit without its payload and fail only later, inside the sandbox.

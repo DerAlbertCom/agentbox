@@ -52,10 +52,11 @@ does not skip the workload image build.
    (the recipe) in the build directory, with the scripts of the workload and the
    bundled CA certificates copied into it.
 6. Writes the state mixin: one `host-mount@1` per state directory.
-7. Runs the [kit build step](authoring.md#kit-build-step) of every local kit with an
-   executable `build` file: copies the kit into `kits/<kit>/` of the build directory,
+7. Runs the [kit build step](authoring.md#kit-build-step) of every local kit with a
+   `build` file: copies the kit into `kits/<kit>/` of the build directory,
    runs `build <stagedKitDir>` from the kit's repository folder and uses the staged
-   copy from here on. A failing script fails the build with its output. This also
+   copy from here on. A failing script fails the build with its output, and so does
+   a `build` file that is not executable or that is found on Windows. This also
    runs with `--metadata-only`.
 8. Optionally checks additional local kit declarations with `sbx kit inspect`,
    passing their resolved arguments, unless `--no-verify` is given. Inspection
