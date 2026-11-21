@@ -19,6 +19,8 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 - **Base image**: the image built from a workload. Maintainers build it; users get it through their squad's layers.
 - **Kit**: a v3 kit, either a workload (full root filesystem) or a mixin (layers added on top). Used for team and squad customization, agent configuration, and auth. Spec: https://github.com/docker/sandbox-kit-spec
 - **Kit build step**: an executable `build` file in a local kit folder. `abox build` copies the kit into the build's staging folder, runs `build <stagedKitDir>` from the kit's folder in the repository, and uses the staged copy everywhere sbx sees the kit. Kits without one pass through unchanged. See [ADR 0001](adr/0001-kit-build-step.md).
+- **sbox**: the command line inside a sandbox for user-facing actions, such as switching the theme. Its core (`sbox-cli`, installed by the `sbox` kit) routes `sbox <command>` to an installed command kit; `sbox --help` lists them. Not to be confused with `sbx`, the Docker Sandboxes CLI on the host.
+- **Command kit**: a kit that installs one `sbox` command as a bundled module into the commands folder, `~/.local/share/sbox/commands/<command>/`. A squad chooses the commands of its sandboxes by choosing command kits.
 - **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, `state`, and `secrets`.
 - **Sandbox**: one per folder.
 - **Workspace**: the folder's files inside the sandbox, at the runtime-provided `WORKSPACE_DIR`.

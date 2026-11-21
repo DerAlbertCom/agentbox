@@ -185,10 +185,13 @@ Only store IDs, key names/counts and safe recovery messages are reported.
 │   │   └── pi-config.yaml
 │   └── opencode-config/
 │       └── opencode-config.yaml
-└── abox-cli/
-    ├── agentic-box.slnx
-    ├── src/Abox/              the command line
-    └── test/Abox.Tests/       the tests
+├── abox-cli/
+│   ├── agentic-box.slnx
+│   ├── src/Abox/              the command line
+│   └── test/Abox.Tests/       the tests
+├── sbox-cli/                  the core of sbox, the command line inside the sandbox
+├── package.json               the Bun workspace of the TypeScript packages
+└── bun.lock
 ```
 
 The `.abox` files and the workloads live in the team folders under `teams`, the kits in
@@ -688,6 +691,20 @@ ordinary local builds retain their previous linked-input support.
 `publish` needs Docker/Buildx, but does not need sbx running or signed in.
 Registry credentials stay in Docker's host credential store; `abox secrets` does not
 configure publishing credentials. See [the publishing details](docs/implementation.md#abox-publish---team-name---root-dir---tag-tag---builder-name).
+
+## Building and testing sbox
+
+`sbox` and its commands are TypeScript packages in the Bun workspace at the
+repository root. With [Bun](https://bun.sh) 1.4.4 installed:
+
+```sh
+bun install --frozen-lockfile
+bun test
+bun run typecheck
+```
+
+`abox build` bundles them through the kits' build steps in a Bun container, so a
+build needs only Docker; see [the sbox kit](kits/README.md#sbox).
 
 ## The formatting and the hooks
 

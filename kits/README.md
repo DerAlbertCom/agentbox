@@ -22,6 +22,32 @@ shared kits are here. The descriptor of a kit follows the
 [kit spec](https://github.com/docker/sandbox-kit-spec); the kits of this folder are
 working examples to copy from.
 
+## sbox
+
+The `sbox` kit installs `sbox`, the command line inside the sandbox for user-facing
+actions. It runs on Bun, which the workload must install through mise (`bun@1.4.4` in
+`teams/mti-ca/mti-ca.workload`); without Bun, `sbox` says so.
+
+| File in the sandbox | What it is |
+|---|---|
+| `~/.local/bin/sbox` | the launcher, on PATH |
+| `~/.local/share/sbox/sbox.js` | the bundled core from `sbox-cli/` |
+| `~/.local/share/sbox/commands/<command>/command.js` | a command, installed by its command kit |
+| `~/.local/state/sbox/<command>/` | the state folder of a command |
+
+`sbox --help` lists the installed commands; with no command kit it lists none. The
+bundle is produced by the kit's [build step](../docs/authoring.md#kit-build-step)
+(`kits/sbox/build`) when `abox build` runs, so it is not committed. The build runs
+Docker and keeps Bun's package cache in the volume `agentic-box-bun-cache`.
+
+### Command kits
+
+A command kit adds one `sbox` command. Its build step bundles the command's package
+into `command.js`, and its recipe copies that file, with any data the command reads,
+into `~/.local/share/sbox/commands/<command>/`. The module default-exports a `Command`
+(`summary` and `run(args, ctx)`) from the command API in `sbox-cli/src/api.ts`; see
+the [TypeScript coding standards](../CODING_STANDARDS.md#typescript).
+
 ## Color schemes
 
 A color scheme kit is named `colorscheme-<scheme>` and declares `provides: [colorscheme]`,

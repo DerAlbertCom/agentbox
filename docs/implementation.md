@@ -1147,6 +1147,14 @@ abox-cli/src/Abox/
     SquadBuildIdentity.cs  validated team/squad/tag and shared repository naming
 ```
 
+```
+sbox-cli/           sbox, the command line inside the sandbox (TypeScript on Bun)
+  src/api.ts        the command API that command kits import type-only
+  src/sbox.ts       the core: options, help, routing to the commands folder
+  src/main.ts       the bundle entry: process arguments, environment and streams
+  launcher/sbox     the launcher on PATH; finds Bun through the mise shims
+```
+
 For architecture and coding conventions, see the
 [coding standards](../CODING_STANDARDS.md#architecture).
 
