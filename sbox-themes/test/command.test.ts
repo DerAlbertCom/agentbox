@@ -17,6 +17,12 @@ let home: string;
 
 beforeEach(async () => {
   home = await mkdtemp(join(tmpdir(), "sbox-theme-"));
+  await mkdir(tools(), { recursive: true });
+  await writeFile(
+    join(tools(), "bat"),
+    `#!/bin/sh\necho "$PWD: bat $@" >> bat.log\ncp .config/bat/themes/*.tmTheme bat.cache 2>/dev/null || true\n`,
+    { mode: 0o755 },
+  );
 });
 
 afterEach(async () => {
@@ -25,6 +31,11 @@ afterEach(async () => {
 
 const data = () => join(home, ".local/share/sbox/commands/theme");
 const state = () => join(home, ".local/state/sbox/theme");
+/**
+ * Fakes of the tools the apps run, first on PATH: `bat` logs its arguments to `~/bat.log`
+ * and copies the bat themes it finds to `~/bat.cache`.
+ */
+const tools = () => join(home, ".fake-tools");
 
 /**
  * Installs the theme command with the palettes and app definitions of this package, or with
@@ -56,7 +67,7 @@ async function run(args: string[], env: Record<string, string> = {}) {
   const stdout = new Capture();
   const stderr = new Capture();
   const code = await sbox(["theme", ...args], {
-    env: { HOME: home, PATH: process.env.PATH ?? "", ...env },
+    env: { HOME: home, PATH: `${tools()}:${process.env.PATH ?? ""}`, ...env },
     stdout,
     stderr,
     stdin: {},
@@ -197,6 +208,101 @@ describe("sbox theme <name> for pi", () => {
     // Assert
     expect(JSON.parse(first)).toEqual({ ...settings, theme: "sbox" });
     expect(await homeFile(".pi/agent/settings.json")).toBe(first);
+  });
+});
+
+describe("sbox theme <name> for the terminal tools", () => {
+  test("renders the bat theme sbox, selects it and rebuilds bat's cache with it", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    const result = await run(["nord"]);
+
+    // Assert
+    expect(result.code).toBe(0);
+    const theme = await homeFile(".config/bat/themes/sbox.tmTheme");
+    expect(theme).toContain("<key>name</key>\n\t<string>sbox</string>");
+    expect(theme).toContain("<key>background</key>\n\t\t\t\t<string>#2e3440</string>");
+    expect(theme).toContain("<key>lineHighlight</key>\n\t\t\t\t<string>#383e4a</string>");
+    expect(theme).toContain("<key>gutterForeground</key>\n\t\t\t\t<string>#616773</string>");
+    expect(await homeFile(".config/bat/config")).toBe("--theme=sbox\n");
+    expect(await homeFile("bat.log")).toBe(`${home}: bat cache --build\n`);
+    expect(await homeFile("bat.cache")).toBe(theme);
+  });
+
+  test("renders delta's git config with the bat theme sbox and the palette's diff colors", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    await run(["nord"]);
+
+    // Assert
+    const config = await homeFile(".config/git/config");
+    expect(config).toStartWith("[delta]\n\tsyntax-theme = sbox\n");
+    expect(config).toContain('\tminus-style = syntax "#443b46"\n');
+    expect(config).toContain('\tminus-emph-style = syntax "#5c424d"\n');
+    expect(config).toContain('\tplus-style = syntax "#40494b"\n');
+    expect(config).toContain('\tplus-emph-style = syntax "#536058"\n');
+    expect(config).toContain('\tline-numbers-minus-style = "#bf616a"\n');
+    expect(config).toContain('\tline-numbers-zero-style = "#616773"\n');
+  });
+
+  test("renders fzf's options file with the palette's colors", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    await run(["nord"]);
+
+    // Assert
+    expect(await homeFile(".config/fzf/sbox")).toBe(
+      [
+        "--color=fg:#d8dee9,bg:-1,hl:#81a1c1,fg+:#d8dee9,bg+:#434c5e,hl+:#81a1c1",
+        "--color=info:#949aa5,prompt:#88c0d0,pointer:#b48ead,marker:#a3be8c",
+        "--color=spinner:#b48ead,header:#ebcb8b,border:#616773,gutter:-1",
+        "",
+      ].join("\n"),
+    );
+  });
+
+  test("renders lazygit's theme config with the palette's colors", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    await run(["nord"]);
+
+    // Assert
+    const theme = Bun.YAML.parse(await homeFile(".config/lazygit/config.yml")) as {
+      gui: { theme: Record<string, string[]> };
+    };
+    expect(theme.gui.theme.activeBorderColor).toEqual(["#81a1c1", "bold"]);
+    expect(theme.gui.theme.inactiveBorderColor).toEqual(["#616773"]);
+    expect(theme.gui.theme.searchingActiveBorderColor).toEqual(["#d5967a", "bold"]);
+    expect(theme.gui.theme.selectedLineBgColor).toEqual(["#434c5e"]);
+    expect(theme.gui.theme.inactiveViewSelectedLineBgColor).toEqual(["#3f4551"]);
+    expect(theme.gui.theme.defaultFgColor).toEqual(["#d8dee9"]);
+  });
+
+  test("renders yazi's theme with the palette's colors", async () => {
+    // Arrange
+    await install();
+
+    // Act
+    await run(["nord"]);
+
+    // Assert
+    const theme = Bun.TOML.parse(await homeFile(".config/yazi/theme.toml")) as Record<
+      string,
+      Record<string, unknown>
+    >;
+    expect(theme.mgr!.cwd).toEqual({ fg: "#88c0d0", italic: true });
+    expect(theme.mgr!.find_position).toEqual({ fg: "#8fbcbb", bold: true });
+    expect(theme.tabs!.inactive).toEqual({ fg: "#81a1c1", bg: "#3f4551" });
+    expect(theme.status!.overall).toEqual({ fg: "#d8dee9", bg: "#383e4a" });
+    expect(theme.filetype!.rules).toContainEqual({ name: "*/", fg: "#81a1c1" });
   });
 });
 

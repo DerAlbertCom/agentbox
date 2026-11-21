@@ -1,0 +1,28 @@
+gui:
+  theme:
+    activeBorderColor:
+      - "{{ accent }}"
+      - bold
+    inactiveBorderColor:
+      - "{{ background | mix: foreground, 30 }}"
+    searchingActiveBorderColor:
+      - "{{ orange }}"
+      - bold
+    optionsTextColor:
+      - "{{ blue }}"
+    selectedLineBgColor:
+      - "{{ selection }}"
+    inactiveViewSelectedLineBgColor:
+      - "{{ background | mix: foreground, 10 }}"
+    cherryPickedCommitFgColor:
+      - "{{ background }}"
+    cherryPickedCommitBgColor:
+      - "{{ magenta }}"
+    markedBaseCommitFgColor:
+      - "{{ background }}"
+    markedBaseCommitBgColor:
+      - "{{ yellow }}"
+    unstagedChangesColor:
+      - "{{ red }}"
+    defaultFgColor:
+      - "{{ foreground }}"

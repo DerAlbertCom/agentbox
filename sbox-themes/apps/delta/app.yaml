@@ -1,0 +1,3 @@
+files:
+  - template: config.liquid
+    target: ~/.config/git/config

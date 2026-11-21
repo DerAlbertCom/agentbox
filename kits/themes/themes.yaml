@@ -10,6 +10,9 @@ args:
     default: tokyo-night
     pattern: '[A-Za-z0-9_-]+'
     env: SBOX_THEME
+  THEMES_FZF_OPTS_FILE:
+    default: /home/agent/.config/fzf/sbox
+    env: FZF_DEFAULT_OPTS_FILE
 capabilities:
   - type: com.docker.sandbox/lifecycle@1
     config:

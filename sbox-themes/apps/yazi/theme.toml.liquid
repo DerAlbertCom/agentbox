@@ -1,0 +1,51 @@
+[mgr]
+cwd = { fg = "{{ cyan }}", italic = true }
+hovered = { bg = "{{ selection }}" }
+preview_hovered = { bg = "{{ selection }}" }
+find_keyword = { fg = "{{ background }}", bg = "{{ orange }}", bold = true }
+find_position = { fg = "{{ bright_cyan }}", bold = true }
+marker_copied = { fg = "{{ green }}", bg = "{{ green }}" }
+marker_cut = { fg = "{{ red }}", bg = "{{ red }}" }
+marker_marked = { fg = "{{ magenta }}", bg = "{{ magenta }}" }
+marker_selected = { fg = "{{ blue }}", bg = "{{ blue }}" }
+count_copied = { fg = "{{ background }}", bg = "{{ green }}" }
+count_cut = { fg = "{{ background }}", bg = "{{ red }}" }
+count_selected = { fg = "{{ background }}", bg = "{{ blue }}" }
+border_symbol = "│"
+border_style = { fg = "{{ background | mix: foreground, 30 }}" }
+
+[tabs]
+active = { fg = "{{ background }}", bg = "{{ accent }}", bold = true }
+inactive = { fg = "{{ accent }}", bg = "{{ background | mix: foreground, 10 }}" }
+
+[mode]
+normal_main = { fg = "{{ background }}", bg = "{{ blue }}", bold = true }
+normal_alt = { fg = "{{ blue }}", bg = "{{ background | mix: foreground, 10 }}" }
+select_main = { fg = "{{ background }}", bg = "{{ magenta }}", bold = true }
+select_alt = { fg = "{{ magenta }}", bg = "{{ background | mix: foreground, 10 }}" }
+unset_main = { fg = "{{ background }}", bg = "{{ red }}", bold = true }
+unset_alt = { fg = "{{ red }}", bg = "{{ background | mix: foreground, 10 }}" }
+
+[status]
+overall = { fg = "{{ foreground }}", bg = "{{ background | mix: foreground, 6 }}" }
+progress_label = { fg = "{{ foreground }}", bold = true }
+progress_normal = { fg = "{{ blue }}", bg = "{{ background | mix: foreground, 10 }}" }
+progress_error = { fg = "{{ red }}", bg = "{{ background | mix: foreground, 10 }}" }
+perm_type = { fg = "{{ blue }}" }
+perm_read = { fg = "{{ yellow }}" }
+perm_write = { fg = "{{ red }}" }
+perm_exec = { fg = "{{ green }}" }
+perm_sep = { fg = "{{ background | mix: foreground, 30 }}" }
+
+[filetype]
+rules = [
+	{ mime = "image/*", fg = "{{ yellow }}" },
+	{ mime = "{audio,video}/*", fg = "{{ magenta }}" },
+	{ mime = "application/*zip", fg = "{{ red }}" },
+	{ mime = "application/x-{tar,bzip*,7z-compressed,xz,rar}", fg = "{{ red }}" },
+	{ mime = "application/{pdf,doc,rtf,vnd.*}", fg = "{{ cyan }}" },
+	{ name = "*", is = "orphan", bg = "{{ red }}" },
+	{ name = "*", is = "exec", fg = "{{ green }}" },
+	{ name = "*/", fg = "{{ blue }}" },
+	{ name = "*", fg = "{{ foreground }}" },
+]
