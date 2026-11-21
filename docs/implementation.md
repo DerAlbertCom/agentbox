@@ -1039,7 +1039,7 @@ apt:
   - git
 mise:
   - nodejs@24.22.2
-  - dotnet@10.0.403                            # the last entry is the default
+  - dotnet@10.0.403                            # one version; the last of several is active
 scripts:
   - enable-fzf.sh                             # run while the image is built
 ```
@@ -1053,9 +1053,10 @@ along with its image settings, including when that workload is shared in `kits/`
 The packages of `apt` are installed in one step before the tools, as root and with
 `--no-install-recommends`, and the package names are checked; the image switches back
 to the agent user after them. The generator writes one
-install step per tool. The versions of one tool are installed in one step, so mise
-keeps them all, and every list is reversed, because mise activates the first entry of
-its list: the last entry of the workload is the default of the image.
+install step per tool, in the order of the workload, so runtimes come before the tools
+that need them. The versions of one tool are installed in one step, so mise keeps them
+all, last one first, because mise activates the first entry of its list: the last
+version in the workload is the active one.
 The GitHub token is passed as a BuildKit secret, so it never lands in a layer. The
 generated image has `/home/agent/workspace` as its default working directory, not
 a guaranteed runtime workspace mount path.

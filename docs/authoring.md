@@ -366,9 +366,10 @@ publishRepository: mtiae-developer-container-images-local
 apt:                                         # the packages of the image
   - git
 
-mise:                                        # the tools of the image
+mise:                                        # the tools, installed in this order
   - nodejs@24.22.2
-  - dotnet@10.0.403                          # the last entry is the default
+  - dotnet@9.0.303
+  - dotnet@10.0.403                          # of several versions, the last is active
 
 scripts:                                     # run while the image is built
   - enable-fzf.sh
@@ -386,9 +387,10 @@ scripts:                                     # run while the image is built
 - The `apt` entries are package names; they are installed with one `apt-get install`
   step while the image is built, as root and before the tools, so the tools then land
   in the home of the agent user with the packages behind them.
-- The tools are installed with mise. The versions of one tool are installed in one
-  step, so a tool can carry several versions; the last entry decides which one an
-  interactive shell starts with.
+- The tools are installed with mise, in the order of the list, so put a runtime such
+  as `nodejs` before the `npm:` tools that need it. The versions of one tool are
+  installed in one step, so a tool can carry several versions; the last one decides
+  which one an interactive shell starts with.
 - The workload of a team lives in the team folder, next to its `.abox` files. A
   workload that several teams use can also live in the `kits` folder of the project;
   abox looks in the team folder first.

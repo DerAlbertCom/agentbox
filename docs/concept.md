@@ -141,7 +141,7 @@ References never include a file extension. The teams of a project live in a fold
 - `template`: container image to build on, as in `sbx run --template`. Default `docker.io/sbx/shell-docker-image`, a shell image with Docker Engine inside (`docker.io/sbx/shell-image` is the variant without it). Pin a tag or digest rather than `latest`. *(proposed)* Named `template` so `base` only means the parent `.abox`. *(name proposed)*
 - `publishRepository`: JFrog repository name on `rwest.jfrog.io`, required for publishing but optional for local builds. One lowercase registry path segment, without a host, slash or tag. Inherited with the root config's workload, recorded in the build manifest, and revalidated before publishing; changing it requires a rebuild. The included workloads use `mtiae-developer-container-images-local`.
 - `apt`: package names, installed with one `apt-get install` before the tools.
-- `mise`: tools. The last entry is the default. The generator writes each tool's list reversed, because mise activates the first entry.
+- `mise`: tools, installed in the order of the list, so runtimes come before the tools that need them. Of several versions of a tool, the last one is active; the generator passes a tool's versions to mise reversed, because mise activates the first entry.
 - `scripts`: run as the last steps of the generated Dockerfile, during the image build.
 
 **`.abox`** (YAML)
@@ -169,7 +169,7 @@ publishRepository: mtiae-developer-container-images-local
 mise:
   - nodejs@24.4.3
   - dotnet@9.0.303
-  - dotnet@10.0.403        # default: last entry
+  - dotnet@10.0.403        # active: last version
 scripts:
   - enable-fzf.sh
 ```
