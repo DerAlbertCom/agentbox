@@ -63,6 +63,13 @@ public interface ISbxClient
     /// <summary>Stops one sandbox without removing it.</summary>
     Task<SbxOutcome> StopSandboxAsync(string name, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Runs a command in the sandbox. Every exec carries the protected HTTPS bootstrap: when
+    /// the Sandbox has a protected HTTPS runtime, the verified reader sets the Kestrel
+    /// certificate and Node extra-CA environment first; a missing, changed or refusing
+    /// reader fails closed with its exit code (78 when unverifiable) and the command does
+    /// not run. Without a runtime the command runs unchanged.
+    /// </summary>
     Task<int> ExecAsync(SbxExecRequest request, CancellationToken cancellationToken);
 
     Task<bool> HasProgramAsync(string sandbox, string program, CancellationToken cancellationToken);
@@ -88,14 +95,6 @@ public interface ISbxClient
         string sandbox,
         string id,
         string json,
-        CancellationToken cancellationToken
-    );
-
-    /// <summary>Stages an already authorized export atomically with its password; does not configure Kestrel or establish host trust.</summary>
-    Task StageDevelopmentCertificateAsync(
-        string sandbox,
-        ReadOnlyMemory<byte> pfx,
-        string password,
         CancellationToken cancellationToken
     );
 

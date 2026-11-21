@@ -2,9 +2,9 @@ using System.CommandLine;
 using Abox.ApplicationPorts;
 using Abox.Configuration;
 using Abox.Health;
+using Abox.Https;
 using Abox.Infrastructure;
 using Abox.Sandboxes;
-using Abox.Sbx;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Abox.Features.Ports;
@@ -16,7 +16,7 @@ public sealed class PortsCommand : Command
         Preflight preflight,
         SandboxResolver sandboxes,
         AppPorts ports,
-        ISbxClient sbx,
+        SandboxHttps https,
         IConsole console
     )
         : base("ports", "Publish discovered application ports on host loopback with an offset.")
@@ -65,13 +65,7 @@ public sealed class PortsCommand : Command
                             );
                         if (refresh)
                         {
-                            await sbx.RefreshDevelopmentCertificateBootstrapAsync(
-                                sandbox.Name,
-                                cancellationToken
-                            );
-                            console.WriteLine(
-                                "HTTPS bootstrap refreshed from this CLI. Private activation retained; HTTPS/Node/agent readiness was not verified. Retry the original launch; use abox ports for full setup."
-                            );
+                            await https.RefreshBootstrapAsync(sandbox.Name, cancellationToken);
                             return 0;
                         }
                         await ports.PublishAsync(

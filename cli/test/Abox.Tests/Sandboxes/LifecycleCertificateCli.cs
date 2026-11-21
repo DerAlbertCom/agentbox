@@ -14,6 +14,7 @@ internal sealed class LifecycleCertificateCli : IDisposable
     private readonly CertificateTestDirectory staging = new();
     public X509Certificate2 Current { get; private set; }
     public int Exports { get; private set; }
+    public Action? Exported { get; set; }
     public HostDevelopmentCertificate Exporter { get; }
 
     public LifecycleCertificateCli(TestConsole console)
@@ -65,6 +66,7 @@ internal sealed class LifecycleCertificateCli : IDisposable
                 Current.Export(X509ContentType.Pfx, args[args.IndexOf("--password") + 1])
             );
             Exports++;
+            Exported?.Invoke();
             return new ProcessResult(0, "private synthetic export", "");
         }
         return new ProcessResult(

@@ -244,7 +244,7 @@ public sealed class DevelopmentCertificateActivationTests
 
     [Theory]
     [InlineData("prepare")]
-    [InlineData("stage")]
+    [InlineData("activate")]
     [InlineData("refresh-bootstrap")]
     public async Task RuntimeLockTimeoutGivesRetryGuidanceWithoutLeakingChildDiagnostics(
         string mode
@@ -255,11 +255,17 @@ public sealed class DevelopmentCertificateActivationTests
         var runner = Substitute.For<IProcessRunner>();
         runner
             .RunAsync(Arg.Any<ProcessRequest>(), Arg.Any<CancellationToken>())
-            .Returns(call => new ProcessResult(
-                call.Arg<ProcessRequest>().Arguments.Contains("cleanup") ? 0 : 75,
-                "private child stdout",
-                "private child stderr"
-            ));
+            .Returns(call =>
+            {
+                var arguments = call.Arg<ProcessRequest>().Arguments;
+                if (arguments.Contains("id"))
+                    return new ProcessResult(0, "1000\n", "");
+                return new ProcessResult(
+                    arguments.Contains("cleanup") || arguments.Contains("root") ? 0 : 75,
+                    "private child stdout",
+                    "private child stderr"
+                );
+            });
         var client = new SbxClient(runner, AboxPaths.For(root.Path, root.Path));
 
         // Act
@@ -279,9 +285,9 @@ public sealed class DevelopmentCertificateActivationTests
                         CancellationToken.None
                     )
             : () =>
-                client.StageDevelopmentCertificateAsync(
+                client.ActivateDevelopmentCertificateAsync(
                     "actual",
-                    new byte[] { 1, 2 },
+                    SyntheticCertificatePayload(),
                     "password",
                     CancellationToken.None
                 );
