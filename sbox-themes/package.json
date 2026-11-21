@@ -1,0 +1,14 @@
+{
+  "name": "sbox-themes",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync-themes": "bun src/sync-themes.ts"
+  },
+  "dependencies": {
+    "liquidjs": "10.30.1"
+  },
+  "devDependencies": {
+    "sbox-cli": "workspace:*"
+  }
+}

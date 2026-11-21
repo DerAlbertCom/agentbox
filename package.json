@@ -2,7 +2,7 @@
   "name": "agentic-box",
   "private": true,
   "type": "module",
-  "workspaces": ["sbox-cli"],
+  "workspaces": ["sbox-cli", "sbox-themes"],
   "scripts": {
     "test": "bun test",
     "typecheck": "tsc --noEmit"
