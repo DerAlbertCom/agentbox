@@ -5,4 +5,3 @@ settings:
   - file: ~/.claude/settings.json
     merge:
       theme: custom:sbox
-restart: Claude Code

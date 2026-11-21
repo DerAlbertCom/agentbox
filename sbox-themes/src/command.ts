@@ -60,8 +60,7 @@ export default {
     if (!themes.exists(name)) return themes.unknown(name);
     const rendered = await themes.render(name);
     await themes.save(name);
-    const restart = rendered.restart.length ? ` Restart ${listing(rendered.restart)} to see it.` : "";
-    ctx.stdout.write(`Switched to the theme '${name}'.${restart}\n`);
+    ctx.stdout.write(`Switched to the theme '${name}'. Some apps show it only after a restart.\n`);
     return rendered.failures.length ? 1 : 0;
   },
 } satisfies Command;
@@ -122,8 +121,4 @@ class Themes {
     await mkdir(this.ctx.paths.state, { recursive: true });
     await writeFile(this.saved, name + "\n");
   }
-}
-
-function listing(names: string[]): string {
-  return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names.at(-1)}` : names.join("");
 }

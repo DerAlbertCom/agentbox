@@ -22,7 +22,7 @@ Items marked *(proposed)* fill gaps that the decisions so far do not cover. "Ver
 - **sbox**: the command line inside a sandbox for user-facing actions, such as switching the theme. Its core (`sbox-cli`, installed by the `sbox` kit) routes `sbox <command>` to an installed command kit; `sbox --help` lists them. Not to be confused with `sbx`, the Docker Sandboxes CLI on the host.
 - **Command kit**: a kit that installs one `sbox` command as a bundled module into the commands folder, `~/.local/share/sbox/commands/<command>/`. A squad chooses the commands of its sandboxes by choosing command kits.
 - **Theme**: a named, app-agnostic palette: one `colors.toml` in the flat format of Omarchy (`mode`, `accent`, the background and foreground variants, the 8 colors and their `bright_*` variants). `sbox theme <name>` renders every app template with it. Installed by the `themes` kit.
-- **App template**: the definition of how one app is themed, a folder with an `app.yaml` and Liquid templates. `app.yaml` names the files to render, the JSON settings to merge, the commands to run afterwards and the app to restart. Every app gets one fixed theme named `sbox`, so switching only rewrites its content.
+- **App template**: the definition of how one app is themed, a folder with an `app.yaml` and Liquid templates. `app.yaml` names the files to render, the JSON settings to merge, and the commands to run afterwards. Every app gets one fixed theme named `sbox`, so switching only rewrites its content.
 - **Config**: an `.abox` file. Composes a sandbox from `base`, `workload`, `kits`, `parameters`, `mcp`, `state`, and `secrets`.
 - **Sandbox**: one per folder.
 - **Workspace**: the folder's files inside the sandbox, at the runtime-provided `WORKSPACE_DIR`.

@@ -4,7 +4,7 @@ import { useThemeHome } from "./theme-home";
 const home = useThemeHome();
 
 describe("sbox theme <name>", () => {
-  test("saves the choice and tells which apps to restart", async () => {
+  test("saves the choice and tells that some apps show it only after a restart", async () => {
     // Arrange
     await home.install();
 
@@ -14,7 +14,7 @@ describe("sbox theme <name>", () => {
     // Assert
     expect(result.code).toBe(0);
     expect(await home.file(".local/state/sbox/theme/current")).toBe("nord\n");
-    expect(result.stdout).toBe("Switched to the theme 'nord'. Restart Claude Code, OpenCode and pi to see it.\n");
+    expect(result.stdout).toBe("Switched to the theme 'nord'. Some apps show it only after a restart.\n");
   });
 
   test("fails for an unknown theme, lists the themes and changes nothing", async () => {
