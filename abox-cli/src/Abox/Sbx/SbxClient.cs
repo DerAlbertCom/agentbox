@@ -173,7 +173,10 @@ public sealed partial class SbxClient : ISbxClient
         );
     }
 
-    /// <summary>Creates a sandbox from a workload kit and its mixins.</summary>
+    /// <summary>
+    /// Creates a sandbox from a workload kit and its mixins. sbx never asks: its output is
+    /// captured, so a question would wait unseen.
+    /// </summary>
     public Task<SbxOutcome> CreateAsync(
         SbxCreateRequest request,
         CancellationToken cancellationToken
@@ -188,6 +191,7 @@ public sealed partial class SbxClient : ISbxClient
             request.Name,
             "--pull",
             PullPolicyArgument(request.PullPolicy),
+            "--no-input",
         };
 
         foreach (var mixin in request.Mixins)
