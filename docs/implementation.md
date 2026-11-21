@@ -351,9 +351,20 @@ See [verification and red evidence](verification/legacy-sandbox-compatibility.md
    first five hex characters, uppercase, of SHA-256 over the normalized absolute
    path: forward slashes, lowercased on Windows.
 4. Validates MCP registrations read-only, then asks before replacing an existing
-   sandbox and lists what is lost. After consent, registers missing MCP servers
-   with URLs and prepares host state directories before deletion. A refusal
-   registers no MCP servers and creates no state directories.
+   sandbox and lists what is lost. After consent, checks the credentials of the
+   squad (below), registers missing MCP servers with URLs and prepares host state
+   directories before deletion. A refusal checks no credentials, registers no MCP
+   servers and creates no state directories.
+   The credential check (`Credentials/SquadCredentials`) needs the squad's local
+   sources (`ResolvedTeam.RootDirectory`); without them it is skipped. For each
+   `credential@1` with an `apiKey` mechanism of a local kit it checks the stored
+   value, with the identity rules of `abox secrets list`, and the binding in sbx's
+   `credentials.yaml` (`Sbx/SbxCredentialBindings`), which must cover every
+   `apiKey.inject[].domain`. On a terminal it asks for a missing value of a declared
+   service (as `abox secrets set` does) and for each missing approval; an approval
+   merges the domains into the file and keeps every other entry. Without a terminal
+   it warns, with `abox secrets set` commands for missing values. The check never
+   fails the create: a broken bindings file or squad source is a warning.
    The state directories on the host are kept: the name of the sandbox does not change.
 5. Passes one `--mount` per state directory under `<state dir>/<sandbox>/` on the host.
 6. Passes the validated MCP server names with `--static-mcp`. A server with no URL
@@ -367,7 +378,9 @@ See [verification and red evidence](verification/legacy-sandbox-compatibility.md
    its mixins and arguments. With `--local`,
     uses the **thin prebuilt-workload runtime kit**, `--kit <mixin>...`
     `--kit-arg <name>=<value>...` and `--pull never` instead. Both pass
-    `--mount <host>:<path>... --static-mcp <names>`.
+    `--mount <host>:<path>... --static-mcp <names>` and `--no-input`: sbx's output
+    is captured, so it must never wait on a question. After a successful create,
+    abox shows sbx's `Note:` lines, such as a credential that was not injected.
 8. Keeps a record of the sandbox in `<state dir>/sandboxes/<sandbox>.json`: the team
    and the squad it comes from, the build metadata and the pulled reference (if any).
 9. After successful creation and record save, copies prepared user secrets through
@@ -1103,6 +1116,8 @@ abox-cli/src/Abox/
                     endpoint override generation and runtime copy flow
   ApplicationPorts/ shared static discovery, occurrence reporting and publishing flow
   Https/            shared host certificate preparation and sandbox HTTPS activation
+  Credentials/      shared kit credential requests, secret value prompting/storing
+                    (used by abox secrets) and the create-time credential check
   Kits/             the .abox and .workload files, the chain, the kit generators
     McpDeclaration.cs      shared MCP name and HTTP(S) URL validation
     YamlScalar.cs          shared generated-YAML scalar quoting, including supplementary Unicode
@@ -1134,6 +1149,7 @@ abox-cli/src/Abox/
     SbxApplicationPorts.cs         application relay and port mapping operations
     SbxUserSecrets.cs              secret transport and network-policy operations
     SbxKitSources.cs               repository-scoped kit-source trust settings
+    SbxCredentialBindings.cs       reads and merges the approvals in sbx's credentials.yaml
     PullPolicy.cs                 closed pull choices, mapped to flags by the wrapper
   Health/           runtime preflight for sandbox commands, secrets and normal builds;
                     checks the queried sbx version against the required minimum

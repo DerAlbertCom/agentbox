@@ -324,6 +324,35 @@ the local kits requesting each service, and whether values are stored. Registry
 kits are not inspected for requested services. `abox secrets remove` takes the
 values off the host.
 
+A stored value is not enough: sbx injects the credential of a kit that is not built
+into sbx only with an approval, a *binding* of the service to the domains of its
+`apiKey.inject` list. sbx keeps the bindings in `~/.config/sbx/credentials.yaml`
+(`$XDG_CONFIG_HOME/sbx`, or `%APPDATA%\sbx` on Windows):
+
+```yaml
+bindings:
+    github:
+        apiKey:
+            domains:
+                - api.github.com
+```
+
+`abox create` checks both before it replaces a sandbox, for the `apiKey` credentials
+of the squad's local kits; it needs the squad's sources, so `--local` only. On a
+terminal it lists what is missing and asks:
+
+- For a missing value of a service declared in `secrets`, whether to set it now. The
+  prompt and the storage are those of `abox secrets set`; an empty answer skips it.
+- For a missing approval, `Approve sending the credential '<service>' to <domains>?`.
+  Yes adds the domains to the binding of the service and keeps every other entry of
+  the file; no starts the sandbox without the credential.
+
+Without a terminal it prints a warning with what is missing and the
+`abox secrets set --team <team> --squad <squad> --service <service>` commands, and
+goes on; approvals need a run on a terminal. sbx itself never asks: it starts without
+an optional credential and rejects a required one, and abox shows its message and
+its `Note:` lines.
+
 ## The workload: `.workload`
 
 The workload is the `.workload` file of the squad without a `base`. It says what the
